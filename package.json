@@ -18,7 +18,8 @@
     "check": "npm run typecheck && npm run lint && npm run db:lint && npm run test && npm run build",
     "test:db": "vitest run --config vitest.db.config.mts",
     "db:push:seed": "supabase db push --include-seed",
-    "db:lint": "node scripts/check-sql.mjs"
+    "db:lint": "node scripts/check-sql.mjs",
+    "admin:create": "node --env-file=.env.local scripts/create-admin.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

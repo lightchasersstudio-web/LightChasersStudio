@@ -17,6 +17,7 @@ Current progress:
 
 - **Phase 0 (foundation):** done, except the brand design system (fonts, palette tokens), which waits on the `ui-ux-pro-max` skill being installed.
 - **Phase 1 (database):** migrations, RLS, seed and DB tests are written. They haven't been pushed to a Supabase project yet, so `npm run test:db` hasn't run against a real database, and `src/types/database.types.ts` hasn't been generated.
+- **Phase 2 (admin auth):** login, `proxy.ts`, the admin gate, the admin shell and the create-admin script are built. Signing in with a real account is untested until a Supabase project exists. The screens use plain shadcn styling, pending the brand design pass.
 
 ## Commands
 
@@ -36,6 +37,7 @@ npm run db:lint        # parse all migrations + seed with the real Postgres pars
 npm run db:push        # apply supabase/migrations to the linked hosted project (db:push:seed also runs seed.sql)
 npm run db:types       # regenerate src/types/database.types.ts from the linked project
 npm run test:db        # DB tests (RLS, create_booking, overlap) against DATABASE_URL_TEST; skipped if unset
+npm run admin:create -- owner@example.com "Full Name" owner   # create/promote an admin (service role, .env.local)
 ```
 
 Supabase runs as a **hosted dev project**, not locally (no Docker on this machine). Link it once with `npx supabase login` and `npx supabase link --project-ref <ref>`. All schema changes go in SQL files in `supabase/migrations/`, never as dashboard-only edits. PGlite can't run on this machine (not enough free RAM), which is why there's no in-process database. DB tests use a real connection, and each runs in a transaction that is rolled back.
@@ -52,6 +54,12 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 ## Architecture
 
 - Route groups: `src/app/(public)` holds marketing pages and the booking wizard; `src/app/(admin)/admin` holds the admin area. Each has its own layout.
+- Admin auth has three layers:
+  1. `src/proxy.ts` (matcher `/admin/*`) refreshes the session and redirects signed-out visitors to `/admin/login?next=…`.
+  2. `src/app/(admin)/admin/(protected)/layout.tsx` runs `requireAdmin()` inside `<Suspense>` and renders children only after it passes.
+  3. **Every admin page calls `requireAdmin()`, and every admin server action calls `assertAdmin()`** (both in `src/server/auth.ts`, using `getClaims()` plus a lookup in `admin_profiles`). Layouts don't re-run on client navigation, so the page and action checks are mandatory.
+- New admin pages go under `(protected)/`, and their nav entries go in `src/components/admin/admin-nav.ts`. The login page lives outside `(protected)` to avoid a redirect loop.
+- Login runs in the browser (`signInWithPassword`) so that Supabase's per-IP rate limit sees the real client IP. Post-login redirects go through `safeAdminRedirect()`, which only allows `/admin` paths. Non-admin sessions are sent to `/admin/login?error=forbidden`, which offers a sign-out button.
 - Supabase clients in `src/lib/supabase/`:
   - `server.ts`: cookie-based, acts as the user, so RLS applies.
   - `browser.ts`: anon key.
@@ -78,9 +86,9 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 ### Booking & payment design (decided; implement in Phases 5 and 5b)
 
 - Status flow: `pending_payment → pending` (deposit paid, awaiting admin) `→ confirmed → completed`, plus `cancelled`, `declined` and `expired`.
-- **No double booking, enforced in Postgres:** a `btree_gist` exclusion constraint on `tstzrange(start_at, end_at)` covering bookings not in `cancelled/declined/expired`.
+- **No double booking, enforced in Postgres:** a gist exclusion constraint on `tstzrange(start_at, blocked_until)` (where `blocked_until` is the end time plus the buffer), covering bookings not in `cancelled/declined/expired`.
 - Unpaid bookings hold the slot until `hold_expires_at` (15–30 min). The constraint can't use `now()`, so stale holds are expired by a pg_cron job **and** at the start of the `create_booking` SECURITY DEFINER RPC. That RPC inserts the client and booking atomically, because anon users have no direct access to `clients` or `bookings`.
-- Prices and `deposit_amount` are always computed on the server from `services`, never taken from the client.
+- Prices and `deposit_cents` are always computed on the server from `services`, never taken from the client.
 - A booking counts as paid **only through a signature-verified, idempotent PayMongo webhook**, never through the success redirect. Check PayMongo's current docs for field names before implementing.
 
 ## Design system (provisional — confirm with `ui-ux-pro-max` before building UI)
