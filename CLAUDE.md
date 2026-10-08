@@ -1,0 +1,85 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+@AGENTS.md
+
+## Project
+
+Booking website for **Light Chasers Studio**, a photography business in Zamboanga City, Philippines. It covers weddings & prenup, portraits & family, events, and product/commercial shoots. Timezone `Asia/Manila`, currency PHP, privacy law: Philippines Data Privacy Act of 2012 (RA 10173).
+
+- **Public side:** no login. Clients fill in a client-info form, then book through a multi-step wizard and **pay a deposit via PayMongo** (GCash etc.) to hold the slot.
+- **Admin side (`/admin`):** the only authenticated area, using Supabase Auth email/password. There is no public sign-up.
+
+The full product spec, data model, security rules and build roadmap are in `docs/master-prompt.md`. Read the relevant section before starting a phase. Work proceeds **phase by phase**: plan each feature, finish and verify a phase, then move on.
+
+Current progress: **Phase 0 (foundation) done.** The brand design system (fonts, palette tokens) waits on the `ui-ux-pro-max` skill being installed. Next is Phase 1 (schema, RLS, seed, generated types).
+
+## Commands
+
+```bash
+npm run dev            # dev server (Turbopack)
+npm run check          # typecheck + lint + unit tests + build — run before calling anything done
+npm run typecheck      # next typegen && tsc (typegen creates global LayoutProps/PageProps types)
+npm run lint
+npm run format         # prettier (with tailwind class sorting)
+npm test               # vitest, all unit tests
+npx vitest run src/lib/env.test.ts        # single test file
+npx vitest run -t "requires the service"  # single test by name
+npm run test:e2e       # playwright (first time: npx playwright install chromium)
+npx playwright test e2e/smoke.spec.ts --project=chromium
+npx shadcn@latest add <component>         # add shadcn components into src/components/ui
+npm run db:push        # apply supabase/migrations to the linked hosted project
+npm run db:types       # regenerate src/types/database.types.ts from the linked project
+```
+
+Supabase runs as a **hosted dev project**, not locally (no Docker on this machine). Link it once with `npx supabase login` and `npx supabase link --project-ref <ref>`. All schema changes go in SQL files in `supabase/migrations/`, never as dashboard-only edits.
+
+## Stack specifics (newer than you may expect)
+
+- **Next.js 16** with App Router and React 19. Read `node_modules/next/dist/docs/` before using an unfamiliar API (see AGENTS.md).
+  - Middleware is now **`src/proxy.ts`**, which exports `proxy`. Use it only for optimistic redirects and Supabase session refresh. Real authorization is re-checked in every admin page and server action.
+  - **`cacheComponents: true`** is enabled. Pages are prerendered by default, and dynamic data (`cookies()`, `headers()`, uncached fetches) must sit inside `<Suspense>` or be cached with `"use cache"`. Check the cache-components docs before writing data-fetching pages.
+- **Tailwind v4**, configured in CSS. Theme tokens live in `src/app/globals.css` (`:root` / `.dark` variables mapped through `@theme inline`). There is no `tailwind.config`.
+- **shadcn/ui**: `radix-nova` style, components in `src/components/ui`. For forms use the **`field`** component (`Field`, `FieldLabel`, `FieldError`, …) with react-hook-form `Controller` plus a zod resolver. The old `form` component is empty in this style.
+- **zod v4** (`z.url()`, `z.email()` are top-level), date-fns v4 with **`@date-fns/tz`** (`TZDate`) for timezone work, lucide-react, next-themes (class strategy, light by default, with a dark toggle).
+
+## Architecture
+
+- Route groups: `src/app/(public)` holds marketing pages and the booking wizard; `src/app/(admin)/admin` holds the admin area. Each has its own layout.
+- Supabase clients in `src/lib/supabase/`:
+  - `server.ts`: cookie-based, acts as the user, so RLS applies.
+  - `browser.ts`: anon key.
+  - `admin.ts`: **service role, bypasses RLS**. Only for trusted server code such as webhooks, and only after checking authorization.
+- Env vars are validated with zod:
+  - `src/lib/env.ts` holds public vars only, safe to import anywhere.
+  - `src/lib/env.server.ts` holds secrets and is marked `server-only`. Every var is documented in `.env.example`.
+  - Never read secrets anywhere else or give them a `NEXT_PUBLIC_` prefix.
+- Data access lives in `src/server/queries/`, mutations in `src/server/actions/` (Server Actions returning `{ ok: true, data } | { ok: false, error }`), and zod schemas in `src/lib/validations/`, shared by client and server and always re-validated on the server.
+- Payments: `src/lib/payments/` (PayMongo, called via `fetch`) and the webhook at `src/app/api/webhooks/paymongo/route.ts`.
+- Vitest stubs `server-only` (`src/test/server-only-stub.ts`), so server modules can be unit-tested.
+
+### Booking & payment design (decided; implement in Phases 1, 5 and 5b)
+
+- Status flow: `pending_payment → pending` (deposit paid, awaiting admin) `→ confirmed → completed`, plus `cancelled`, `declined` and `expired`.
+- **No double booking, enforced in Postgres:** a `btree_gist` exclusion constraint on `tstzrange(start_at, end_at)` covering bookings not in `cancelled/declined/expired`.
+- Unpaid bookings hold the slot until `hold_expires_at` (15–30 min). The constraint can't use `now()`, so stale holds are expired by a pg_cron job **and** at the start of the `create_booking` SECURITY DEFINER RPC. That RPC inserts the client and booking atomically, because anon users have no direct access to `clients` or `bookings`.
+- Prices and `deposit_amount` are always computed on the server from `services`, never taken from the client.
+- A booking counts as paid **only through a signature-verified, idempotent PayMongo webhook**, never through the success redirect. Check PayMongo's current docs for field names before implementing.
+
+## Design system (provisional — confirm with `ui-ux-pro-max` before building UI)
+
+Load the `ui-ux-pro-max` skill before creating or changing UI. Colours are sampled from the logo (`public/brand/logo.jpg`):
+
+- Evergreen `#455D5A` (primary: text, buttons)
+- Terracotta `#CE7056` (accent; large text and decoration only, since it is ~3.4:1 on white; use `#A8513A` for text)
+- Sage `#91C099` (soft tints, always with dark text)
+- Background: ivory `#FAF8F4` light / `#141A19` dark
+
+Proposed type: Cormorant Garamond for headings, Inter for body text. The script wordmark appears only as the logo image. Editorial, photo-first, mobile-first, WCAG 2.1 AA, always `next/image`.
+
+## Conventions
+
+- kebab-case filenames (enforced by ESLint), PascalCase components, no `any`, Server Components by default with `"use client"` at the leaves.
+- RLS on every table. Admin role comes from `admin_profiles`, never from a client-supplied flag. Booking lookup needs reference code **and** email.
+- On Windows: both PowerShell and Git Bash are available.

@@ -1,0 +1,8 @@
+.next
+node_modules
+package-lock.json
+supabase/.temp
+src/types/database.types.ts
+playwright-report
+test-results
+docs/master-prompt.md
