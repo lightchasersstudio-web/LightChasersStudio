@@ -27,6 +27,14 @@ npm run db:types     # regenerate src/types/database.types.ts
 
 Put the project URL, anon key and service role key into `.env.local`. Never expose the service role key to the browser.
 
+In the Supabase dashboard, go to **Authentication → Sign In / Providers** and turn **off** "Allow new users to sign up". Admin accounts are created only with:
+
+```bash
+npm run admin:create -- owner@example.com "Full Name" owner
+```
+
+This prints a temporary password once.
+
 ## Scripts
 
 | Script             | Purpose                                                                    |
