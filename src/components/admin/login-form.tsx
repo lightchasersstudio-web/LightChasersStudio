@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import { createClient } from "@/lib/supabase/browser";
 import { safeAdminRedirect } from "@/lib/utils/safe-redirect";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { signOut } from "@/server/actions/auth";
+
+const noopSubscribe = () => () => {};
 
 /**
  * Signs in from the browser so Supabase Auth's per-IP rate limiting applies to
@@ -24,6 +26,13 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const forbidden = searchParams.get("error") === "forbidden";
   const [formError, setFormError] = useState<string | null>(null);
+  // False in the server HTML, true once React has hydrated. Until then a submit
+  // would be a native form post, bypassing onSubmit.
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -63,7 +72,9 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
+    // method="post" so a submit that somehow happens before hydration never puts
+    // the password in the URL (browser history, server logs).
+    <form method="post" onSubmit={form.handleSubmit(onSubmit)} noValidate>
       <FieldGroup>
         <Controller
           name="email"
@@ -101,7 +112,11 @@ export function LoginForm() {
           )}
         />
         {formError && <FieldError>{formError}</FieldError>}
-        <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={!hydrated || form.formState.isSubmitting}
+        >
           {form.formState.isSubmitting && <Loader2Icon className="animate-spin" aria-hidden />}
           Sign in
         </Button>
