@@ -15,7 +15,10 @@
     "test:e2e": "playwright test",
     "db:types": "supabase gen types typescript --linked --schema public > src/types/database.types.ts",
     "db:push": "supabase db push",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm run db:lint && npm run test && npm run build",
+    "test:db": "vitest run --config vitest.db.config.mts",
+    "db:push:seed": "supabase db push --include-seed",
+    "db:lint": "node scripts/check-sql.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -42,12 +45,15 @@
     "@playwright/test": "^1.64.0",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "eslint-plugin-check-file": "^3.3.2",
+    "libpg-query": "^18.1.5",
+    "pg": "^8.23.1",
     "prettier": "^3.9.9",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "supabase": "^2.120.0",

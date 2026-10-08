@@ -13,13 +13,16 @@ Booking website for **Light Chasers Studio**, a photography business in Zamboang
 
 The full product spec, data model, security rules and build roadmap are in `docs/master-prompt.md`. Read the relevant section before starting a phase. Work proceeds **phase by phase**: plan each feature, finish and verify a phase, then move on.
 
-Current progress: **Phase 0 (foundation) done.** The brand design system (fonts, palette tokens) waits on the `ui-ux-pro-max` skill being installed. Next is Phase 1 (schema, RLS, seed, generated types).
+Current progress:
+
+- **Phase 0 (foundation):** done, except the brand design system (fonts, palette tokens), which waits on the `ui-ux-pro-max` skill being installed.
+- **Phase 1 (database):** migrations, RLS, seed and DB tests are written. They haven't been pushed to a Supabase project yet, so `npm run test:db` hasn't run against a real database, and `src/types/database.types.ts` hasn't been generated.
 
 ## Commands
 
 ```bash
 npm run dev            # dev server (Turbopack)
-npm run check          # typecheck + lint + unit tests + build — run before calling anything done
+npm run check          # typecheck + lint + db:lint + unit tests + build — run before calling anything done
 npm run typecheck      # next typegen && tsc (typegen creates global LayoutProps/PageProps types)
 npm run lint
 npm run format         # prettier (with tailwind class sorting)
@@ -29,11 +32,13 @@ npx vitest run -t "requires the service"  # single test by name
 npm run test:e2e       # playwright (first time: npx playwright install chromium)
 npx playwright test e2e/smoke.spec.ts --project=chromium
 npx shadcn@latest add <component>         # add shadcn components into src/components/ui
-npm run db:push        # apply supabase/migrations to the linked hosted project
+npm run db:lint        # parse all migrations + seed with the real Postgres parser (no DB needed)
+npm run db:push        # apply supabase/migrations to the linked hosted project (db:push:seed also runs seed.sql)
 npm run db:types       # regenerate src/types/database.types.ts from the linked project
+npm run test:db        # DB tests (RLS, create_booking, overlap) against DATABASE_URL_TEST; skipped if unset
 ```
 
-Supabase runs as a **hosted dev project**, not locally (no Docker on this machine). Link it once with `npx supabase login` and `npx supabase link --project-ref <ref>`. All schema changes go in SQL files in `supabase/migrations/`, never as dashboard-only edits.
+Supabase runs as a **hosted dev project**, not locally (no Docker on this machine). Link it once with `npx supabase login` and `npx supabase link --project-ref <ref>`. All schema changes go in SQL files in `supabase/migrations/`, never as dashboard-only edits. PGlite can't run on this machine (not enough free RAM), which is why there's no in-process database. DB tests use a real connection, and each runs in a transaction that is rolled back.
 
 ## Stack specifics (newer than you may expect)
 
@@ -59,7 +64,18 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 - Payments: `src/lib/payments/` (PayMongo, called via `fetch`) and the webhook at `src/app/api/webhooks/paymongo/route.ts`.
 - Vitest stubs `server-only` (`src/test/server-only-stub.ts`), so server modules can be unit-tested.
 
-### Booking & payment design (decided; implement in Phases 1, 5 and 5b)
+### Database conventions (Phase 1)
+
+- Money is stored as integer **centavos** in `*_cents` columns (₱1 = 100). Images are stored as Storage **paths** (`cover_image_path`, `storage_path`, `logo_path`) in the public `portfolio` and `brand` buckets, never as full URLs.
+- `business_settings` is a single row (`id = true`) holding the timezone and booking rules: notice, advance window, slot interval, buffer, default deposit %, and hold minutes.
+- Functions are `SECURITY DEFINER` with `set search_path = ''` and fully qualified names. Every new function must `revoke execute ... from public` and then grant only the roles that need it, because Supabase grants anon execute by default.
+- `create_booking` is **service-role only**. Call it through the admin client from a server action, after Turnstile and rate limiting. It raises P0001 with one of these messages: `service_unavailable`, `invalid_start_time`, `too_soon`, `too_far`, `blackout_date`, `outside_business_hours`, `slot_unavailable`. Map them to user-facing text.
+- `get_busy_ranges(from, to)` is callable by anon, returns no personal data, and accepts at most a 62-day window. It feeds the public slot picker together with `availability_rules` and `blackout_dates`.
+- Public bookings never overwrite an existing `clients` row; clients are matched by lowercased email. Each booking stores the contact name and phone as submitted.
+- Bookings, payments and clients use `on delete restrict`. Privacy deletion requests need an anonymisation routine (Phase 6).
+- A trigger enforces booking status transitions.
+
+### Booking & payment design (decided; implement in Phases 5 and 5b)
 
 - Status flow: `pending_payment → pending` (deposit paid, awaiting admin) `→ confirmed → completed`, plus `cancelled`, `declined` and `expired`.
 - **No double booking, enforced in Postgres:** a `btree_gist` exclusion constraint on `tstzrange(start_at, end_at)` covering bookings not in `cancelled/declined/expired`.
