@@ -47,5 +47,7 @@ This prints a temporary password once.
 
 ## Project docs
 
+- `docs/SETUP.md`: step-by-step setup for a new developer
+- `docs/HANDOFF.md`: current progress, decisions, known limits and next steps
 - `docs/master-prompt.md`: full product spec, data model, security requirements and roadmap
 - `CLAUDE.md`: working notes for AI-assisted development
