@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
+import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
 import { deleteService, reorderServices, setServiceActive } from "@/server/actions/services";
 import type { Service } from "@/server/queries/services";
@@ -143,10 +144,4 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
       ))}
     </ul>
   );
-}
-
-function formatDuration(minutes: number) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return [h && `${h} hr`, m && `${m} min`].filter(Boolean).join(" ");
 }

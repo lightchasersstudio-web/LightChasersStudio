@@ -43,7 +43,7 @@ export function LoginCollage() {
       <div className="pointer-events-none absolute -top-24 -left-24 size-80 rounded-full bg-terracotta/30 blur-3xl" />
       <div className="pointer-events-none absolute -right-20 -bottom-20 size-96 rounded-full bg-sage/30 blur-3xl" />
 
-      <p className="relative flex items-center gap-2 font-script text-2xl text-sage">
+      <p className="relative flex items-center gap-2 font-script text-2xl text-panel-foreground">
         <Sparkle className="size-4 text-terracotta" />
         behind the lens
       </p>

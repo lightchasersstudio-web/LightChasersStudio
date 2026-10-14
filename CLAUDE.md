@@ -19,6 +19,7 @@ Current progress:
 - **Phase 1 (database):** done. Migrations and seed are pushed to the hosted dev project (`mkpjxrhjynbjuiovloiy`), `npm run test:db` passes against it, and `src/types/database.types.ts` is generated.
 - **Phase 2 (admin auth):** login, `proxy.ts`, the admin gate, the admin shell and the create-admin script are built. Sign-in with the real owner account is verified on the dev project.
 - **Phase 3 (admin content):** done. Services CRUD (cover photo, ordering, on/off), weekly hours + blackout dates, portfolio uploads (multi-photo, featured, ordering), studio profile/logo/booking rules, and an Account page to change password. Covered by unit tests, `npm run test:db`, and `e2e/admin-content.spec.ts` (needs `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`).
+- **Phase 4 (public site):** done. Home, services list + detail, portfolio (filters + lightbox), about, contact (live opening hours), branded 404. All public pages are static and refreshed by admin edits through cache tags. "Book a session" points to `/contact` until Phase 5 (`BOOK_HREF` in `src/components/public/site-nav.ts`).
 
 ## Commands
 
@@ -74,6 +75,8 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 - **Admin server actions** go through `adminAction(schema, input, fn)` in `src/server/admin-action.ts`: it calls `assertAdmin()`, re-validates with the shared zod schema (field errors come back to the form via `handleResult()` in `src/components/admin/form-utils.ts`), and catches unexpected errors. After a write, call `audit(...)` and `revalidate(TAGS.x)` (`updateTag` + `refresh`). Phase 4's public `"use cache"` queries must `cacheTag()` with the same `TAGS` so admin edits show up immediately.
 - **Admin forms** keep inputs as strings; zod schemas in `src/lib/validations/` transform them into DB rows (pesos → centavos via `src/lib/utils/money.ts`). Use the wrappers in `src/components/admin/form-fields.tsx`.
 - **Image uploads** happen in the browser (`src/lib/images/prepare-image.ts`): resize, re-encode to WebP (strips EXIF/GPS), make a blur placeholder, upload straight to Storage under admin RLS, then a server action saves the path. Actions only accept paths matching `STORAGE_PATH` in `src/lib/storage.ts`; build URLs with `publicImageUrl()`.
+- **Public data** lives in `src/server/queries/public.ts`: `"use cache"` + `cacheTag(TAGS.x)` + `cacheLife("days")`, using the cookie-free anon client `src/lib/supabase/public.ts` (never `cookies()` inside a cache scope).
+- **Dynamic public routes** (e.g. `/services/[slug]`) must read `params` **inside `<Suspense>`** (Partial Prefetching); reading them at the top level breaks regeneration after an admin edit (500). `generateStaticParams` must return at least one entry. Client components calling `usePathname()` in shared layouts need a `<Suspense>` wrapper too (see `nav-links.tsx`). Unknown slugs are soft 404s (200 + `noindex`).
 - `requireAdmin()` calls `await connection()` first; without it Next flags the Supabase client's `Date.now()` during runtime prefetch.
 - Vitest stubs `server-only` (`src/test/server-only-stub.ts`), so server modules can be unit-tested.
 
@@ -105,6 +108,7 @@ Load the `ui-ux-pro-max` skill before creating or changing UI. The vibe is a cut
 - **Shape:** `--radius: 1rem`, pill buttons (`rounded-full`), 44px touch targets (button `default` h-10, `lg` h-11; inputs h-11).
 - **Photo motifs** (CSS utilities in `globals.css`): `polaroid` (white frame with a deep bottom), `viewfinder` (terracotta corner brackets), `bg-studio` (blush/sage glow over a dot grid), plus `<Sparkle />` (`src/components/shared/sparkle.tsx`, the four-point star from the logo). The logo JPG has a white background, so show it on white (a polaroid) or with `mix-blend-multiply` in light mode.
 - Editorial, photo-first, mobile-first, WCAG 2.1 AA, `prefers-reduced-motion` respected globally, always `next/image`.
+- **Motion** (`motion/react`, formerly Framer Motion) for gesture/physics animation, e.g. the swipeable hero stack (`src/components/public/hero-deck.tsx`). Wrap in `<MotionConfig reducedMotion="user">`; simple entrances stay as Tailwind `animate-in` classes.
 
 ## Conventions
 
