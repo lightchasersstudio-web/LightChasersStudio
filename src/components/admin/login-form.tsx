@@ -63,7 +63,7 @@ export function LoginForm() {
           This account doesn&apos;t have admin access. Sign out and use an admin account.
         </p>
         <form action={signOut}>
-          <Button type="submit" className="w-full">
+          <Button type="submit" size="lg" className="w-full">
             Sign out
           </Button>
         </form>
@@ -114,7 +114,8 @@ export function LoginForm() {
         {formError && <FieldError>{formError}</FieldError>}
         <Button
           type="submit"
-          className="w-full"
+          size="lg"
+          className="mt-2 w-full"
           disabled={!hydrated || form.formState.isSubmitting}
         >
           {form.formState.isSubmitting && <Loader2Icon className="animate-spin" aria-hidden />}

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
@@ -47,6 +48,9 @@ const lookupAdmin = cache(async (): Promise<AdminLookup> => {
 
 /** For admin pages/layouts: returns the admin or redirects. Call inside <Suspense>. */
 export async function requireAdmin(): Promise<CurrentAdmin> {
+  // Admin pages are per-request: stop runtime prefetch/prerender here, before the
+  // Supabase client reads the clock (Next flags Date.now() during prerender).
+  await connection();
   const result = await lookupAdmin();
   if (result.status === "signed-out") redirect("/admin/login");
   if (result.status === "forbidden") redirect("/admin/login?error=forbidden");

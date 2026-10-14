@@ -1,21 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Caveat, Fraunces, Nunito_Sans } from "next/font/google";
 
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
 
-// Placeholder fonts — brand typography is set in the design-system step.
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Brand type: Fraunces (soft serif headings), Nunito Sans (body), Caveat (handwritten accents).
+const display = Fraunces({
+  variable: "--font-display",
   subsets: ["latin"],
+  axes: ["SOFT", "opsz"],
 });
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const body = Nunito_Sans({ variable: "--font-body", subsets: ["latin"] });
+const hand = Caveat({ variable: "--font-hand", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {
@@ -31,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${display.variable} ${body.variable} ${hand.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider
@@ -41,7 +39,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           disableTransitionOnChange
         >
           {children}
-          <Toaster />
+          {/* Top: on phones a bottom toast would cover sticky save bars. */}
+          <Toaster position="top-center" />
         </ThemeProvider>
       </body>
     </html>

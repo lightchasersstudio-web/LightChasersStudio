@@ -319,6 +319,46 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     });
   });
 
+  it("replaces the weekly schedule atomically, admins only", async () => {
+    await inRollback(async (c) => {
+      await setupFixtures(c);
+      const adminId = crypto.randomUUID();
+      const userId = crypto.randomUUID();
+      await c.query(
+        "insert into auth.users (id, email) values ($1, 'admin@test.local'), ($2, 'user@test.local')",
+        [adminId, userId],
+      );
+      await c.query("insert into public.admin_profiles (user_id, role) values ($1, 'admin')", [
+        adminId,
+      ]);
+      const week = JSON.stringify([
+        { day_of_week: 1, start_time: "09:00", end_time: "12:00" },
+        { day_of_week: 1, start_time: "13:00", end_time: "18:00" },
+      ]);
+
+      await actAs(c, "authenticated", userId);
+      expect(
+        await expectFailure(c, "select public.replace_availability_rules($1::jsonb)", [week]),
+      ).toMatch(/forbidden/);
+
+      await c.query("reset role");
+      await actAs(c, "authenticated", adminId);
+      await c.query("select public.replace_availability_rules($1::jsonb)", [week]);
+      const { rows } = await c.query(
+        "select day_of_week, start_time::text from public.availability_rules order by start_time",
+      );
+      expect(rows).toEqual([
+        { day_of_week: 1, start_time: "09:00:00" },
+        { day_of_week: 1, start_time: "13:00:00" },
+      ]);
+
+      // A bad window fails the whole call and leaves the saved week untouched.
+      const bad = JSON.stringify([{ day_of_week: 2, start_time: "18:00", end_time: "09:00" }]);
+      await expectFailure(c, "select public.replace_availability_rules($1::jsonb)", [bad]);
+      expect((await c.query("select 1 from public.availability_rules")).rows).toHaveLength(2);
+    });
+  });
+
   it("rejects invalid status transitions", async () => {
     await inRollback(async (c) => {
       const s = await setupFixtures(c);

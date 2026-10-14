@@ -28,11 +28,11 @@ async function AdminGate({ children }: { children: React.ReactNode }) {
 function AdminShellSkeleton() {
   return (
     <div className="flex flex-1" aria-busy="true" aria-label="Loading admin">
-      <div className="hidden w-60 border-r p-4 md:block">
+      <div className="hidden w-64 border-r bg-sidebar p-5 md:block">
         <Skeleton className="mb-6 h-8 w-32" />
         <div className="space-y-2">
           {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-8 w-full" />
+            <Skeleton key={i} className="h-11 w-full rounded-full" />
           ))}
         </div>
       </div>

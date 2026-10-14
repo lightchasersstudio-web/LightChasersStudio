@@ -1,11 +1,12 @@
 "use client";
 
-import { LogOutIcon, MenuIcon } from "lucide-react";
+import { CameraIcon, LogOutIcon, MenuIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { adminNav } from "@/components/admin/admin-nav";
+import { Sparkle } from "@/components/shared/sparkle";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -19,12 +20,12 @@ export function AdminShell({ admin, children }: { admin: ShellAdmin; children: R
 
   return (
     <div className="flex flex-1">
-      <aside className="hidden w-60 shrink-0 flex-col border-r md:flex">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar md:flex">
         <SidebarContent admin={admin} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-2 border-b px-4 py-2">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b bg-background/80 px-4 py-2 backdrop-blur">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button
@@ -36,19 +37,21 @@ export function AdminShell({ admin, children }: { admin: ShellAdmin; children: R
                 <MenuIcon className="size-5" aria-hidden />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
+            <SheetContent side="left" className="w-72 bg-sidebar p-0">
               <SheetHeader className="sr-only">
                 <SheetTitle>Admin navigation</SheetTitle>
               </SheetHeader>
               <SidebarContent admin={admin} onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
-          <span className="font-medium md:hidden">Light Chasers · Admin</span>
+          <span className="md:hidden">
+            <BrandMark />
+          </span>
           <div className="ml-auto">
             <ThemeToggle />
           </div>
         </header>
-        <main id="main" className="flex-1 p-4 md:p-8">
+        <main id="main" className="flex-1 p-4 md:p-10">
           {children}
         </main>
       </div>
@@ -61,12 +64,16 @@ function SidebarContent({ admin, onNavigate }: { admin: ShellAdmin; onNavigate?:
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b px-4 py-4">
-        <Link href="/admin" className="font-semibold" onClick={onNavigate}>
-          Light Chasers · Admin
+      <div className="px-5 py-6">
+        <Link
+          href="/admin"
+          onClick={onNavigate}
+          className="inline-block rounded-xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <BrandMark />
         </Link>
       </div>
-      <nav aria-label="Admin" className="flex-1 space-y-1 p-2">
+      <nav aria-label="Admin" className="flex-1 space-y-1 px-3">
         {adminNav.map(({ href, label, icon: Icon }) => {
           const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
           return (
@@ -76,8 +83,9 @@ function SidebarContent({ admin, onNavigate }: { admin: ShellAdmin; onNavigate?:
               onClick={onNavigate}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                active && "bg-muted font-medium",
+                "flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                active &&
+                  "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
               )}
             >
               <Icon className="size-4" aria-hidden />
@@ -86,8 +94,8 @@ function SidebarContent({ admin, onNavigate }: { admin: ShellAdmin; onNavigate?:
           );
         })}
       </nav>
-      <div className="border-t p-3">
-        <p className="truncate px-1 text-sm font-medium">{admin.fullName ?? "Admin"}</p>
+      <div className="m-3 rounded-2xl border bg-card p-3">
+        <p className="truncate px-1 text-sm font-semibold">{admin.fullName ?? "Admin"}</p>
         {admin.email && (
           <p className="truncate px-1 text-xs text-muted-foreground">{admin.email}</p>
         )}
@@ -99,5 +107,21 @@ function SidebarContent({ admin, onNavigate }: { admin: ShellAdmin; onNavigate?:
         </form>
       </div>
     </div>
+  );
+}
+
+/** Camera "lens" badge + wordmark, echoing the logo. */
+function BrandMark() {
+  return (
+    <span className="flex items-center gap-2.5">
+      <span className="relative grid size-10 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+        <CameraIcon className="size-5" aria-hidden />
+        <Sparkle className="absolute -top-1 -right-1 size-3.5 text-terracotta" />
+      </span>
+      <span className="leading-none">
+        <span className="block font-heading text-lg font-semibold">Light Chasers</span>
+        <span className="block font-script text-base text-terracotta-ink">studio admin</span>
+      </span>
+    </span>
   );
 }

@@ -7,9 +7,15 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-display);
+  --font-script: var(--font-hand);
+  --color-terracotta: var(--terracotta);
+  --color-terracotta-ink: var(--terracotta-ink);
+  --color-sage: var(--sage);
+  --color-blush: var(--blush);
+  --color-panel: var(--panel);
+  --color-panel-foreground: var(--panel-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,72 +55,85 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* Light Chasers palette (sampled from public/brand/logo.jpg). Contrast notes are vs --background. */
+  --background: #faf8f4; /* ivory */
+  --foreground: #2b3a38; /* deep evergreen, ~11:1 */
+  --card: #ffffff;
+  --card-foreground: #2b3a38;
+  --popover: #ffffff;
+  --popover-foreground: #2b3a38;
+  --primary: #455d5a; /* evergreen, ~6.7:1; white on it ~7:1 */
+  --primary-foreground: #ffffff;
+  --secondary: #e7f1e8; /* sage tint */
+  --secondary-foreground: #2f4a3a;
+  --muted: #f1ede6;
+  --muted-foreground: #5f6f6c; /* ~4.9:1 */
+  --accent: #f8e6df; /* blush (terracotta tint) */
+  --accent-foreground: #7f3a28;
+  --destructive: #b42318;
+  --border: #e6e0d6;
+  --input: #ddd6ca;
+  --ring: #ce7056;
+  --terracotta: #ce7056; /* decoration / large text only (~3.4:1) */
+  --terracotta-ink: #a8513a; /* terracotta for body-size text, ~5.3:1 */
+  --sage: #91c099;
+  --blush: #f8e6df;
+  --panel: #455d5a; /* evergreen brand panel in both themes */
+  --panel-foreground: #faf8f4;
+  --chart-1: #455d5a;
+  --chart-2: #ce7056;
+  --chart-3: #91c099;
+  --chart-4: #d9a441;
+  --chart-5: #8a7a6b;
+  --radius: 1rem;
+  --sidebar: #f5f1ea;
+  --sidebar-foreground: #2b3a38;
+  --sidebar-primary: #455d5a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f8e6df;
+  --sidebar-accent-foreground: #7f3a28;
+  --sidebar-border: #e6e0d6;
+  --sidebar-ring: #ce7056;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #141a19;
+  --foreground: #ede9e1;
+  --card: #1c2423;
+  --card-foreground: #ede9e1;
+  --popover: #1c2423;
+  --popover-foreground: #ede9e1;
+  --primary: #91c099; /* sage on dark, dark text on it */
+  --primary-foreground: #142019;
+  --secondary: #23302d;
+  --secondary-foreground: #d5e8d8;
+  --muted: #222b29;
+  --muted-foreground: #a8b3b0;
+  --accent: #3a2620;
+  --accent-foreground: #f2c2b2;
+  --destructive: #f97066;
+  --border: #ffffff1a;
+  --input: #ffffff26;
+  --ring: #e08a70;
+  --terracotta: #e08a70;
+  --terracotta-ink: #eda08a;
+  --sage: #91c099;
+  --blush: #3a2620;
+  --panel: #1f2b29;
+  --panel-foreground: #ede9e1;
+  --chart-1: #91c099;
+  --chart-2: #e08a70;
+  --chart-3: #6fa3a0;
+  --chart-4: #e3b85c;
+  --chart-5: #b8a898;
+  --sidebar: #182120;
+  --sidebar-foreground: #ede9e1;
+  --sidebar-primary: #91c099;
+  --sidebar-primary-foreground: #142019;
+  --sidebar-accent: #3a2620;
+  --sidebar-accent-foreground: #f2c2b2;
+  --sidebar-border: #ffffff1a;
+  --sidebar-ring: #e08a70;
 }
 
 @layer base {
@@ -130,5 +149,78 @@
   }
   html {
     @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading tracking-tight text-balance;
+    /* Fraunces "soft" axis: rounder, friendlier serif. */
+    font-variation-settings: "SOFT" 100;
+  }
+}
+
+/* Photo-studio motifs */
+/* Always a white frame, so its caption ink is fixed in both themes (~5.3:1 on white). */
+@utility polaroid {
+  @apply relative rounded-sm bg-white p-3 pb-10 shadow-[0_10px_30px_-12px_rgb(43_58_56/0.35)] ring-1 ring-black/5;
+  color: #a8513a;
+}
+
+/* Camera viewfinder corner brackets around an element. */
+@utility viewfinder {
+  position: relative;
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-color: var(--terracotta);
+    pointer-events: none;
+  }
+  &::before {
+    top: -0.5rem;
+    left: -0.5rem;
+    border-top-width: 2px;
+    border-left-width: 2px;
+    border-top-left-radius: 0.375rem;
+  }
+  &::after {
+    right: -0.5rem;
+    bottom: -0.5rem;
+    border-right-width: 2px;
+    border-bottom-width: 2px;
+    border-bottom-right-radius: 0.375rem;
+  }
+}
+
+/* Soft dotted "film grain" backdrop for hero/login areas. */
+@utility bg-studio {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(
+      circle at 15% 10%,
+      color-mix(in oklab, var(--blush) 90%, transparent) 0,
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 85% 90%,
+      color-mix(in oklab, var(--sage) 25%, transparent) 0,
+      transparent 45%
+    ),
+    radial-gradient(color-mix(in oklab, var(--foreground) 7%, transparent) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    18px 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

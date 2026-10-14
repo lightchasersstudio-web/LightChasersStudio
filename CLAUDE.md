@@ -15,9 +15,10 @@ The full product spec, data model, security rules and build roadmap are in `docs
 
 Current progress:
 
-- **Phase 0 (foundation):** done, except the brand design system (fonts, palette tokens), which waits on the `ui-ux-pro-max` skill being installed.
-- **Phase 1 (database):** migrations, RLS, seed and DB tests are written. They haven't been pushed to a Supabase project yet, so `npm run test:db` hasn't run against a real database, and `src/types/database.types.ts` hasn't been generated.
-- **Phase 2 (admin auth):** login, `proxy.ts`, the admin gate, the admin shell and the create-admin script are built. Signing in with a real account is untested until a Supabase project exists. The screens use plain shadcn styling, pending the brand design pass.
+- **Phase 0 (foundation):** done, including the brand design system (see Design system below).
+- **Phase 1 (database):** done. Migrations and seed are pushed to the hosted dev project (`mkpjxrhjynbjuiovloiy`), `npm run test:db` passes against it, and `src/types/database.types.ts` is generated.
+- **Phase 2 (admin auth):** login, `proxy.ts`, the admin gate, the admin shell and the create-admin script are built. Sign-in with the real owner account is verified on the dev project.
+- **Phase 3 (admin content):** done. Services CRUD (cover photo, ordering, on/off), weekly hours + blackout dates, portfolio uploads (multi-photo, featured, ordering), studio profile/logo/booking rules, and an Account page to change password. Covered by unit tests, `npm run test:db`, and `e2e/admin-content.spec.ts` (needs `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`).
 
 ## Commands
 
@@ -70,6 +71,10 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
   - Never read secrets anywhere else or give them a `NEXT_PUBLIC_` prefix.
 - Data access lives in `src/server/queries/`, mutations in `src/server/actions/` (Server Actions returning `{ ok: true, data } | { ok: false, error }`), and zod schemas in `src/lib/validations/`, shared by client and server and always re-validated on the server.
 - Payments: `src/lib/payments/` (PayMongo, called via `fetch`) and the webhook at `src/app/api/webhooks/paymongo/route.ts`.
+- **Admin server actions** go through `adminAction(schema, input, fn)` in `src/server/admin-action.ts`: it calls `assertAdmin()`, re-validates with the shared zod schema (field errors come back to the form via `handleResult()` in `src/components/admin/form-utils.ts`), and catches unexpected errors. After a write, call `audit(...)` and `revalidate(TAGS.x)` (`updateTag` + `refresh`). Phase 4's public `"use cache"` queries must `cacheTag()` with the same `TAGS` so admin edits show up immediately.
+- **Admin forms** keep inputs as strings; zod schemas in `src/lib/validations/` transform them into DB rows (pesos → centavos via `src/lib/utils/money.ts`). Use the wrappers in `src/components/admin/form-fields.tsx`.
+- **Image uploads** happen in the browser (`src/lib/images/prepare-image.ts`): resize, re-encode to WebP (strips EXIF/GPS), make a blur placeholder, upload straight to Storage under admin RLS, then a server action saves the path. Actions only accept paths matching `STORAGE_PATH` in `src/lib/storage.ts`; build URLs with `publicImageUrl()`.
+- `requireAdmin()` calls `await connection()` first; without it Next flags the Supabase client's `Date.now()` during runtime prefetch.
 - Vitest stubs `server-only` (`src/test/server-only-stub.ts`), so server modules can be unit-tested.
 
 ### Database conventions (Phase 1)
@@ -91,16 +96,15 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 - Prices and `deposit_cents` are always computed on the server from `services`, never taken from the client.
 - A booking counts as paid **only through a signature-verified, idempotent PayMongo webhook**, never through the success redirect. Check PayMongo's current docs for field names before implementing.
 
-## Design system (provisional — confirm with `ui-ux-pro-max` before building UI)
+## Design system
 
-Load the `ui-ux-pro-max` skill before creating or changing UI. Colours are sampled from the logo (`public/brand/logo.jpg`):
+Load the `ui-ux-pro-max` skill before creating or changing UI. The vibe is a cute, warm, modern photo studio. Tokens live in `src/app/globals.css`; components use tokens, never raw hex.
 
-- Evergreen `#455D5A` (primary: text, buttons)
-- Terracotta `#CE7056` (accent; large text and decoration only, since it is ~3.4:1 on white; use `#A8513A` for text)
-- Sage `#91C099` (soft tints, always with dark text)
-- Background: ivory `#FAF8F4` light / `#141A19` dark
-
-Proposed type: Cormorant Garamond for headings, Inter for body text. The script wordmark appears only as the logo image. Editorial, photo-first, mobile-first, WCAG 2.1 AA, always `next/image`.
+- **Colours** (from `public/brand/logo.jpg`): Evergreen `#455D5A` (`primary`), Terracotta `#CE7056` (`terracotta`; decoration and large text only, ~3.4:1, so use `terracotta-ink` `#A8513A` for text), Sage `#91C099` (`sage`; tints, always with dark text), Blush `#F8E6DF` (`accent`/`blush`). Background ivory `#FAF8F4` light / `#141A19` dark; in dark mode `primary` becomes sage with dark text.
+- **Type** (`next/font` in `src/app/layout.tsx`): Fraunces with the SOFT axis for h1–h3 (`font-heading`, applied automatically), Nunito Sans for body (`font-sans`), Caveat for short handwritten accents only (`font-script`, e.g. "say cheese!"). The script wordmark appears only as the logo image.
+- **Shape:** `--radius: 1rem`, pill buttons (`rounded-full`), 44px touch targets (button `default` h-10, `lg` h-11; inputs h-11).
+- **Photo motifs** (CSS utilities in `globals.css`): `polaroid` (white frame with a deep bottom), `viewfinder` (terracotta corner brackets), `bg-studio` (blush/sage glow over a dot grid), plus `<Sparkle />` (`src/components/shared/sparkle.tsx`, the four-point star from the logo). The logo JPG has a white background, so show it on white (a polaroid) or with `mix-blend-multiply` in light mode.
+- Editorial, photo-first, mobile-first, WCAG 2.1 AA, `prefers-reduced-motion` respected globally, always `next/image`.
 
 ## Conventions
 
