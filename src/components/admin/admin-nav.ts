@@ -1,9 +1,21 @@
-import { LayoutDashboardIcon, type LucideIcon } from "lucide-react";
+import {
+  CalendarClockIcon,
+  CameraIcon,
+  ImagesIcon,
+  LayoutDashboardIcon,
+  SettingsIcon,
+  UserRoundIcon,
+  type LucideIcon,
+} from "lucide-react";
 
 export type AdminNavItem = { href: string; label: string; icon: LucideIcon };
 
-// Add sections here as each phase ships (services, availability, portfolio, settings,
-// bookings, calendar, clients).
+// Add sections here as each phase ships (bookings, calendar, clients in Phase 6).
 export const adminNav: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon },
+  { href: "/admin/services", label: "Services", icon: CameraIcon },
+  { href: "/admin/availability", label: "Availability", icon: CalendarClockIcon },
+  { href: "/admin/portfolio", label: "Portfolio", icon: ImagesIcon },
+  { href: "/admin/settings", label: "Settings", icon: SettingsIcon },
+  { href: "/admin/account", label: "Account", icon: UserRoundIcon },
 ];

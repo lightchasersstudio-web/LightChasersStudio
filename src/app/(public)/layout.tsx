@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/shared/theme-toggle";
 export default function PublicLayout({ children }: LayoutProps<"/">) {
   return (
     <>
-      <header className="border-b">
+      <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link href="/" aria-label="Light Chasers Studio home">
             <Image
@@ -15,6 +15,7 @@ export default function PublicLayout({ children }: LayoutProps<"/">) {
               alt="Light Chasers Studio"
               width={64}
               height={64}
+              className="rounded-xl mix-blend-multiply dark:mix-blend-normal"
               priority
             />
           </Link>

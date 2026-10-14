@@ -8,7 +8,7 @@ test("public home renders", async ({ page }) => {
 test("signed-out visitors are sent from /admin to the login page", async ({ page }) => {
   await page.goto("/admin/bookings?status=pending");
   await expect(page).toHaveURL(/\/admin\/login\?next=%2Fadmin%2Fbookings%3Fstatus%3Dpending/);
-  await expect(page.getByRole("heading", { name: "Admin sign in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   await expect(page.getByLabel("Email")).toBeVisible();
   await expect(page.getByLabel("Password")).toBeVisible();
 });
