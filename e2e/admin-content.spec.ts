@@ -42,16 +42,43 @@ test("services: create, hide, edit and delete", async ({ page }) => {
   await page.getByRole("button", { name: "Create service" }).click();
   await expect(page).toHaveURL(/\/admin\/services\/[0-9a-f-]{36}$/);
 
+  // The public (cached) services page picks up the change right away.
+  await page.goto("/services");
+  await expect(page.getByRole("link", { name })).toBeVisible();
+  // A slug that didn't exist at build time renders on demand (regression: 500 from usePathname).
+  await page.getByRole("link", { name }).click();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.getByText("₱2,500").first()).toBeVisible();
+
   await page.goto("/admin/services");
   const row = page.getByRole("listitem").filter({ hasText: name });
   await expect(row).toContainText("₱2,500");
   await row.getByRole("switch", { name: `${name} bookable` }).click();
   await expect(row.getByText("Hidden")).toBeVisible();
+  await expect(page.getByText(`${name} is hidden.`)).toBeVisible(); // saved, not just optimistic
 
+  await page.goto("/services");
+  await expect(page.getByRole("heading", { name: "Services & packages" })).toBeVisible();
+  await expect(page.getByRole("link", { name })).toHaveCount(0);
+
+  await page.goto("/admin/services");
   await row.getByRole("link", { name: `Edit ${name}` }).click();
   await page.getByLabel("Price").fill("3000");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Service saved.")).toBeVisible();
+
+  // Edits regenerate pages that were prerendered at build time (regression: 500 when
+  // params were read outside <Suspense>). Check every public service page.
+  await page.goto("/services");
+  const hrefs = await page
+    .getByRole("article")
+    .getByRole("link")
+    .evaluateAll((links) => links.map((a) => a.getAttribute("href")!));
+  for (const href of hrefs) {
+    const res = await page.goto(href);
+    expect(res?.status(), href).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  }
 
   await page.goto("/admin/services");
   await page.getByRole("button", { name: `Delete ${name}` }).click();
@@ -95,6 +122,13 @@ test("portfolio: upload, feature and delete a photo", async ({ page }) => {
   await page.getByLabel("Describe this photo").fill(alt);
   await page.getByRole("button", { name: "Upload 1 photo" }).click();
   await expect(page.getByText("Added 1 photo.")).toBeVisible();
+
+  // Shows on the public gallery straight away, and opens in the lightbox.
+  await page.goto("/portfolio");
+  await page.getByRole("button", { name: `Open photo: ${alt}` }).click();
+  await expect(page.getByRole("dialog").getByText(alt)).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  await page.goto("/admin/portfolio");
 
   const card = page.getByRole("listitem").filter({ hasText: alt });
   await card.getByRole("button", { name: "Feature photo on the home page" }).click();

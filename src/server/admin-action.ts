@@ -4,18 +4,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { refresh, updateTag } from "next/cache";
 import type { z } from "zod";
 
+import { TAGS } from "@/lib/cache-tags";
 import { createClient } from "@/lib/supabase/server";
 import { fail, type ActionResult } from "@/lib/utils/action-result";
 import { assertAdmin, type CurrentAdmin } from "@/server/auth";
 import type { Database, Json } from "@/types/database.types";
 
-/** Cache tags for public catalogue data. Phase 4's "use cache" queries tag with these. */
-export const TAGS = {
-  services: "services",
-  portfolio: "portfolio",
-  settings: "settings",
-  availability: "availability",
-} as const;
+export { TAGS };
 
 type Ctx = { admin: CurrentAdmin; supabase: SupabaseClient<Database> };
 
