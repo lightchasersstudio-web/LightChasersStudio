@@ -22,14 +22,18 @@ export default async function HomePage() {
     listFeaturedPhotos(9),
   ]);
   const heroPhotos = featured.slice(0, 3);
-  // One card per category (Versa Space is the studio rental one); categories without
-  // packages yet point to the contact page instead of an empty section.
-  const shootCards = SERVICE_CATEGORIES.map(({ value, label }) => ({
-    key: value,
-    label,
-    href: services.some((s) => s.category === value) ? `/services#${value}` : "/contact",
-    Icon: CATEGORY_ICONS[value],
-  }));
+  // One card per category (Versa Space is the studio rental one). A category without
+  // packages shows "Coming soon" if flagged, otherwise points to the contact page.
+  const shootCards = SERVICE_CATEGORIES.map(({ value, label, comingSoon }) => {
+    const empty = !services.some((s) => s.category === value);
+    return {
+      key: value,
+      label,
+      href: empty && !comingSoon ? "/contact" : `/services#${value}`,
+      soon: empty && comingSoon,
+      Icon: CATEGORY_ICONS[value],
+    };
+  });
   const highlights = featured.slice(3, 9).length >= 3 ? featured.slice(3, 9) : featured.slice(0, 6);
 
   return (
@@ -79,7 +83,7 @@ export default async function HomePage() {
           align="center"
         />
         <ul className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-          {shootCards.map(({ key, label, href, Icon }, i) => {
+          {shootCards.map(({ key, label, href, soon, Icon }, i) => {
             // Odd count: the last card spans the full row on 2-column screens.
             const isOrphan = shootCards.length % 2 === 1 && i === shootCards.length - 1;
             return (
@@ -92,6 +96,11 @@ export default async function HomePage() {
                     <Icon className="size-6" aria-hidden />
                   </span>
                   <span className="font-heading text-lg leading-tight font-semibold">{label}</span>
+                  {soon && (
+                    <span className="rounded-full bg-accent px-2.5 py-0.5 font-script text-base text-terracotta-ink">
+                      Coming soon
+                    </span>
+                  )}
                 </Link>
               </li>
             );

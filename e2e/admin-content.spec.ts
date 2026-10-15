@@ -90,6 +90,34 @@ test("services: create, hide, edit and delete", async ({ page }) => {
   await expect(page.getByText(name)).toHaveCount(0);
 });
 
+test("Versa Space shows its package once one is added, coming soon otherwise", async ({
+  page,
+}, testInfo) => {
+  // One studio package at a time: parallel projects would see each other's.
+  test.skip(testInfo.project.name === "mobile", "covered by the desktop run");
+  const name = `E2E Package Studio ${Date.now()}`;
+  await page.goto("/admin/services/new");
+  await page.getByLabel("Service name").fill(name);
+  await page.getByLabel("Category").selectOption("studio");
+  await page.getByLabel("Price").fill("1500");
+  await page.getByRole("button", { name: "Create service" }).click();
+  await expect(page).toHaveURL(/\/admin\/services\/[0-9a-f-]{36}$/);
+
+  await page.goto("/services");
+  const studio = page.locator("section#studio");
+  await expect(studio.getByRole("link", { name, exact: true })).toBeVisible();
+  await expect(studio.getByText("Coming soon")).toHaveCount(0);
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: /Versa Space/ })).not.toContainText("Coming soon");
+
+  await page.goto("/admin/services");
+  await page.getByRole("button", { name: `Delete ${name}` }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByText(name)).toHaveCount(0);
+  await page.goto("/services");
+  await expect(page.locator("section#studio").getByText("Coming soon")).toBeVisible();
+});
+
 test("availability: validates hours and blocks/unblocks a date", async ({ page }, testInfo) => {
   await page.goto("/admin/availability");
   const monday = page.getByRole("listitem").filter({ hasText: "Monday" }).first();

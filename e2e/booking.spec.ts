@@ -60,9 +60,7 @@ test("Book now on a package opens the wizard with it chosen and walks to payment
   await submit.click();
   // Without a PayMongo key the server refuses before holding a slot.
   await expect(
-    page.getByText(
-      /Online payment isn't available yet|Too many attempts/,
-    ),
+    page.getByText(/Online payment isn't available yet|Too many attempts/),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/book/);
 });

@@ -94,3 +94,16 @@ test("mobile menu reaches every page", async ({ page }) => {
     await expect(page).toHaveURL(new RegExp(`/${label.toLowerCase()}$`));
   }
 });
+
+test("Versa Space says coming soon until it has a package", async ({ page }) => {
+  await page.goto("/services");
+  const studio = page.locator("section#studio");
+  test.skip((await studio.getByRole("article").count()) > 0, "Versa Space already has packages");
+
+  await page.goto("/");
+  const card = page.getByRole("link", { name: /Versa Space/ });
+  await expect(card).toContainText("Coming soon");
+  await card.click();
+  await expect(page).toHaveURL(/\/services#studio$/);
+  await expect(page.locator("section#studio").getByText("Coming soon")).toBeVisible();
+});
