@@ -22,6 +22,7 @@ const esc = (s: string) =>
   );
 
 function layout(
+  siteUrl: string,
   b: BookingSummary,
   heading: string,
   intro: string,
@@ -40,7 +41,7 @@ function layout(
   return `<!doctype html><html><body style="margin:0;background:#FAF8F4;font-family:Helvetica,Arial,sans-serif;color:${INK}">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border-radius:16px;overflow:hidden">
-<tr><td style="background:${EVERGREEN};color:#fff;padding:20px 24px;font-size:20px;font-weight:bold">${esc(b.studioName)}</td></tr>
+<tr><td align="center" style="padding:20px 24px 16px;border-bottom:4px solid ${EVERGREEN}"><img src="${esc(siteUrl)}/brand/logo.jpg" width="112" height="112" alt="${esc(b.studioName)}" style="display:block;border:0;outline:none"></td></tr>
 <tr><td style="padding:24px">
 <h1 style="margin:0 0 8px;font-size:22px">${esc(heading)}</h1>
 <p style="margin:0 0 20px;line-height:1.5">Hi ${esc(b.contactName)}, ${esc(intro)}</p>
@@ -65,7 +66,7 @@ function clientEmail(
   const href = lookupUrl(siteUrl, b.reference);
   return {
     subject,
-    html: layout(b, heading, intro, { href, label: "View your booking" }),
+    html: layout(siteUrl, b, heading, intro, { href, label: "View your booking" }),
     text: `Hi ${b.contactName}, ${intro}\n\n${bookingSummaryText(b)}\n\nView your booking: ${href}`,
   };
 }
@@ -117,7 +118,7 @@ export function newBookingAlertEmail(
     : "a new booking is waiting for your review.";
   return {
     subject: `${needsRefundReview ? "Payment needs review" : "New booking needs review"}: ${b.reference}`,
-    html: layout({ ...b, contactName: "there" }, "New booking", intro, {
+    html: layout(siteUrl, { ...b, contactName: "there" }, "New booking", intro, {
       href,
       label: "Open in admin",
     }),

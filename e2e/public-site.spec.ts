@@ -61,11 +61,23 @@ test("unknown service shows the 404 page", async ({ page }) => {
   expect((await page.goto("/no-such-page"))?.status()).toBe(404);
 });
 
-test("contact page lists opening hours for every day", async ({ page }) => {
+test("contact page lists opening hours and links to Facebook", async ({ page }) => {
   await page.goto("/contact");
   for (const day of ["Monday", "Sunday"]) {
     await expect(page.getByText(day, { exact: true })).toBeVisible();
   }
+  const visit = page.getByRole("link", { name: /Visit our page/ });
+  test.skip((await visit.count()) === 0, "no Facebook page in Settings");
+  await expect(visit).toHaveAttribute("href", /facebook\.com\//);
+  await expect(visit).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: /^Message us on Messenger/ })).toHaveAttribute(
+    "href",
+    /^https:\/\/m\.me\//,
+  );
+  await expect(page.getByRole("link", { name: "Book now" }).last()).toHaveAttribute(
+    "href",
+    "/book",
+  );
 });
 
 test("portfolio lightbox opens, navigates with the keyboard and closes", async ({ page }) => {

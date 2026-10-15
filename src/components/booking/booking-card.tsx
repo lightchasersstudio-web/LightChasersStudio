@@ -1,4 +1,5 @@
 import { CalendarIcon, CameraIcon, MapPinIcon } from "lucide-react";
+import Image from "next/image";
 
 import { StatusBadge } from "@/components/booking/status-badge";
 import { Sparkle } from "@/components/shared/sparkle";
@@ -31,7 +32,9 @@ export function BookingCard({
     >
       <header className="relative bg-panel px-6 pt-6 pb-8 text-panel-foreground">
         <Sparkle className="absolute top-5 right-6 size-5 text-terracotta" />
-        <p className="font-script text-xl">{b.studioName}</p>
+        <span className="inline-block overflow-hidden rounded-full bg-white ring-2 ring-panel-foreground/20">
+          <Image src="/brand/logo.jpg" alt={b.studioName} width={64} height={64} sizes="64px" />
+        </span>
         <p className="mt-3 text-xs tracking-wider uppercase opacity-85">Booking reference</p>
         <p className="font-heading text-2xl font-semibold tracking-wide">{b.reference}</p>
       </header>

@@ -29,6 +29,12 @@ describe("booking emails", () => {
     expect(email.text).toContain("Balance: ₱2,450");
   });
 
+  it("shows the studio logo from the live site", () => {
+    const email = bookingConfirmedEmail(booking, "https://studio.example");
+    expect(email.html).toContain('src="https://studio.example/brand/logo.jpg"');
+    expect(email.html).toContain('alt="Light Chasers Studio"');
+  });
+
   it("points the studio alert at the admin booking page", () => {
     const email = newBookingAlertEmail(booking, "https://studio.example", "b-1", true);
     expect(email.text).toContain("https://studio.example/admin/bookings/b-1");

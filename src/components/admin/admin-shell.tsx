@@ -1,6 +1,7 @@
 "use client";
 
-import { CameraIcon, LogOutIcon, MenuIcon } from "lucide-react";
+import { LogOutIcon, MenuIcon } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -110,17 +111,23 @@ function SidebarContent({ admin, onNavigate }: { admin: ShellAdmin; onNavigate?:
   );
 }
 
-/** Camera "lens" badge + wordmark, echoing the logo. */
+/** The studio logo (on white, so it reads in dark mode too) with an "admin" tag. */
 function BrandMark() {
   return (
-    <span className="flex items-center gap-2.5">
-      <span className="relative grid size-10 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
-        <CameraIcon className="size-5" aria-hidden />
-        <Sparkle className="absolute -top-1 -right-1 size-3.5 text-terracotta" />
+    <span className="flex items-center gap-3">
+      <span className="relative shrink-0 overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-black/5">
+        <Image
+          src="/brand/logo.jpg"
+          alt="Light Chasers Studio"
+          width={56}
+          height={56}
+          sizes="56px"
+          priority
+        />
       </span>
-      <span className="leading-none">
-        <span className="block font-heading text-lg font-semibold">Light Chasers</span>
-        <span className="block font-script text-base text-terracotta-ink">studio admin</span>
+      <span className="flex items-center gap-1.5 font-script text-lg text-terracotta-ink">
+        <Sparkle className="size-3 text-terracotta" />
+        studio admin
       </span>
     </span>
   );

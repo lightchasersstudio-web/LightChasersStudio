@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
+import { getPublicEnv } from "@/lib/env";
 
 // Brand type: Fraunces (soft serif headings), Nunito Sans (body), Caveat (handwritten accents).
 const display = Fraunces({
@@ -16,6 +17,8 @@ const body = Nunito_Sans({ variable: "--font-body", subsets: ["latin"] });
 const hand = Caveat({ variable: "--font-hand", subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  // Absolute base for the logo share image (opengraph-image.jpg) and other metadata URLs.
+  metadataBase: new URL(getPublicEnv().NEXT_PUBLIC_SITE_URL),
   title: {
     default: "Light Chasers Studio",
     template: "%s · Light Chasers Studio",
