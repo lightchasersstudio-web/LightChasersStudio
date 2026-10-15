@@ -20,6 +20,11 @@ async function pickFirstFreeTime(page: Page) {
 test("Book now on a package opens the wizard with it chosen and walks to payment", async ({
   page,
 }) => {
+  // Count booking submits (the server action carries the client's details).
+  let submits = 0;
+  page.on("request", (r) => {
+    if (r.method() === "POST" && (r.postData() ?? "").includes('"fullName"')) submits++;
+  });
   await page.goto("/services");
   const card = page.getByRole("article").first();
   const name = (await card.getByRole("heading").textContent())!.trim();
@@ -54,6 +59,10 @@ test("Book now on a package opens the wizard with it chosen and walks to payment
 
   // Step 5: review shows the database price; submitting never charges without keys
   await expect(page.getByRole("heading", { name: "Review & pay" })).toBeVisible();
+  // Reaching Review must not submit anything (regression: Continue turned into the submit button mid-click).
+  await page.waitForTimeout(1000);
+  expect(submits, "booking submitted before Pay was clicked").toBe(0);
+  await expect(page.getByRole("button", { name: /Pay .* deposit|Request booking/ })).toBeEnabled();
   await expect(page.getByText("Package price")).toBeVisible();
   await expect(page.getByText(name).first()).toBeVisible();
   const submit = page.getByRole("button", { name: /Pay .* deposit|Request booking/ });

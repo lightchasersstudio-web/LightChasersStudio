@@ -50,3 +50,6 @@ next-env.d.ts
 
 # brainstorming mockups
 .superpowers/
+
+# trial-mode email previews (PAYMENTS_MOCK)
+.mock-emails/
