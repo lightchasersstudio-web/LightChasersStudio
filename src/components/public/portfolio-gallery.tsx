@@ -2,8 +2,10 @@
 
 import { ChevronLeftIcon, ChevronRightIcon, ImagesIcon, XIcon } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRef, useState } from "react";
 
+import { bookHref } from "@/components/public/site-nav";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +14,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { SERVICE_CATEGORIES, type ServiceCategory } from "@/lib/catalog";
+import { categoryLabel, SERVICE_CATEGORIES, type ServiceCategory } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import type { PublicPhoto } from "@/server/queries/public";
@@ -135,7 +137,7 @@ function Lightbox({
                 className="object-contain"
               />
             </div>
-            <figcaption className="flex items-center gap-3 px-4 py-4 sm:px-8">
+            <figcaption className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-8">
               <div className="min-w-0 flex-1">
                 <DialogTitle className="truncate font-sans text-base font-semibold text-white">
                   {photo.caption ?? photo.alt_text}
@@ -144,6 +146,18 @@ function Lightbox({
                   {index! + 1} of {photos.length}
                 </DialogDescription>
               </div>
+              <Button
+                asChild
+                className="order-last w-full bg-white text-black hover:bg-white/90 sm:order-none sm:w-auto"
+              >
+                {photo.service ? (
+                  <Link href={bookHref(photo.service.slug)}>Book this package</Link>
+                ) : (
+                  <Link href={`/services#${photo.category}`}>
+                    See {categoryLabel(photo.category)} packages
+                  </Link>
+                )}
+              </Button>
               {photos.length > 1 && (
                 <div className="flex gap-2">
                   <LightboxButton label="Previous photo" onClick={() => go(-1)}>

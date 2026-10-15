@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { Sparkle } from "@/components/shared/sparkle";
 import { BookCta } from "@/components/public/book-cta";
 import { SectionHeading } from "@/components/public/section-heading";
 import { ServiceCard } from "@/components/public/service-card";
@@ -17,7 +18,7 @@ export default async function ServicesPage() {
   const groups = SERVICE_CATEGORIES.map((c) => ({
     ...c,
     services: services.filter((s) => s.category === c.value),
-  })).filter((g) => g.services.length > 0);
+  })).filter((g) => g.services.length > 0 || g.comingSoon);
 
   return (
     <>
@@ -46,7 +47,7 @@ export default async function ServicesPage() {
       </section>
 
       <div className="mx-auto max-w-6xl space-y-16 px-4 py-16 sm:px-6">
-        {groups.length === 0 && (
+        {services.length === 0 && (
           <p className="rounded-3xl border border-dashed p-10 text-center text-lg text-muted-foreground">
             New packages are on their way. Get in touch and we&apos;ll put something together for
             you.
@@ -62,11 +63,21 @@ export default async function ServicesPage() {
             <h2 id={`${g.value}-heading`} className="text-3xl font-semibold">
               {g.label}
             </h2>
-            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {g.services.map((s) => (
-                <ServiceCard key={s.id} service={s} />
-              ))}
-            </div>
+            {g.services.length > 0 ? (
+              <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {g.services.map((s) => (
+                  <ServiceCard key={s.id} service={s} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-6 flex flex-col items-start gap-3 rounded-3xl border border-dashed bg-accent/40 p-8 sm:flex-row sm:items-center">
+                <Sparkle className="size-6 shrink-0 text-terracotta" />
+                <div>
+                  <p className="font-script text-2xl text-terracotta-ink">Coming soon</p>
+                  <p className="text-muted-foreground">{g.label} packages will appear here soon.</p>
+                </div>
+              </div>
+            )}
           </section>
         ))}
       </div>

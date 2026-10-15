@@ -44,6 +44,7 @@ export const bookingRulesSchema = z
     bufferMinutes: intString(0, 480),
     defaultDepositPercent: intString(0, 100),
     holdMinutes: intString(5, 120),
+    maxConcurrentBookings: intString(1, 10),
   })
   .transform((v) => ({
     min_notice_hours: v.minNoticeHours,
@@ -52,6 +53,7 @@ export const bookingRulesSchema = z
     buffer_minutes: v.bufferMinutes,
     default_deposit_percent: v.defaultDepositPercent,
     hold_minutes: v.holdMinutes,
+    max_concurrent_bookings: v.maxConcurrentBookings,
   }));
 
 export type BookingRulesInput = z.input<typeof bookingRulesSchema>;

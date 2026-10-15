@@ -37,7 +37,16 @@ import type { PortfolioImage } from "@/server/queries/portfolio";
 
 type Filter = "all" | "featured" | ServiceCategory;
 
-export function PortfolioGrid({ images: initial }: { images: PortfolioImage[] }) {
+type PackageOption = { value: string; label: string };
+
+export function PortfolioGrid({
+  images: initial,
+  packages,
+}: {
+  images: PortfolioImage[];
+  /** Packages a photo can be linked to, for "Book this package" in the public gallery. */
+  packages: PackageOption[];
+}) {
   const [images, setImages] = useState(initial);
   const [prev, setPrev] = useState(initial);
   if (prev !== initial) {
@@ -74,6 +83,7 @@ export function PortfolioGrid({ images: initial }: { images: PortfolioImage[] })
         altText: img.alt_text,
         caption: img.caption ?? "",
         isFeatured: updated.is_featured,
+        serviceId: img.service_id ?? "",
       });
       if (
         !handleResult(
@@ -195,7 +205,12 @@ export function PortfolioGrid({ images: initial }: { images: PortfolioImage[] })
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="sm:max-w-lg">
           {editing && (
-            <EditPhotoForm key={editing.id} image={editing} onDone={() => setEditing(null)} />
+            <EditPhotoForm
+              key={editing.id}
+              image={editing}
+              packages={packages}
+              onDone={() => setEditing(null)}
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -203,7 +218,15 @@ export function PortfolioGrid({ images: initial }: { images: PortfolioImage[] })
   );
 }
 
-function EditPhotoForm({ image, onDone }: { image: PortfolioImage; onDone: () => void }) {
+function EditPhotoForm({
+  image,
+  packages,
+  onDone,
+}: {
+  image: PortfolioImage;
+  packages: PackageOption[];
+  onDone: () => void;
+}) {
   const form = useForm<
     UpdatePortfolioImageInput,
     unknown,
@@ -216,6 +239,7 @@ function EditPhotoForm({ image, onDone }: { image: PortfolioImage; onDone: () =>
       altText: image.alt_text,
       caption: image.caption ?? "",
       isFeatured: image.is_featured,
+      serviceId: image.service_id ?? "",
     },
   });
 
@@ -246,6 +270,13 @@ function EditPhotoForm({ image, onDone }: { image: PortfolioImage; onDone: () =>
           name="category"
           label="Category"
           options={SERVICE_CATEGORIES}
+        />
+        <SelectField
+          control={form.control}
+          name="serviceId"
+          label="Package shown (optional)"
+          description='Adds a "Book this package" button when visitors open this photo.'
+          options={[{ value: "", label: "None" }, ...packages]}
         />
         <SwitchField
           control={form.control}

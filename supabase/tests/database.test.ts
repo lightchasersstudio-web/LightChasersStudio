@@ -54,10 +54,11 @@ async function expectFailure(c: PoolClient, sql: string, params: unknown[] = [])
 }
 
 /** Deterministic fixtures, created as the table owner inside the test transaction. */
-async function setupFixtures(c: PoolClient) {
+async function setupFixtures(c: PoolClient, capacity = 1) {
   await c.query(`update public.business_settings
     set timezone = '${TZ}', min_notice_hours = 48, max_advance_days = 180,
-        slot_interval_minutes = 30, buffer_minutes = 30, default_deposit_percent = 30, hold_minutes = 20
+        slot_interval_minutes = 30, buffer_minutes = 30, default_deposit_percent = 30, hold_minutes = 20,
+        max_concurrent_bookings = ${capacity}
     where id`);
   await c.query("delete from public.availability_rules");
   await c.query("delete from public.blackout_dates");
@@ -106,6 +107,38 @@ function book(
     hold_expires_at: Date | null;
   }>(CREATE, [name, email, "09171234567", serviceId, start.toISOString()]);
 }
+
+const ADMIN_CREATE = `select * from public.admin_create_booking(
+  p_full_name => $1, p_email => $2, p_phone => '09171234567', p_preferred_contact => 'phone',
+  p_messenger => null, p_service_id => $3, p_start_at => $4, p_price_cents => $5,
+  p_allow_outside_hours => $6, p_location => null, p_participants => 1, p_special_requests => null,
+  p_payment_provider => $7, p_payment_amount_cents => $8, p_payment_reference => null,
+  p_admin_id => null)`;
+
+function adminBook(
+  c: PoolClient,
+  serviceId: string,
+  start: Date,
+  opts: {
+    email?: string | null;
+    price?: number;
+    allowOutside?: boolean;
+    pay?: [string, number];
+  } = {},
+) {
+  return c.query<{ booking_id: string; reference_code: string }>(ADMIN_CREATE, [
+    "Walk In",
+    opts.email === undefined ? "walkin@example.com" : opts.email,
+    serviceId,
+    start.toISOString(),
+    opts.price ?? 350000,
+    opts.allowOutside ?? false,
+    opts.pay?.[0] ?? null,
+    opts.pay?.[1] ?? null,
+  ]);
+}
+
+const PAID = "select * from public.mark_booking_paid($1, $2, $3, $4, '{}'::jsonb)";
 
 describe.skipIf(!url)("database (RLS + booking rules)", () => {
   describe("row level security", () => {
@@ -374,6 +407,234 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         b.booking_id,
       ]);
       expect(rows[0].hold_expires_at).toBeNull();
+    });
+  });
+  describe("capacity (several shoots at once)", () => {
+    it("allows up to max_concurrent_bookings at the same time", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        await book(c, s.portrait, manila(10, 10), "a@example.com");
+        await book(c, s.portrait, manila(10, 10), "b@example.com");
+        const third = [
+          "Cy",
+          "c@example.com",
+          "09170000000",
+          s.portrait,
+          manila(10, 10).toISOString(),
+        ];
+        expect(await expectFailure(c, CREATE, third)).toMatch(/slot_unavailable/);
+      });
+    });
+
+    it("counts only bookings that actually coincide", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        // 10:00-11:00 (+30 buffer) and 12:00-13:00 (+30) never overlap each other.
+        await book(c, s.portrait, manila(10, 10), "a@example.com");
+        await book(c, s.portrait, manila(10, 12), "b@example.com");
+        // A 2h wedding 10:30-12:30 (+30) overlaps both, but only one at any instant.
+        await expect(
+          book(c, s.wedding, manila(10, 10, 30), "c@example.com"),
+        ).resolves.toBeDefined();
+        // 10:30-11:30 now has two at once, so a third booking there is refused.
+        const fourth = [
+          "Di",
+          "d@example.com",
+          "09170000000",
+          s.portrait,
+          manila(10, 11).toISOString(),
+        ];
+        expect(await expectFailure(c, CREATE, fourth)).toMatch(/slot_unavailable/);
+      });
+    });
+
+    it("serialises booking creation so two requests can't both take the last spot", async () => {
+      // Session A checks capacity and keeps its transaction open; session B's check
+      // must wait for A (advisory lock), so B can't count before A's booking exists.
+      const range = "now() + interval '10 days', now() + interval '10 days 1 hour'";
+      const a = await pool!.connect();
+      const b = await pool!.connect();
+      try {
+        await a.query("begin");
+        await a.query(`select public.assert_capacity(${range})`);
+        await b.query("begin");
+        await b.query("set local lock_timeout = '1s'");
+        await expect(b.query(`select public.assert_capacity(${range})`)).rejects.toThrow(
+          /lock timeout/,
+        );
+      } finally {
+        await a.query("rollback");
+        await b.query("rollback");
+        a.release();
+        b.release();
+      }
+    });
+  });
+
+  describe("admin_create_booking", () => {
+    it("skips the notice rule, warns outside hours, and never exceeds capacity", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        // Tomorrow is too soon for the public, fine for staff.
+        const created = (await adminBook(c, s.portrait, manila(1, 10))).rows[0]!;
+        const { rows } = await c.query(
+          "select status, source, hold_expires_at from public.bookings where id = $1",
+          [created.booking_id],
+        );
+        expect(rows[0]).toEqual({ status: "confirmed", source: "admin", hold_expires_at: null });
+
+        const late = manila(3, 20); // 20:00, after the 19:00 closing
+        const args = (allow: boolean) => [
+          "Walk In",
+          null,
+          s.portrait,
+          late.toISOString(),
+          350000,
+          allow,
+          null,
+          null,
+        ];
+        expect(await expectFailure(c, ADMIN_CREATE, args(false))).toMatch(/outside_business_hours/);
+        await expect(
+          adminBook(c, s.portrait, late, { email: null, allowOutside: true }),
+        ).resolves.toBeDefined();
+        // Same slot again with capacity 1: refused even with the override.
+        expect(await expectFailure(c, ADMIN_CREATE, args(true))).toMatch(/slot_unavailable/);
+      });
+    });
+
+    it("works without an email, uses the custom price and records a cash payment", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const b = (
+          await adminBook(c, s.portrait, manila(5, 10), {
+            email: null,
+            price: 200000,
+            pay: ["cash", 50000],
+          })
+        ).rows[0]!;
+        const { rows } = await c.query(
+          `select b.price_cents, b.deposit_cents, cl.email, p.provider, p.amount_cents, p.status
+           from public.bookings b join public.clients cl on cl.id = b.client_id
+           join public.payments p on p.booking_id = b.id where b.id = $1`,
+          [b.booking_id],
+        );
+        expect(rows).toEqual([
+          {
+            price_cents: 200000,
+            deposit_cents: 60000,
+            email: null,
+            provider: "cash",
+            amount_cents: 50000,
+            status: "paid",
+          },
+        ]);
+      });
+    });
+  });
+
+  describe("mark_booking_paid (PayMongo webhook)", () => {
+    it("flags money that lands on a cancelled or already-paid booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const cancelled = (await book(c, s.portrait, manila(10, 10), "a@example.com")).rows[0]!;
+        await c.query("update public.bookings set status = 'cancelled' where id = $1", [
+          cancelled.booking_id,
+        ]);
+        const late = await c.query(PAID, [cancelled.reference_code, "cs_c", "pay_c", 105000]);
+        expect(late.rows[0].outcome).toBe("needs_review");
+
+        const paid = (await book(c, s.portrait, manila(11, 10), "b@example.com")).rows[0]!;
+        await c.query(PAID, [paid.reference_code, "cs_p1", "pay_p1", 105000]);
+        const twice = await c.query(PAID, [paid.reference_code, "cs_p2", "pay_p2", 105000]);
+        expect(twice.rows[0].outcome).toBe("needs_review");
+
+        const { rows } = await c.query(
+          "select status, needs_refund_review from public.bookings where id = any($1) order by start_at",
+          [[cancelled.booking_id, paid.booking_id]],
+        );
+        expect(rows).toEqual([
+          { status: "cancelled", needs_refund_review: true },
+          { status: "pending", needs_refund_review: true },
+        ]);
+      });
+    });
+
+    it("settles a held booking once, even when the event repeats", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        await actAs(c, "service_role");
+        const b = (await book(c, s.portrait, manila(10, 10))).rows[0]!;
+        const first = await c.query(PAID, [b.reference_code, "cs_1", "pay_1", 105000]);
+        expect(first.rows[0].outcome).toBe("paid");
+        const again = await c.query(PAID, [b.reference_code, "cs_1", "pay_1", 105000]);
+        expect(again.rows[0].outcome).toBe("duplicate");
+        const { rows } = await c.query(
+          `select b.status, count(p.*)::int as payments from public.bookings b
+           join public.payments p on p.booking_id = b.id where b.id = $1 group by b.status`,
+          [b.booking_id],
+        );
+        expect(rows).toEqual([{ status: "pending", payments: 1 }]);
+      });
+    });
+
+    it("keeps a late payment but flags it when the slot has filled up", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const lapsed = (await book(c, s.portrait, manila(10, 10), "a@example.com")).rows[0]!;
+        await c.query(
+          "update public.bookings set hold_expires_at = now() - interval '1 minute' where id = $1",
+          [lapsed.booking_id],
+        );
+        await book(c, s.portrait, manila(10, 10), "b@example.com"); // expires `lapsed`, takes the slot
+
+        const { rows } = await c.query(PAID, [lapsed.reference_code, "cs_9", "pay_9", 105000]);
+        expect(rows[0].outcome).toBe("needs_review");
+        const after = await c.query(
+          "select status, needs_refund_review from public.bookings where id = $1",
+          [lapsed.booking_id],
+        );
+        expect(after.rows[0]).toEqual({ status: "pending", needs_refund_review: true });
+      });
+    });
+  });
+
+  it("keeps the new functions away from anon and signed-in users", async () => {
+    await inRollback(async (c) => {
+      await setupFixtures(c);
+      for (const role of ["anon", "authenticated"] as const) {
+        await actAs(c, role);
+        for (const sql of [
+          "select public.hit_rate_limit('k', 5, 60)",
+          "select * from public.mark_booking_paid('BK-2026-ABCDEF', 'cs', 'pay', 1, '{}'::jsonb)",
+          "select public.assert_capacity(now(), now() + interval '1 hour')",
+          `select * from public.admin_create_booking('A B', null, '0917000000', 'phone', null,
+             gen_random_uuid(), now(), 1, true, null, 1, null, null, null, null, null)`,
+        ]) {
+          expect(await expectFailure(c, sql), `${role}: ${sql}`).toMatch(/permission denied/);
+        }
+        await c.query("reset role");
+      }
+    });
+  });
+
+  it("hit_rate_limit allows N hits per window, then blocks", async () => {
+    await inRollback(async (c) => {
+      await actAs(c, "service_role");
+      const hit = async () =>
+        (await c.query("select public.hit_rate_limit('test:ip', 3, 600) as ok")).rows[0].ok;
+      expect([await hit(), await hit(), await hit(), await hit()]).toEqual([
+        true,
+        true,
+        true,
+        false,
+      ]);
     });
   });
 });

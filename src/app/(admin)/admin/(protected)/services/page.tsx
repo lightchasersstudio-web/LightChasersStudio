@@ -1,19 +1,18 @@
 import { PlusIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { ServicesList } from "@/components/admin/services-list";
+import { ListSkeleton } from "@/components/admin/skeletons";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/server/auth";
 import { listServicesForAdmin } from "@/server/queries/services";
 
 export const metadata: Metadata = { title: "Services" };
 
-export default async function AdminServicesPage() {
-  await requireAdmin();
-  const services = await listServicesForAdmin();
-
+export default function AdminServicesPage() {
   return (
     <>
       <PageHeader
@@ -29,7 +28,14 @@ export default async function AdminServicesPage() {
           </Button>
         }
       />
-      <ServicesList services={services} />
+      <Suspense fallback={<ListSkeleton rows={5} />}>
+        <Services />
+      </Suspense>
     </>
   );
+}
+
+async function Services() {
+  await requireAdmin();
+  return <ServicesList services={await listServicesForAdmin()} />;
 }

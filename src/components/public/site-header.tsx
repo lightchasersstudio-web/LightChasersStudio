@@ -38,7 +38,7 @@ export async function SiteHeader() {
         <NavLinks />
         <ThemeToggle />
         <Button asChild className="hidden sm:inline-flex">
-          <Link href={BOOK_HREF}>Book a session</Link>
+          <Link href={BOOK_HREF}>Book now</Link>
         </Button>
         <MobileNav businessName={settings.business_name} />
       </nav>

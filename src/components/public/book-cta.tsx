@@ -8,9 +8,12 @@ import { Button } from "@/components/ui/button";
 export function BookCta({
   title = "Ready when you are.",
   text = "Tell us about your day and we'll help you plan a session that feels like you.",
+  href = BOOK_HREF,
 }: {
   title?: string;
   text?: string;
+  /** Booking link; pass `bookHref(slug)` on a package page so that package is chosen. */
+  href?: string;
 }) {
   return (
     <section aria-labelledby="book-cta" className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -30,7 +33,7 @@ export function BookCta({
             size="lg"
             className="mt-8 bg-panel-foreground text-panel hover:bg-panel-foreground/90"
           >
-            <Link href={BOOK_HREF}>Book a session</Link>
+            <Link href={href}>Book now</Link>
           </Button>
         </div>
       </div>

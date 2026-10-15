@@ -123,11 +123,14 @@ export type Database = {
           hold_expires_at: string | null
           id: string
           location: string | null
+          messenger: string | null
+          needs_refund_review: boolean
           participants: number
           preferred_contact: Database["public"]["Enums"]["contact_method"]
           price_cents: number
           reference_code: string
           service_id: string
+          source: string
           special_requests: string | null
           start_at: string
           status: Database["public"]["Enums"]["booking_status"]
@@ -145,11 +148,14 @@ export type Database = {
           hold_expires_at?: string | null
           id?: string
           location?: string | null
+          messenger?: string | null
+          needs_refund_review?: boolean
           participants?: number
           preferred_contact: Database["public"]["Enums"]["contact_method"]
           price_cents: number
           reference_code: string
           service_id: string
+          source?: string
           special_requests?: string | null
           start_at: string
           status?: Database["public"]["Enums"]["booking_status"]
@@ -167,11 +173,14 @@ export type Database = {
           hold_expires_at?: string | null
           id?: string
           location?: string | null
+          messenger?: string | null
+          needs_refund_review?: boolean
           participants?: number
           preferred_contact?: Database["public"]["Enums"]["contact_method"]
           price_cents?: number
           reference_code?: string
           service_id?: string
+          source?: string
           special_requests?: string | null
           start_at?: string
           status?: Database["public"]["Enums"]["booking_status"]
@@ -210,6 +219,7 @@ export type Database = {
           instagram_url: string | null
           logo_path: string | null
           max_advance_days: number
+          max_concurrent_bookings: number
           min_notice_hours: number
           phone: string | null
           slot_interval_minutes: number
@@ -233,6 +243,7 @@ export type Database = {
           instagram_url?: string | null
           logo_path?: string | null
           max_advance_days?: number
+          max_concurrent_bookings?: number
           min_notice_hours?: number
           phone?: string | null
           slot_interval_minutes?: number
@@ -256,6 +267,7 @@ export type Database = {
           instagram_url?: string | null
           logo_path?: string | null
           max_advance_days?: number
+          max_concurrent_bookings?: number
           min_notice_hours?: number
           phone?: string | null
           slot_interval_minutes?: number
@@ -271,7 +283,7 @@ export type Database = {
           consent_given_at: string
           consent_version: string
           created_at: string
-          email: string
+          email: string | null
           full_name: string
           id: string
           phone: string
@@ -282,7 +294,7 @@ export type Database = {
           consent_given_at: string
           consent_version: string
           created_at?: string
-          email: string
+          email?: string | null
           full_name: string
           id?: string
           phone: string
@@ -293,7 +305,7 @@ export type Database = {
           consent_given_at?: string
           consent_version?: string
           created_at?: string
-          email?: string
+          email?: string | null
           full_name?: string
           id?: string
           phone?: string
@@ -338,6 +350,8 @@ export type Database = {
           provider_checkout_id: string | null
           provider_payment_id: string | null
           raw: Json | null
+          recorded_by: string | null
+          reference: string | null
           status: Database["public"]["Enums"]["payment_status"]
           updated_at: string
         }
@@ -352,6 +366,8 @@ export type Database = {
           provider_checkout_id?: string | null
           provider_payment_id?: string | null
           raw?: Json | null
+          recorded_by?: string | null
+          reference?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           updated_at?: string
         }
@@ -366,6 +382,8 @@ export type Database = {
           provider_checkout_id?: string | null
           provider_payment_id?: string | null
           raw?: Json | null
+          recorded_by?: string | null
+          reference?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           updated_at?: string
         }
@@ -389,6 +407,7 @@ export type Database = {
           height: number | null
           id: string
           is_featured: boolean
+          service_id: string | null
           sort_order: number
           storage_path: string
           width: number | null
@@ -402,6 +421,7 @@ export type Database = {
           height?: number | null
           id?: string
           is_featured?: boolean
+          service_id?: string | null
           sort_order?: number
           storage_path: string
           width?: number | null
@@ -415,9 +435,36 @@ export type Database = {
           height?: number | null
           id?: string
           is_featured?: boolean
+          service_id?: string | null
           sort_order?: number
           storage_path?: string
           width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_images_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rate_limits: {
+        Row: {
+          hits: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          hits: number
+          key: string
+          window_start: string
+        }
+        Update: {
+          hits?: number
+          key?: string
+          window_start?: string
         }
         Relationships: []
       }
@@ -480,12 +527,41 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_create_booking: {
+        Args: {
+          p_admin_id: string
+          p_allow_outside_hours: boolean
+          p_email: string
+          p_full_name: string
+          p_location: string
+          p_messenger: string
+          p_participants: number
+          p_payment_amount_cents: number
+          p_payment_provider: string
+          p_payment_reference: string
+          p_phone: string
+          p_preferred_contact: Database["public"]["Enums"]["contact_method"]
+          p_price_cents: number
+          p_service_id: string
+          p_special_requests: string
+          p_start_at: string
+        }
+        Returns: {
+          booking_id: string
+          reference_code: string
+        }[]
+      }
+      assert_capacity: {
+        Args: { p_blocked_until: string; p_exclude?: string; p_start: string }
+        Returns: undefined
+      }
       create_booking: {
         Args: {
           p_consent_version: string
           p_email: string
           p_full_name: string
           p_location?: string
+          p_messenger?: string
           p_participants?: number
           p_phone: string
           p_preferred_contact: Database["public"]["Enums"]["contact_method"]
@@ -509,7 +585,24 @@ export type Database = {
           start_at: string
         }[]
       }
+      hit_rate_limit: {
+        Args: { p_key: string; p_limit: number; p_window_seconds: number }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
+      mark_booking_paid: {
+        Args: {
+          p_amount_cents: number
+          p_checkout_id: string
+          p_payment_id: string
+          p_raw: Json
+          p_reference: string
+        }
+        Returns: {
+          booking_id: string
+          outcome: string
+        }[]
+      }
       replace_availability_rules: {
         Args: { p_rules: Json }
         Returns: undefined
@@ -527,7 +620,12 @@ export type Database = {
         | "expired"
       contact_method: "email" | "phone" | "sms" | "messenger" | "viber"
       payment_status: "pending" | "paid" | "failed" | "expired" | "refunded"
-      service_category: "wedding" | "portrait" | "event" | "commercial"
+      service_category:
+        | "wedding"
+        | "portrait"
+        | "studio"
+        | "event"
+        | "commercial"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -667,7 +765,13 @@ export const Constants = {
       ],
       contact_method: ["email", "phone", "sms", "messenger", "viber"],
       payment_status: ["pending", "paid", "failed", "expired", "refunded"],
-      service_category: ["wedding", "portrait", "event", "commercial"],
+      service_category: [
+        "wedding",
+        "portrait",
+        "studio",
+        "event",
+        "commercial",
+      ],
     },
   },
 } as const

@@ -6,5 +6,9 @@ export const SITE_NAV = [
   { href: "/contact", label: "Contact" },
 ] as const;
 
-// shortcut: points at the contact page until the booking wizard ships in Phase 5; then use "/book".
-export const BOOK_HREF = "/contact";
+export const BOOK_HREF = "/book";
+
+/** The booking wizard, with a package already chosen when given its slug. */
+export function bookHref(serviceSlug?: string): string {
+  return serviceSlug ? `${BOOK_HREF}?service=${encodeURIComponent(serviceSlug)}` : BOOK_HREF;
+}

@@ -44,7 +44,7 @@ export function MobileNav({ businessName }: { businessName: string }) {
           </Suspense>
           <Button asChild size="lg" className="mt-4">
             <Link href={BOOK_HREF} onClick={() => setOpen(false)}>
-              Book a session
+              Book now
             </Link>
           </Button>
         </nav>

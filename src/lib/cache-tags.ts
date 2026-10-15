@@ -4,4 +4,5 @@ export const TAGS = {
   portfolio: "portfolio",
   settings: "settings",
   availability: "availability",
+  bookings: "bookings",
 } as const;

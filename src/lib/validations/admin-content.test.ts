@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { blackoutSchema, datesInRange, weeklyHoursSchema } from "./availability";
+import { updatePortfolioImageSchema } from "./portfolio";
+import { bookingRulesSchema } from "./settings";
 import { serviceSchema, slugify, type ServiceFormInput } from "./services";
 
 const service: ServiceFormInput = {
@@ -120,5 +122,49 @@ describe("blackoutSchema", () => {
 
   it("datesInRange is inclusive", () => {
     expect(datesInRange("2026-03-01", "2026-03-01")).toEqual(["2026-03-01"]);
+  });
+});
+
+describe("updatePortfolioImageSchema", () => {
+  const base = {
+    id: "8a6e0804-2bd0-4672-b79d-d97027f9071b",
+    category: "studio",
+    altText: "Couple in the studio",
+    caption: "",
+    isFeatured: false,
+  };
+
+  it("links a photo to a package", () => {
+    const id = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    expect(updatePortfolioImageSchema.parse({ ...base, serviceId: id }).serviceId).toBe(id);
+  });
+
+  it("treats an empty package choice as no link", () => {
+    expect(updatePortfolioImageSchema.parse({ ...base, serviceId: "" }).serviceId).toBeNull();
+  });
+});
+
+describe("bookingRulesSchema", () => {
+  const rules = {
+    minNoticeHours: "48",
+    maxAdvanceDays: "180",
+    slotIntervalMinutes: "30",
+    bufferMinutes: "30",
+    defaultDepositPercent: "30",
+    holdMinutes: "20",
+    maxConcurrentBookings: "3",
+  } as const;
+
+  it("saves how many shoots can run at the same time", () => {
+    expect(bookingRulesSchema.parse(rules).max_concurrent_bookings).toBe(3);
+  });
+
+  it("keeps it between 1 and 10", () => {
+    expect(bookingRulesSchema.safeParse({ ...rules, maxConcurrentBookings: "0" }).success).toBe(
+      false,
+    );
+    expect(bookingRulesSchema.safeParse({ ...rules, maxConcurrentBookings: "11" }).success).toBe(
+      false,
+    );
   });
 });

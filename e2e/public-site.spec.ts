@@ -3,12 +3,12 @@ import { expect, test } from "@playwright/test";
 test("home leads to services and a service detail page", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Book a session" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Book now" }).first()).toBeVisible();
 
   await page.goto("/services");
   const firstCard = page.getByRole("article").first();
   const name = (await firstCard.getByRole("heading").textContent())!.trim();
-  await firstCard.getByRole("link", { name }).click();
+  await firstCard.getByRole("link", { name, exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   await expect(page.getByText("Package price")).toBeVisible();
 });
@@ -93,4 +93,17 @@ test("mobile menu reaches every page", async ({ page }) => {
     await page.getByRole("dialog").getByRole("link", { name: label, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/${label.toLowerCase()}$`));
   }
+});
+
+test("Versa Space says coming soon until it has a package", async ({ page }) => {
+  await page.goto("/services");
+  const studio = page.locator("section#studio");
+  test.skip((await studio.getByRole("article").count()) > 0, "Versa Space already has packages");
+
+  await page.goto("/");
+  const card = page.getByRole("link", { name: /Versa Space/ });
+  await expect(card).toContainText("Coming soon");
+  await card.click();
+  await expect(page).toHaveURL(/\/services#studio$/);
+  await expect(page.locator("section#studio").getByText("Coming soon")).toBeVisible();
 });

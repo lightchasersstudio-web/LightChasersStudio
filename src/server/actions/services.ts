@@ -53,7 +53,7 @@ export async function updateService(id: string, input: unknown): Promise<ActionR
       await removeObjects(ctx.supabase, "portfolio", [before.cover_image_path]);
     }
     await audit(ctx, "service.update", "service", id, { name: row.name });
-    revalidate(TAGS.services);
+    revalidate(TAGS.services, TAGS.portfolio); // photos show the package name and link
     return ok(undefined);
   });
 }
@@ -66,7 +66,7 @@ export async function setServiceActive(input: unknown): Promise<ActionResult> {
       .eq("id", id);
     if (error) throw error;
     await audit(ctx, isActive ? "service.activate" : "service.deactivate", "service", id);
-    revalidate(TAGS.services);
+    revalidate(TAGS.services, TAGS.portfolio);
     return ok(undefined);
   });
 }
@@ -90,7 +90,7 @@ export async function deleteService(input: unknown): Promise<ActionResult> {
     if (data.cover_image_path)
       await removeObjects(ctx.supabase, "portfolio", [data.cover_image_path]);
     await audit(ctx, "service.delete", "service", id, { name: data.name });
-    revalidate(TAGS.services);
+    revalidate(TAGS.services, TAGS.portfolio);
     return ok(undefined);
   });
 }

@@ -1,0 +1,153 @@
+import "server-only";
+
+import { TZDate } from "@date-fns/tz";
+import { addDays, getDaysInMonth } from "date-fns";
+
+import type { BookingStatus } from "@/lib/booking/status";
+import { createClient } from "@/lib/supabase/server";
+import { BUSINESS_TZ } from "@/lib/utils/business-date";
+
+export type CalendarBooking = {
+  id: string;
+  reference: string;
+  status: BookingStatus;
+  startAt: string;
+  endAt: string;
+  blockedUntil: string;
+  contactName: string;
+  serviceName: string;
+  needsRefundReview: boolean;
+  source: string;
+};
+
+/** Bookings touching `month` ("YYYY-MM"), for the admin calendar (RLS: admins only). */
+export async function listBookingsForMonth(
+  month: string,
+  { includeClosed = false } = {},
+): Promise<CalendarBooking[]> {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const first = new TZDate(y, m - 1, 1, BUSINESS_TZ);
+  const from = addDays(first, -1).toISOString();
+  const to = addDays(first, getDaysInMonth(first) + 1).toISOString();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id, reference_code, status, start_at, end_at, blocked_until, hold_expires_at, contact_name, needs_refund_review, source, service:services(name)",
+    )
+    .lt("start_at", to)
+    .gt("blocked_until", from)
+    .order("start_at");
+  if (error) throw error;
+
+  const now = Date.now();
+  return data
+    .map((b) => ({
+      ...b,
+      // A lapsed hold is effectively expired even before the cron job marks it.
+      status:
+        b.status === "pending_payment" && b.hold_expires_at && Date.parse(b.hold_expires_at) <= now
+          ? ("expired" as const)
+          : b.status,
+    }))
+    .filter((b) => includeClosed || !["cancelled", "declined", "expired"].includes(b.status))
+    .map((b) => ({
+      id: b.id,
+      reference: b.reference_code,
+      status: b.status,
+      startAt: b.start_at,
+      endAt: b.end_at,
+      blockedUntil: b.blocked_until,
+      contactName: b.contact_name,
+      serviceName: b.service?.name ?? "Session",
+      needsRefundReview: b.needs_refund_review,
+      source: b.source,
+    }));
+}
+
+export type CalendarContext = {
+  hours: { day: number; start: string; end: string }[];
+  blackouts: { date: string; reason: string | null }[];
+  capacity: number;
+  slotInterval: number;
+};
+
+/** Opening hours, blocked dates and capacity for drawing the calendar. */
+export async function getCalendarContext(month: string): Promise<CalendarContext> {
+  const supabase = await createClient();
+  const [hours, blackouts, settings] = await Promise.all([
+    supabase.from("availability_rules").select("day_of_week, start_time, end_time"),
+    supabase
+      .from("blackout_dates")
+      .select("date, reason")
+      .gte("date", `${month}-01`)
+      .lt("date", nextMonthStart(month)),
+    supabase
+      .from("business_settings")
+      .select("max_concurrent_bookings, slot_interval_minutes")
+      .single(),
+  ]);
+  for (const r of [hours, blackouts, settings]) if (r.error) throw r.error;
+  return {
+    hours: hours.data!.map((h) => ({
+      day: h.day_of_week,
+      start: h.start_time.slice(0, 5),
+      end: h.end_time.slice(0, 5),
+    })),
+    blackouts: blackouts.data!,
+    capacity: settings.data!.max_concurrent_bookings,
+    slotInterval: settings.data!.slot_interval_minutes,
+  };
+}
+
+/** "2026-12" → "2027-01-01" */
+function nextMonthStart(month: string): string {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+}
+
+export type AdminBooking = Awaited<ReturnType<typeof getBookingForAdmin>>;
+
+/** One booking with client, payments and the booking-card summary (RLS: admins only). */
+export async function getBookingForAdmin(id: string) {
+  const supabase = await createClient();
+  const [{ data, error }, settings] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select(
+        "id, reference_code, status, source, start_at, end_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    supabase.from("business_settings").select("business_name, phone, email").single(),
+  ]);
+  if (error) throw error;
+  if (settings.error) throw settings.error;
+  if (!data) return null;
+
+  const payments = [...data.payments].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const paidCents = payments
+    .filter((p) => p.status === "paid")
+    .reduce((sum, p) => sum + p.amount_cents, 0);
+  return {
+    ...data,
+    email: data.client?.email ?? null,
+    serviceName: data.service?.name ?? "Session",
+    payments,
+    paidCents,
+    summary: {
+      reference: data.reference_code,
+      serviceName: data.service?.name ?? "Session",
+      startAt: data.start_at,
+      endAt: data.end_at,
+      location: data.location,
+      priceCents: data.price_cents,
+      paidCents,
+      contactName: data.contact_name,
+      studioName: settings.data.business_name,
+      studioPhone: settings.data.phone,
+      studioEmail: settings.data.email,
+    },
+  };
+}

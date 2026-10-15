@@ -1,8 +1,8 @@
-import { HeartIcon, PackageIcon, PartyPopperIcon, UsersIcon } from "lucide-react";
 import type { Metadata } from "next";
 
 import { BookCta } from "@/components/public/book-cta";
 import { BrandLogo } from "@/components/public/brand-logo";
+import { CATEGORY_ICONS } from "@/components/public/category-icons";
 import { PhotoPolaroid, PlaceholderPolaroid } from "@/components/public/photo-polaroid";
 import { SectionHeading } from "@/components/public/section-heading";
 import { Sparkle } from "@/components/shared/sparkle";
@@ -12,13 +12,6 @@ import { getPublicSettings, listFeaturedPhotos } from "@/server/queries/public";
 export const metadata: Metadata = {
   title: "About",
   description: "Meet Light Chasers Studio, a photography studio in Zamboanga City.",
-};
-
-const ICONS = {
-  wedding: HeartIcon,
-  portrait: UsersIcon,
-  event: PartyPopperIcon,
-  commercial: PackageIcon,
 };
 
 export default async function AboutPage() {
@@ -82,7 +75,7 @@ export default async function AboutPage() {
         />
         <ul className="mt-10 grid gap-4 sm:grid-cols-2">
           {SERVICE_CATEGORIES.map(({ value, label }) => {
-            const Icon = ICONS[value];
+            const Icon = CATEGORY_ICONS[value];
             return (
               <li key={value} className="flex items-center gap-4 rounded-3xl border bg-card p-5">
                 <span className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">

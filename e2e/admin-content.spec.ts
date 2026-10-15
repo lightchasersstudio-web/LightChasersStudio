@@ -28,6 +28,8 @@ async function signIn(page: Page) {
 test.beforeEach(async ({ page }) => signIn(page));
 
 test("services: create, hide, edit and delete", async ({ page }) => {
+  // Visits every public service page after edits, which regenerate on demand: slow under a full parallel run.
+  test.setTimeout(60_000);
   const name = `E2E Package ${Date.now()}`;
   await page.goto("/admin/services/new");
   await page.getByLabel("Service name").fill(name);
@@ -44,9 +46,9 @@ test("services: create, hide, edit and delete", async ({ page }) => {
 
   // The public (cached) services page picks up the change right away.
   await page.goto("/services");
-  await expect(page.getByRole("link", { name })).toBeVisible();
+  await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   // A slug that didn't exist at build time renders on demand (regression: 500 from usePathname).
-  await page.getByRole("link", { name }).click();
+  await page.getByRole("link", { name, exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   await expect(page.getByText("₱2,500").first()).toBeVisible();
 
@@ -59,7 +61,7 @@ test("services: create, hide, edit and delete", async ({ page }) => {
 
   await page.goto("/services");
   await expect(page.getByRole("heading", { name: "Services & packages" })).toBeVisible();
-  await expect(page.getByRole("link", { name })).toHaveCount(0);
+  await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
 
   await page.goto("/admin/services");
   await row.getByRole("link", { name: `Edit ${name}` }).click();
@@ -73,7 +75,9 @@ test("services: create, hide, edit and delete", async ({ page }) => {
   const hrefs = await page
     .getByRole("article")
     .getByRole("link")
-    .evaluateAll((links) => links.map((a) => a.getAttribute("href")!));
+    .evaluateAll((links) =>
+      links.map((a) => a.getAttribute("href")!).filter((h) => h.startsWith("/services/")),
+    );
   for (const href of hrefs) {
     const res = await page.goto(href);
     expect(res?.status(), href).toBe(200);
@@ -84,6 +88,34 @@ test("services: create, hide, edit and delete", async ({ page }) => {
   await page.getByRole("button", { name: `Delete ${name}` }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
   await expect(page.getByText(name)).toHaveCount(0);
+});
+
+test("Versa Space shows its package once one is added, coming soon otherwise", async ({
+  page,
+}, testInfo) => {
+  // One studio package at a time: parallel projects would see each other's.
+  test.skip(testInfo.project.name === "mobile", "covered by the desktop run");
+  const name = `E2E Package Studio ${Date.now()}`;
+  await page.goto("/admin/services/new");
+  await page.getByLabel("Service name").fill(name);
+  await page.getByLabel("Category").selectOption("studio");
+  await page.getByLabel("Price").fill("1500");
+  await page.getByRole("button", { name: "Create service" }).click();
+  await expect(page).toHaveURL(/\/admin\/services\/[0-9a-f-]{36}$/);
+
+  await page.goto("/services");
+  const studio = page.locator("section#studio");
+  await expect(studio.getByRole("link", { name, exact: true })).toBeVisible();
+  await expect(studio.getByText("Coming soon")).toHaveCount(0);
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: /Versa Space/ })).not.toContainText("Coming soon");
+
+  await page.goto("/admin/services");
+  await page.getByRole("button", { name: `Delete ${name}` }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByText(name)).toHaveCount(0);
+  await page.goto("/services");
+  await expect(page.locator("section#studio").getByText("Coming soon")).toBeVisible();
 });
 
 test("availability: validates hours and blocks/unblocks a date", async ({ page }, testInfo) => {
