@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest";
+
+import { bookingSummaryText, type BookingSummary } from "./booking-summary";
+
+const booking: BookingSummary = {
+  reference: "BK-2026-ABC123",
+  serviceName: "Family Portrait Session",
+  startAt: "2026-11-03T05:00:00.000Z", // 1:00 PM in Manila
+  endAt: "2026-11-03T06:00:00.000Z",
+  location: "Studio",
+  priceCents: 350000,
+  paidCents: 105000,
+  contactName: "Ana Cruz",
+  studioName: "Light Chasers Studio",
+  studioPhone: "0917 123 4567",
+  studioEmail: null,
+};
+
+describe("bookingSummaryText", () => {
+  it("lists the booking with Manila times and the balance", () => {
+    const text = bookingSummaryText(booking);
+    expect(text).toContain("BK-2026-ABC123");
+    expect(text).toContain("Family Portrait Session");
+    expect(text).toContain("Tue, 3 Nov 2026, 1:00 PM – 2:00 PM");
+    expect(text).toContain("Total: ₱3,500");
+    expect(text).toContain("Paid: ₱1,050");
+    expect(text).toContain("Balance: ₱2,450");
+    expect(text).toContain("0917 123 4567");
+    expect(text).not.toContain("null");
+  });
+
+  it("leaves out an empty location and says when it's fully paid", () => {
+    const text = bookingSummaryText({ ...booking, location: null, paidCents: 350000 });
+    expect(text).not.toMatch(/Location/);
+    expect(text).toContain("Fully paid");
+  });
+});

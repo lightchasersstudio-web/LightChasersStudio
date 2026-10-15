@@ -218,6 +218,7 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
       bufferMinutes: String(settings.buffer_minutes),
       defaultDepositPercent: String(settings.default_deposit_percent),
       holdMinutes: String(settings.hold_minutes),
+      maxConcurrentBookings: String(settings.max_concurrent_bookings),
     },
   });
   const { control } = form;
@@ -288,6 +289,13 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
               label="Payment window (minutes)"
               inputMode="numeric"
               description="How long an unpaid booking holds the slot."
+            />
+            <TextField
+              control={control}
+              name="maxConcurrentBookings"
+              label="Shoots that can run at the same time"
+              inputMode="numeric"
+              description="1–10. Online bookings and the calendar never go over this."
             />
           </div>
         </CardContent>

@@ -1,17 +1,17 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-14, at the end of Phase 4._
+_Last updated: 2026-10-15, Phase 5 built (waiting on payment/email keys)._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
 ## The project in one paragraph
 
-A booking website for **Light Chasers Studio**, a photography studio in Zamboanga City (weddings & prenups, portraits & family, events, product shoots). Visitors browse services and the portfolio without logging in. In Phase 5 they will book a time slot and pay a deposit through PayMongo (GCash and others). Staff manage everything from an admin area at `/admin`, which is the only part that needs a login. Built with Next.js 16, Tailwind v4, shadcn/ui and Supabase (Postgres, Auth, Storage).
+A booking website for **Light Chasers Studio**, a photography studio in Zamboanga City (weddings & prenups, portraits & family, events, product shoots). Visitors browse services and the portfolio without logging in, pick a free date and time on a month calendar, and pay a deposit through PayMongo (GCash and others). Staff can also book clients in themselves from an admin calendar. Staff manage everything from an admin area at `/admin`, which is the only part that needs a login. Built with Next.js 16, Tailwind v4, shadcn/ui and Supabase (Postgres, Auth, Storage).
 
 ## Where we left off
 
 - **Phases 0–4 are built and verified.** Phase 4 (public site) is on branch `phase-4-public-site`, with a PR open against `main`.
-- **Next up: Phase 5, the booking flow.** See [Next steps](#next-steps).
+- **Phase 5 (booking flow + calendars) is built** on branch `phase-5-booking`. Online payment, emails and bot protection switch on once the owner adds the PayMongo, Resend and Turnstile keys. See [Next steps](#next-steps).
 - Nothing is deployed yet. Production setup is Phase 8.
 
 ## Roadmap status
@@ -22,9 +22,9 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 | 1     | Database: schema, RLS, booking functions, storage, seed, types              | ✅ Done, pushed to dev DB    | #2  |
 | 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified | #3  |
 | 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                      | #4  |
-| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done, PR open             | —   |
-| 5     | Booking flow: wizard, time slots, PayMongo deposit, Turnstile, emails       | ⏳ Next                      |     |
-| 6     | Admin booking management: dashboard, bookings, calendar, clients, audit log | Not started                  |     |
+| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                      | #5  |
+| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Built, needs owner keys   | —   |
+| 6     | Admin: dashboard stats, bookings table, clients, reschedule, privacy        | ⏳ Next                      |     |
 | 7     | Hardening: security headers, accessibility, performance, SEO, sitemap       | Not started                  |     |
 | 8     | Deploy: Vercel + production Supabase                                        | Not started                  |     |
 
@@ -71,30 +71,45 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 - **About and Contact:** contact details, social links, live opening hours and a Google Maps link.
 - A branded 404 page, a sticky header with a mobile menu and a dark-mode toggle, and the footer.
 - Every public page is static and loads instantly. Admin edits refresh the affected pages right away through cache tags (`src/lib/cache-tags.ts`).
-- **"Book a session" currently links to `/contact`.** Phase 5 switches it to `/book`; it's a one-line change in `src/components/public/site-nav.ts`.
+
+### Phase 5: Booking flow and calendars
+
+Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `docs/superpowers/plans/2026-10-15-booking-calendar.md`.
+
+- **"Book now" everywhere.** A "Book now" next to a package (service card, service page, a portfolio photo linked to a package) opens the wizard with that package already chosen.
+- **Booking wizard at `/book`:** your details → package → **month calendar + time list** → shoot details → review → PayMongo deposit. Dots show days with free times; fully booked and closed days are greyed out. Only truly free times are offered.
+- **After paying:** `/book/done` (thanks + reference), `/book/cancelled` (try again while the slot is held), and `/booking` where a client views their booking card with reference + email.
+- **Versa Space** is a new category, "studio rental". The home card links to it; the owner adds the actual rental package(s) and prices in Admin → Services.
+- **Several shoots at once.** Settings → Booking rules → "Shoots that can run at the same time" (default 2). The database enforces it, even when two people book the last spot at the same moment.
+- **Admin calendar (`/admin/calendar`):** month grid with colour-coded bookings, hatched closed/blocked days, and a day timeline with a dashed "free" lane. Click a free block to book a client into it.
+- **Staff bookings (`/admin/bookings/new`):** confirmed straight away; email optional; custom price; deposit recorded as GCash, cash or "pay at the shoot"; times outside opening hours or on blocked days need a "Book anyway" click.
+- **Booking page (`/admin/bookings/[id]`):** Call / Text / Email / Messenger buttons (preferred one highlighted, no Viber), a branded booking card to screenshot plus "Copy as text" for Messenger, confirm / decline / complete / cancel, record GCash or cash payments, private notes, resend email, and a warning banner if a PayMongo deposit arrived after the slot filled up.
+- **Emails (Resend):** booking received, booking confirmed, declined/cancelled to the client; "new booking needs review" to the studio email in Settings.
 
 ## How it's verified
 
-| Check                 | Command                                                         | Last result                                               |
-| --------------------- | --------------------------------------------------------------- | --------------------------------------------------------- |
-| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build) | ✅ passing, 34 unit tests                                 |
-| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                   | ✅ passing against the dev project                        |
-| Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                   | ✅ passing on desktop and phone (Pixel 7), touch included |
-| Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)   | ✅ passing, includes public-page refresh after edits      |
+| Check                 | Command                                                         | Last result                                                |
+| --------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- |
+| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build) | ✅ passing                                                 |
+| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                   | ✅ passing against the dev project                         |
+| Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                   | ✅ passing on desktop and phone (Pixel 7), touch included  |
+| Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)   | ✅ passing, includes public-page refresh after edits       |
+| Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`             | ✅ wizard up to payment; staff booking, share, pay, cancel |
 
-The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **temporary** admin account, delete it afterwards, and never use the owner account. The tests clean up what they create: services named `E2E Package…`, photos with alt text `E2E photo…` and blackouts with reason `E2E test…`.
+The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **temporary** admin account, delete it afterwards, and never use the owner account. The tests clean up what they create: services named `E2E Package…`, photos with alt text `E2E photo…` and blackouts with reason `E2E test…`. Booking tests leave cancelled bookings named `E2E Client…`; delete those (and their payments and clients) after a run.
 
 ## Environments and accounts
 
 - **Supabase dev project:** ref `mkpjxrhjynbjuiovloiy`, hosted (no local Docker). All migrations and the seed are applied.
 - **Owner admin account:** exists on the dev project. Credentials are held by the studio owner and are never written in the repo.
 - **GitHub:** `lightchasersstudio-web/LightChasersStudio`. Work goes on one branch and one PR per phase, merged into `main`.
-- **Not set up yet:** production Supabase, Vercel, PayMongo, Resend (email) and Cloudflare Turnstile. Their env vars are optional in code until Phase 5.
+- **Not set up yet:** production Supabase, Vercel, PayMongo, Resend (email) and Cloudflare Turnstile. Without their keys: emails are skipped, Turnstile is skipped in development only (production refuses bookings), and online booking says payment isn't available yet.
 
 ## Key decisions (don't undo these without a reason)
 
 - **Money is stored as integer centavos** (`*_cents` columns, ₱1 = 100). Prices and deposits are always calculated on the server, never taken from the browser.
 - **A booking counts as paid only through a signature-verified PayMongo webhook**, never through the "payment success" redirect.
+- **Capacity lives in the database** (`assert_capacity`), not in the page. The calendars only mirror it.
 - **Booking statuses:** `pending_payment → pending → confirmed → completed`, plus `cancelled`, `declined` and `expired`. A database trigger enforces the allowed transitions.
 - **Unpaid bookings hold the slot** for a limited time (`hold_expires_at`). Expired holds are released by a cron job and also at the start of each new booking.
 - **Admin role comes from the `admin_profiles` table**, never from anything the browser sends. The Supabase service-role key is only used on the server.
@@ -111,23 +126,17 @@ The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **tem
 - **Seed content is placeholder.** Real prices, packages, hours and the "about" text must come from the owner.
 - **`npm audit` warnings** from dependencies haven't been reviewed. Do this in Phase 7.
 - **The hero swipe** is tested in Chrome (desktop and Android emulation) but not yet on a real iPhone in Safari.
+- **PayMongo webhook fields** follow PayMongo's docs but haven't seen a real test-mode event yet. Confirm `parsePaidEvent` in `src/lib/payments/paymongo.ts` against one when the keys exist.
+- **Rate-limit rows** (`rate_limits`) are never purged. Add a cleanup if the table grows.
 - **The GitHub CLI (`gh`) isn't installed** on the main dev machine, so PRs are opened from the GitHub website.
 
 ## Next steps
 
-**Phase 5: booking flow.** Read the "Booking" sections of `docs/master-prompt.md` and the booking notes in `CLAUDE.md` first.
+**Finish Phase 5 (needs the owner):**
 
-1. Build a multi-step wizard at `/book`: client info → service → date and time → details → review → confirmation.
-2. Build the slot picker from `availability_rules`, `blackout_dates` and `get_busy_ranges()`. Use the Asia/Manila timezone throughout.
-3. Add a server action that checks Cloudflare Turnstile, applies rate limiting, then calls `create_booking` through the service-role client. Map its error codes to friendly messages.
-4. PayMongo checkout for the deposit, plus the webhook at `src/app/api/webhooks/paymongo/route.ts`. It must verify the signature and be safe to receive twice. Check PayMongo's current docs for field names first.
-5. Confirmation emails through Resend.
-6. Switch `BOOK_HREF` in `src/components/public/site-nav.ts` to `/book`.
-7. Add the PayMongo, Turnstile and Resend keys to `.env.local` and make them required in `src/lib/env.server.ts`.
+1. Add the keys to `.env.local` (see `docs/SETUP.md`): PayMongo **test** secret key, Turnstile site key + secret, Resend API key + `EMAIL_FROM`.
+2. Register the PayMongo webhook at `<site>/api/webhooks/paymongo` for `checkout_session.payment.paid` and put its secret in `PAYMONGO_WEBHOOK_SECRET`. Locally this needs a tunnel (or test on a Vercel preview).
+3. Make one test booking and check: the webhook marks it paid, the client and studio emails arrive, and `parsePaidEvent` matches the real payload.
+4. Add the Versa Space rental package(s) and real prices, plus the deposit and cancellation/refund wording.
 
-**Before Phase 5 can be fully tested, the owner needs to provide:**
-
-- PayMongo test keys
-- A Cloudflare Turnstile site key and secret
-- A Resend API key and a verified sender domain or address
-- The real deposit rules and the cancellation/refund policy wording
+**Phase 6:** dashboard stats, searchable bookings table, clients list with history, rescheduling, and the privacy anonymisation routine.

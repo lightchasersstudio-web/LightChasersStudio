@@ -1,15 +1,9 @@
-import {
-  ArrowRightIcon,
-  HeartIcon,
-  HouseIcon,
-  PackageIcon,
-  PartyPopperIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowRightIcon } from "lucide-react";
 import Link from "next/link";
 
 import { BookCta } from "@/components/public/book-cta";
 import { BrandLogo } from "@/components/public/brand-logo";
+import { CATEGORY_ICONS } from "@/components/public/category-icons";
 import { HeroDeck } from "@/components/public/hero-deck";
 import { PhotoPolaroid } from "@/components/public/photo-polaroid";
 import { SectionHeading } from "@/components/public/section-heading";
@@ -21,21 +15,6 @@ import { SERVICE_CATEGORIES } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { getPublicSettings, listActiveServices, listFeaturedPhotos } from "@/server/queries/public";
 
-const CATEGORY_ICONS = {
-  wedding: HeartIcon,
-  portrait: UsersIcon,
-  event: PartyPopperIcon,
-  commercial: PackageIcon,
-};
-
-/** "What we shoot" cards: every service category, plus Versa Space right after portraits. */
-const SHOOT_CARDS = SERVICE_CATEGORIES.flatMap(({ value, label }) => {
-  const card = { key: value, label, href: `/services#${value}`, Icon: CATEGORY_ICONS[value] };
-  return value === "portrait"
-    ? [card, { key: "versa-space", label: "Versa Space", href: "/contact", Icon: HouseIcon }]
-    : [card];
-});
-
 export default async function HomePage() {
   const [settings, services, featured] = await Promise.all([
     getPublicSettings(),
@@ -43,6 +22,14 @@ export default async function HomePage() {
     listFeaturedPhotos(9),
   ]);
   const heroPhotos = featured.slice(0, 3);
+  // One card per category (Versa Space is the studio rental one); categories without
+  // packages yet point to the contact page instead of an empty section.
+  const shootCards = SERVICE_CATEGORIES.map(({ value, label }) => ({
+    key: value,
+    label,
+    href: services.some((s) => s.category === value) ? `/services#${value}` : "/contact",
+    Icon: CATEGORY_ICONS[value],
+  }));
   const highlights = featured.slice(3, 9).length >= 3 ? featured.slice(3, 9) : featured.slice(0, 6);
 
   return (
@@ -64,7 +51,7 @@ export default async function HomePage() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="lg">
-                <Link href={BOOK_HREF}>Book a session</Link>
+                <Link href={BOOK_HREF}>Book now</Link>
               </Button>
               <Button asChild size="lg" variant="outline">
                 <Link href="/portfolio">
@@ -92,9 +79,9 @@ export default async function HomePage() {
           align="center"
         />
         <ul className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
-          {SHOOT_CARDS.map(({ key, label, href, Icon }, i) => {
+          {shootCards.map(({ key, label, href, Icon }, i) => {
             // Odd count: the last card spans the full row on 2-column screens.
-            const isOrphan = SHOOT_CARDS.length % 2 === 1 && i === SHOOT_CARDS.length - 1;
+            const isOrphan = shootCards.length % 2 === 1 && i === shootCards.length - 1;
             return (
               <li key={key} className={cn(isOrphan && "col-span-2 lg:col-span-1")}>
                 <Link

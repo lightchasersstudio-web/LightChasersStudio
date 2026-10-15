@@ -1,5 +1,6 @@
 import {
   CalendarClockIcon,
+  CalendarDaysIcon,
   CameraIcon,
   ImagesIcon,
   LayoutDashboardIcon,
@@ -10,9 +11,10 @@ import {
 
 export type AdminNavItem = { href: string; label: string; icon: LucideIcon };
 
-// Add sections here as each phase ships (bookings, calendar, clients in Phase 6).
+// Add sections here as each phase ships (bookings table and clients in Phase 6).
 export const adminNav: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon },
+  { href: "/admin/calendar", label: "Calendar", icon: CalendarDaysIcon },
   { href: "/admin/services", label: "Services", icon: CameraIcon },
   { href: "/admin/availability", label: "Availability", icon: CalendarClockIcon },
   { href: "/admin/portfolio", label: "Portfolio", icon: ImagesIcon },

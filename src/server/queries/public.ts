@@ -11,7 +11,10 @@ import type { Tables } from "@/types/database.types";
 // a safety net in case an invalidation is ever missed.
 
 export type PublicService = Tables<"services">;
-export type PublicPhoto = Tables<"portfolio_images">;
+/** A portfolio photo, with the package it shows when linked (null if unlinked or hidden). */
+export type PublicPhoto = Tables<"portfolio_images"> & {
+  service: Pick<Tables<"services">, "slug" | "name"> | null;
+};
 export type PublicSettings = Pick<
   Tables<"business_settings">,
   | "business_name"
@@ -26,6 +29,8 @@ export type PublicSettings = Pick<
   | "instagram_url"
   | "tiktok_url"
   | "default_deposit_percent"
+  | "hold_minutes"
+  | "max_advance_days"
 >;
 
 export async function getPublicSettings(): Promise<PublicSettings> {
@@ -35,7 +40,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   const { data, error } = await createPublicClient()
     .from("business_settings")
     .select(
-      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent",
+      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent, hold_minutes, max_advance_days",
     )
     .single();
   if (error) throw error;
@@ -76,7 +81,8 @@ export async function listPortfolio(): Promise<PublicPhoto[]> {
   cacheLife("days");
   const { data, error } = await createPublicClient()
     .from("portfolio_images")
-    .select("*")
+    // RLS only exposes active services to anon, so a hidden package joins as null.
+    .select("*, service:services(slug, name)")
     .order("sort_order")
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -89,7 +95,8 @@ export async function listFeaturedPhotos(limit: number): Promise<PublicPhoto[]> 
   cacheLife("days");
   const { data, error } = await createPublicClient()
     .from("portfolio_images")
-    .select("*")
+    // RLS only exposes active services to anon, so a hidden package joins as null.
+    .select("*, service:services(slug, name)")
     .eq("is_featured", true)
     .order("sort_order")
     .limit(limit);

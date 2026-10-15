@@ -19,7 +19,11 @@ Current progress:
 - **Phase 1 (database):** done. Migrations and seed are pushed to the hosted dev project (`mkpjxrhjynbjuiovloiy`), `npm run test:db` passes against it, and `src/types/database.types.ts` is generated.
 - **Phase 2 (admin auth):** login, `proxy.ts`, the admin gate, the admin shell and the create-admin script are built. Sign-in with the real owner account is verified on the dev project.
 - **Phase 3 (admin content):** done. Services CRUD (cover photo, ordering, on/off), weekly hours + blackout dates, portfolio uploads (multi-photo, featured, ordering), studio profile/logo/booking rules, and an Account page to change password. Covered by unit tests, `npm run test:db`, and `e2e/admin-content.spec.ts` (needs `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`).
-- **Phase 4 (public site):** done. Home, services list + detail, portfolio (filters + lightbox), about, contact (live opening hours), branded 404. All public pages are static and refreshed by admin edits through cache tags. "Book a session" points to `/contact` until Phase 5 (`BOOK_HREF` in `src/components/public/site-nav.ts`).
+- **Phase 4 (public site):** done. Home, services list + detail, portfolio (filters + lightbox), about, contact (live opening hours), branded 404. All public pages are static and refreshed by admin edits through cache tags.
+- **Phase 5 (booking flow + calendars):** built; payments/emails/Turnstile wait on the owner's keys. Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`.
+  - Public: "Book now" everywhere (`bookHref(slug)` in `site-nav.ts` preselects a package); wizard `/book` (details → package → month calendar + times → shoot details → review → PayMongo deposit), `/book/done`, `/book/cancelled` (retry while held), `/booking` (lookup by reference + email). Portfolio photos can link to a package ("Book this package"). Versa Space = `studio` category (studio rental).
+  - Admin: `/admin/calendar` (month grid + day timeline with a "free" lane), `/admin/bookings/new` (staff booking: confirmed at once, email optional, custom price, GCash/cash/pay-at-shoot, outside-hours needs "Book anyway"), `/admin/bookings/[id]` (contact buttons incl. Messenger, booking card + copy-as-text, confirm/decline/complete/cancel, record payment, notes, resend email, late-payment review banner). Settings → "Shoots that can run at the same time".
+  - Without keys: emails are skipped (logged), Turnstile is skipped in dev only (production refuses), online booking says payment isn't available. The PayMongo event parser (`parsePaidEvent`) still needs confirming against a real test-mode delivery.
 
 ## Commands
 
@@ -77,6 +81,7 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 - **Image uploads** happen in the browser (`src/lib/images/prepare-image.ts`): resize, re-encode to WebP (strips EXIF/GPS), make a blur placeholder, upload straight to Storage under admin RLS, then a server action saves the path. Actions only accept paths matching `STORAGE_PATH` in `src/lib/storage.ts`; build URLs with `publicImageUrl()`.
 - **Public data** lives in `src/server/queries/public.ts`: `"use cache"` + `cacheTag(TAGS.x)` + `cacheLife("days")`, using the cookie-free anon client `src/lib/supabase/public.ts` (never `cookies()` inside a cache scope).
 - **Dynamic public routes** (e.g. `/services/[slug]`) must read `params` **inside `<Suspense>`** (Partial Prefetching); reading them at the top level breaks regeneration after an admin edit (500). `generateStaticParams` must return at least one entry. Client components calling `usePathname()` in shared layouts need a `<Suspense>` wrapper too (see `nav-links.tsx`). Unknown slugs are soft 404s (200 + `noindex`).
+- **Admin pages render their static header at once and put `requireAdmin()` + data (and any `params`/`searchParams` read) in a child inside `<Suspense>` with a skeleton from `src/components/admin/skeletons.tsx`** (use `<AdminOnly>` when a page has no data). Awaiting at the page top makes client navigation block (dev "uncached data during a navigation" insight). Forms seeded from the URL get a `key` so a new link remounts them.
 - `requireAdmin()` calls `await connection()` first; without it Next flags the Supabase client's `Date.now()` during runtime prefetch.
 - Vitest stubs `server-only` (`src/test/server-only-stub.ts`), so server modules can be unit-tested.
 
@@ -85,7 +90,8 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 - Money is stored as integer **centavos** in `*_cents` columns (₱1 = 100). Images are stored as Storage **paths** (`cover_image_path`, `storage_path`, `logo_path`) in the public `portfolio` and `brand` buckets, never as full URLs.
 - `business_settings` is a single row (`id = true`) holding the timezone and booking rules: notice, advance window, slot interval, buffer, default deposit %, and hold minutes.
 - Functions are `SECURITY DEFINER` with `set search_path = ''` and fully qualified names. Every new function must `revoke execute ... from public` and then grant only the roles that need it, because Supabase grants anon execute by default.
-- `create_booking` is **service-role only**. Call it through the admin client from a server action, after Turnstile and rate limiting. It raises P0001 with one of these messages: `service_unavailable`, `invalid_start_time`, `too_soon`, `too_far`, `blackout_date`, `outside_business_hours`, `slot_unavailable`. Map them to user-facing text.
+- `create_booking` is **service-role only**. Call it through the admin client from a server action, after Turnstile and rate limiting. It raises P0001 with one of these messages: `service_unavailable`, `invalid_start_time`, `too_soon`, `too_far`, `blackout_date`, `outside_business_hours`, `slot_unavailable`, `email_required`. Map them with `src/lib/booking/booking-errors.ts`.
+- `admin_create_booking` (service role, after `assertAdmin`), `mark_booking_paid` (webhook only, idempotent per payment id) and `hit_rate_limit` (Postgres fixed-window limiter, used by `src/lib/rate-limit.ts`) are the other booking RPCs. `clients.email` is nullable (staff bookings); public bookings still require it.
 - `get_busy_ranges(from, to)` is callable by anon, returns no personal data, and accepts at most a 62-day window. It feeds the public slot picker together with `availability_rules` and `blackout_dates`.
 - Public bookings never overwrite an existing `clients` row; clients are matched by lowercased email. Each booking stores the contact name and phone as submitted.
 - Bookings, payments and clients use `on delete restrict`. Privacy deletion requests need an anonymisation routine (Phase 6).
@@ -94,10 +100,10 @@ Supabase runs as a **hosted dev project**, not locally (no Docker on this machin
 ### Booking & payment design (decided; implement in Phases 5 and 5b)
 
 - Status flow: `pending_payment → pending` (deposit paid, awaiting admin) `→ confirmed → completed`, plus `cancelled`, `declined` and `expired`.
-- **No double booking, enforced in Postgres:** a gist exclusion constraint on `tstzrange(start_at, blocked_until)` (where `blocked_until` is the end time plus the buffer), covering bookings not in `cancelled/declined/expired`.
+- **Capacity, enforced in Postgres:** up to `business_settings.max_concurrent_bookings` shoots may run at once. Every booking path calls `assert_capacity(start, blocked_until)`, which takes a transaction-wide advisory lock and checks the peak number of blocking bookings that actually coincide in the range (`blocked_until` = end + buffer). The old exclusion constraint is gone. `src/lib/booking/slots.ts` mirrors the rule for the calendars.
 - Unpaid bookings hold the slot until `hold_expires_at` (15–30 min). The constraint can't use `now()`, so stale holds are expired by a pg_cron job **and** at the start of the `create_booking` SECURITY DEFINER RPC. That RPC inserts the client and booking atomically, because anon users have no direct access to `clients` or `bookings`.
 - Prices and `deposit_cents` are always computed on the server from `services`, never taken from the client.
-- A booking counts as paid **only through a signature-verified, idempotent PayMongo webhook**, never through the success redirect. Check PayMongo's current docs for field names before implementing.
+- A booking counts as paid **only through a signature-verified, idempotent PayMongo webhook** (`src/app/api/webhooks/paymongo/route.ts`, event `checkout_session.payment.paid`), never through the success redirect. A payment arriving after the hold lapsed is kept; if the slot filled meanwhile the booking is flagged `needs_refund_review`.
 
 ## Design system
 

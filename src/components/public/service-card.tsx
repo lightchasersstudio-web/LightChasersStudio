@@ -1,14 +1,16 @@
-import { ArrowRightIcon, CameraIcon, ClockIcon } from "lucide-react";
+import { CameraIcon, ClockIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { bookHref } from "@/components/public/site-nav";
+import { Button } from "@/components/ui/button";
 import { categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
 import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
 import type { PublicService } from "@/server/queries/public";
 
-/** Whole card is one link; the title carries the accessible name. */
+/** Whole card links to the package; "Book now" sits above that link and opens the wizard with it chosen. */
 export function ServiceCard({ service }: { service: PublicService }) {
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-3xl border bg-card transition-shadow duration-300 focus-within:ring-3 focus-within:ring-ring/50 hover:shadow-xl">
@@ -47,12 +49,11 @@ export function ServiceCard({ service }: { service: PublicService }) {
               {formatDuration(service.duration_minutes)}
             </p>
           </div>
-          <span
-            aria-hidden
-            className="grid size-11 place-items-center rounded-full bg-primary text-primary-foreground transition-transform duration-300 group-hover:translate-x-1"
-          >
-            <ArrowRightIcon className="size-5" />
-          </span>
+          <Button asChild className="relative z-10 shrink-0">
+            <Link href={bookHref(service.slug)} aria-label={`Book now: ${service.name}`}>
+              Book now
+            </Link>
+          </Button>
         </div>
       </div>
     </article>

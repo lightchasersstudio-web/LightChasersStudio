@@ -6,6 +6,7 @@ export type ServiceCategory = Database["public"]["Enums"]["service_category"];
 export const SERVICE_CATEGORIES: { value: ServiceCategory; label: string }[] = [
   { value: "wedding", label: "Weddings & prenup" },
   { value: "portrait", label: "Portraits & family" },
+  { value: "studio", label: "Versa Space" },
   { value: "event", label: "Events" },
   { value: "commercial", label: "Product & commercial" },
 ];

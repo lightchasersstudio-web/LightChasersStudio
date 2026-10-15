@@ -52,6 +52,7 @@ export async function updatePortfolioImage(input: unknown): Promise<ActionResult
         category: v.category,
         alt_text: v.altText,
         caption: v.caption,
+        service_id: v.serviceId,
         is_featured: v.isFeatured,
       })
       .eq("id", v.id)

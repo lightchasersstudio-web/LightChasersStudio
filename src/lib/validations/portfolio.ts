@@ -37,6 +37,8 @@ export const updatePortfolioImageSchema = z.object({
   altText,
   caption: optionalText(300),
   isFeatured: z.boolean(),
+  // "" from the select means "no package".
+  serviceId: z.union([z.literal(""), z.uuid()]).transform((v) => v || null),
 });
 
 export type UpdatePortfolioImageInput = z.input<typeof updatePortfolioImageSchema>;

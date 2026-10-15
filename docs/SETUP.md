@@ -63,19 +63,21 @@ cp .env.example .env.local
 
 Open `.env.local` in your editor and fill in the values the owner gave you:
 
-| Variable                                                 | What it is                                        | Needed now?                |
-| -------------------------------------------------------- | ------------------------------------------------- | -------------------------- |
-| `NEXT_PUBLIC_SITE_URL`                                   | Leave as `http://localhost:3000`                  | ✅ Yes                     |
-| `BUSINESS_TIMEZONE`                                      | Leave as `Asia/Manila`                            | ✅ Yes                     |
-| `NEXT_PUBLIC_SUPABASE_URL`                               | Supabase project URL                              | ✅ Yes                     |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                          | Supabase public (anon) key                        | ✅ Yes                     |
-| `SUPABASE_SERVICE_ROLE_KEY`                              | Supabase secret key: **server only, never share** | ✅ Yes                     |
-| `DATABASE_URL_TEST`                                      | Database connection string for DB tests           | Only for `npm run test:db` |
-| `RESEND_API_KEY`, `EMAIL_FROM`                           | Email sending                                     | No (Phase 5)               |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Bot protection                                    | No (Phase 5)               |
-| `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`         | Payments                                          | No (Phase 5)               |
+| Variable                                                 | What it is                                        | Needed now?                                 |
+| -------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                                   | Leave as `http://localhost:3000`                  | ✅ Yes                                      |
+| `BUSINESS_TIMEZONE`                                      | Leave as `Asia/Manila`                            | ✅ Yes                                      |
+| `NEXT_PUBLIC_SUPABASE_URL`                               | Supabase project URL                              | ✅ Yes                                      |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                          | Supabase public (anon) key                        | ✅ Yes                                      |
+| `SUPABASE_SERVICE_ROLE_KEY`                              | Supabase secret key: **server only, never share** | ✅ Yes                                      |
+| `DATABASE_URL_TEST`                                      | Database connection string for DB tests           | Only for `npm run test:db`                  |
+| `RESEND_API_KEY`, `EMAIL_FROM`                           | Email sending                                     | Optional in dev; needed for emails          |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Bot protection                                    | Optional in dev; **required in production** |
+| `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`         | Payments                                          | Optional in dev; needed to take deposits    |
 
-Leave the "not needed now" ones empty.
+Without these keys the site still runs: emails are skipped (you'll see "[email] not configured" in the terminal), the security check is skipped on your computer, and online booking stops at "Online payment isn't available yet." Staff bookings in the admin work fully.
+
+**Testing payments locally** needs PayMongo **test** keys and a public URL for the webhook (PayMongo can't reach `localhost`), e.g. a tunnel or a Vercel preview. Register `<that URL>/api/webhooks/paymongo` for the `checkout_session.payment.paid` event and put the webhook's secret in `PAYMONGO_WEBHOOK_SECRET`.
 
 > ⚠️ Never put a secret in a variable that starts with `NEXT_PUBLIC_`. Those are sent to the browser.
 
