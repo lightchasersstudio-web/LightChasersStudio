@@ -1,6 +1,6 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-15, Phase 5 built (waiting on payment/email keys)._
+_Last updated: 2026-10-16. Phases 0–5 are on `main`; online payments and emails wait on the owner's PayMongo, Resend and Turnstile keys._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -10,9 +10,9 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 
 ## Where we left off
 
-- **Phases 0–4 are built and verified.** Phase 4 (public site) is on branch `phase-4-public-site`, with a PR open against `main`.
-- **Phase 5 (booking flow + calendars) is built** on branch `phase-5-booking`. Online payment, emails and bot protection switch on once the owner adds the PayMongo, Resend and Turnstile keys. See [Next steps](#next-steps).
-- Nothing is deployed yet. Production setup is Phase 8.
+- **Phases 0–5 are built, verified and merged into `main`** (Phase 5 = PR #7). The latest commit on `main` (`1d8f1ed`, contact page + logo) was pushed directly to `main` at the owner's request.
+- **Online payment, emails and bot protection** switch on once the owner adds the PayMongo, Resend and Turnstile keys. Everything else works without them. See [Next steps](#next-steps).
+- **Hosting:** the owner is setting up Vercel from `main`, using the **dev** Supabase project for now. A separate production database is still Phase 8.
 
 ## Roadmap status
 
@@ -23,10 +23,10 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 | 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified | #3  |
 | 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                      | #4  |
 | 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                      | #5  |
-| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Built, needs owner keys   | —   |
+| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Merged, needs owner keys  | #7  |
 | 6     | Admin: dashboard stats, bookings table, clients, reschedule, privacy        | ⏳ Next                      |     |
 | 7     | Hardening: security headers, accessibility, performance, SEO, sitemap       | Not started                  |     |
-| 8     | Deploy: Vercel + production Supabase                                        | Not started                  |     |
+| 8     | Deploy: Vercel + production Supabase                                        | ⏳ Vercel (dev DB) underway  |     |
 
 ## What's built
 
@@ -86,24 +86,35 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Booking page (`/admin/bookings/[id]`):** Call / Text / Email / Messenger buttons (preferred one highlighted, no Viber), a branded booking card to screenshot plus "Copy as text" for Messenger, confirm / decline / complete / cancel, record GCash or cash payments, private notes, resend email, and a warning banner if a PayMongo deposit arrived after the slot filled up.
 - **Emails (Resend):** booking received, booking confirmed, declined/cancelled to the client; "new booking needs review" to the studio email in Settings.
 
+### After Phase 5 (polish, 2026-10-15 → 16)
+
+- **Versa Space "Coming soon".** While the Versa Space (studio rental) category has no active package, the home card shows a "Coming soon" tag and `/services#studio` shows a "Coming soon" panel. Adding a package replaces it automatically. Controlled by `comingSoon: true` on the category in `src/lib/catalog.ts`.
+- **Contact page redesign** (`/contact`): Book now + "Message us on Facebook" buttons, a Facebook card (Messenger chat via `m.me/lightchasersstudio` + "Visit our page"), email / phone / Google Maps cards, a "help us reply faster" checklist and studio hours. The Facebook link (`https://www.facebook.com/lightchasersstudio/`) is saved in Admin → Settings, and the footer shows it on every page.
+- **Logo everywhere:** admin sidebar and phone top bar, the booking card, and booking emails. The browser tab icon, phone home-screen icon and web manifest use the logo's camera emblem (`src/app/favicon.ico`, `icon.png`, `apple-icon.png`); link previews on Facebook/Messenger use the full logo (`src/app/opengraph-image.jpg`). To change them, replace those files.
+- **Admin pages load instantly:** each admin page shows its title right away and a skeleton while the admin check and data load (`src/components/admin/skeletons.tsx`). This removed the dev warning "uncached data during a navigation".
+- **Fixes:** "Book now" on a different package now replaces an earlier choice in the wizard (and the same for staff bookings from the calendar); a PayMongo payment that lands on a cancelled/declined/already-paid booking is kept and flagged for a refund check; online booking without PayMongo says "Online payment isn't available yet" instead of a security-check error.
+
 ## How it's verified
 
 | Check                 | Command                                                         | Last result                                                |
 | --------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- |
-| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build) | ✅ passing                                                 |
-| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                   | ✅ passing against the dev project                         |
+| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build) | ✅ passing, 85 unit tests                                  |
+| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                   | ✅ 21 passing against the dev project                      |
 | Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                   | ✅ passing on desktop and phone (Pixel 7), touch included  |
 | Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)   | ✅ passing, includes public-page refresh after edits       |
 | Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`             | ✅ wizard up to payment; staff booking, share, pay, cancel |
 
 The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **temporary** admin account, delete it afterwards, and never use the owner account. The tests clean up what they create: services named `E2E Package…`, photos with alt text `E2E photo…` and blackouts with reason `E2E test…`. Booking tests leave cancelled bookings named `E2E Client…`; delete those (and their payments and clients) after a run.
 
+On this machine a full parallel e2e run is sometimes flaky under load (an admin sign-in or the hero swipe test timing out); those tests pass when rerun on their own.
+
 ## Environments and accounts
 
 - **Supabase dev project:** ref `mkpjxrhjynbjuiovloiy`, hosted (no local Docker). All migrations and the seed are applied.
 - **Owner admin account:** exists on the dev project. Credentials are held by the studio owner and are never written in the repo.
-- **GitHub:** `lightchasersstudio-web/LightChasersStudio`. Work goes on one branch and one PR per phase, merged into `main`.
-- **Not set up yet:** production Supabase, Vercel, PayMongo, Resend (email) and Cloudflare Turnstile. Without their keys: emails are skipped, Turnstile is skipped in development only (production refuses bookings), and online booking says payment isn't available yet.
+- **GitHub:** `lightchasersstudio-web/LightChasersStudio`. Work normally goes on one branch and one PR per phase, merged into `main`. Every push to `main` redeploys the live site once Vercel is connected.
+- **Vercel:** being set up by the owner from `main`, with the dev Supabase project. Required env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `BUSINESS_TIMEZONE`, `NEXT_PUBLIC_SITE_URL` (the live address; used for emails, PayMongo return pages and link previews). The live site and local development share **one database**.
+- **Not set up yet:** production Supabase, PayMongo, Resend (email) and Cloudflare Turnstile. Without their keys: emails are skipped, Turnstile is skipped in development only (production refuses bookings), and online booking says payment isn't available yet.
 
 ## Key decisions (don't undo these without a reason)
 
@@ -128,15 +139,27 @@ The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **tem
 - **The hero swipe** is tested in Chrome (desktop and Android emulation) but not yet on a real iPhone in Safari.
 - **PayMongo webhook fields** follow PayMongo's docs but haven't seen a real test-mode event yet. Confirm `parsePaidEvent` in `src/lib/payments/paymongo.ts` against one when the keys exist.
 - **Rate-limit rows** (`rate_limits`) are never purged. Add a cleanup if the table grows.
+- **Staff time picker** (new booking) also offers times earlier today; the database accepts them.
+- **Recording a payment** on a cancelled/declined booking is hidden in the UI but not refused by the server.
+- **Short (1-hour) blocks** on the admin day timeline cut off their last line on narrow screens.
+- **Calendar month arrows** change only the URL, so the old month stays on screen until the new one loads (no skeleton).
 - **The GitHub CLI (`gh`) isn't installed** on the main dev machine, so PRs are opened from the GitHub website.
 
 ## Next steps
 
-**Finish Phase 5 (needs the owner):**
+**Go live (owner):**
 
-1. Add the keys to `.env.local` (see `docs/SETUP.md`): PayMongo **test** secret key, Turnstile site key + secret, Resend API key + `EMAIL_FROM`.
-2. Register the PayMongo webhook at `<site>/api/webhooks/paymongo` for `checkout_session.payment.paid` and put its secret in `PAYMONGO_WEBHOOK_SECRET`. Locally this needs a tunnel (or test on a Vercel preview).
-3. Make one test booking and check: the webhook marks it paid, the client and studio emails arrive, and `parsePaidEvent` matches the real payload.
-4. Add the Versa Space rental package(s) and real prices, plus the deposit and cancellation/refund wording.
+1. Finish the Vercel setup from `main` (env vars above), then in Supabase → Authentication → URL Configuration set the **Site URL** to the Vercel address and add both `https://<vercel-address>/**` and `http://localhost:3000/**` to **Redirect URLs**.
+2. Replace the placeholder packages and prices in the admin, add the Versa Space rental package(s), and add a studio phone number in Settings if clients should call.
+
+**Finish Phase 5 (needs the owner's accounts), in this order:**
+
+1. **Cloudflare Turnstile:** add a widget for the Vercel address + `localhost`; set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`.
+2. **Resend:** API key in `RESEND_API_KEY`; verify a domain the studio owns and set `EMAIL_FROM` (a Gmail address can't be a sender; `onboarding@resend.dev` only reaches the account's own inbox).
+3. **PayMongo (test mode first):** `PAYMONGO_SECRET_KEY` (`sk_test_…`); webhook at `https://<site>/api/webhooks/paymongo` for `checkout_session.payment.paid`, secret in `PAYMONGO_WEBHOOK_SECRET`. Make one test booking on the live site and check that it becomes "Deposit paid · needs your OK", the payment shows on the booking page, and the emails arrive. Confirm `parsePaidEvent` against the real payload (Vercel logs). If checkout fails, match `PAYMENT_METHODS` in `src/lib/payments/paymongo.ts` to the methods enabled on the account.
+4. **Live payments:** activate the PayMongo account, then swap in the live key and a new live-mode webhook secret.
+5. **Owner wording:** deposit rules and the cancellation/refund policy, to add to the review step and emails.
+
+Add each key in Vercel (then redeploy) and in `.env.local`. `docs/SETUP.md` has the local details.
 
 **Phase 6:** dashboard stats, searchable bookings table, clients list with history, rescheduling, and the privacy anonymisation routine.
