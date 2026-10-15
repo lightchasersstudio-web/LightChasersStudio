@@ -1,4 +1,11 @@
-import { ArrowRightIcon, HeartIcon, PackageIcon, PartyPopperIcon, UsersIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  HeartIcon,
+  HouseIcon,
+  PackageIcon,
+  PartyPopperIcon,
+  UsersIcon,
+} from "lucide-react";
 import Link from "next/link";
 
 import { BookCta } from "@/components/public/book-cta";
@@ -20,6 +27,14 @@ const CATEGORY_ICONS = {
   event: PartyPopperIcon,
   commercial: PackageIcon,
 };
+
+/** "What we shoot" cards: every service category, plus Versa Space right after portraits. */
+const SHOOT_CARDS = SERVICE_CATEGORIES.flatMap(({ value, label }) => {
+  const card = { key: value, label, href: `/services#${value}`, Icon: CATEGORY_ICONS[value] };
+  return value === "portrait"
+    ? [card, { key: "versa-space", label: "Versa Space", href: "/contact", Icon: HouseIcon }]
+    : [card];
+});
 
 export default async function HomePage() {
   const [settings, services, featured] = await Promise.all([
@@ -76,13 +91,14 @@ export default async function HomePage() {
           title="Every kind of story"
           align="center"
         />
-        <ul className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {SERVICE_CATEGORIES.map(({ value, label }) => {
-            const Icon = CATEGORY_ICONS[value];
+        <ul className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+          {SHOOT_CARDS.map(({ key, label, href, Icon }, i) => {
+            // Odd count: the last card spans the full row on 2-column screens.
+            const isOrphan = SHOOT_CARDS.length % 2 === 1 && i === SHOOT_CARDS.length - 1;
             return (
-              <li key={value}>
+              <li key={key} className={cn(isOrphan && "col-span-2 lg:col-span-1")}>
                 <Link
-                  href={`/services#${value}`}
+                  href={href}
                   className="group flex h-full flex-col items-center gap-3 rounded-3xl border bg-card p-5 text-center transition-all duration-300 hover:-translate-y-1 hover:border-terracotta hover:shadow-lg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:p-7"
                 >
                   <span className="grid size-14 place-items-center rounded-full bg-accent text-accent-foreground transition-colors group-hover:bg-terracotta group-hover:text-white">

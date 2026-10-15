@@ -50,7 +50,8 @@ export function HeroDeck({ photos }: { photos: PublicPhoto[] }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="relative grid w-[min(100%,22rem)] [grid-template-areas:'stack']">
+      {/* `isolate` keeps the cards' z-indexes inside the deck, below the sticky header. */}
+      <div className="relative isolate grid w-[min(100%,22rem)] [grid-template-areas:'stack']">
         {order.map((card) => {
           const isFlying = flying?.card === card;
           const depth = isFlying ? -1 : stack.indexOf(card);

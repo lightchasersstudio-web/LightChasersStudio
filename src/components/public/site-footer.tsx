@@ -88,7 +88,7 @@ export async function SiteFooter() {
         </div>
       </div>
       <div className="border-t border-panel-foreground/15">
-        <p className="mx-auto max-w-6xl px-4 py-5 text-sm text-panel-foreground/85 sm:px-6">
+        <p className="mx-auto max-w-6xl px-4 py-5 text-center text-sm text-panel-foreground/85 sm:px-6">
           © {year} {s.business_name} · {s.city}, Philippines
         </p>
       </div>
