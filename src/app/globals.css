@@ -96,44 +96,46 @@
   --sidebar-ring: #ce7056;
 }
 
+/* Dark: a soft, warm evergreen-slate (not near-black) with lifted surfaces, so
+   cards read clearly and photos don't glare. Contrast notes are vs --background. */
 .dark {
-  --background: #141a19;
-  --foreground: #ede9e1;
-  --card: #1c2423;
-  --card-foreground: #ede9e1;
-  --popover: #1c2423;
-  --popover-foreground: #ede9e1;
-  --primary: #91c099; /* sage on dark, dark text on it */
-  --primary-foreground: #142019;
-  --secondary: #23302d;
-  --secondary-foreground: #d5e8d8;
-  --muted: #222b29;
-  --muted-foreground: #a8b3b0;
-  --accent: #3a2620;
-  --accent-foreground: #f2c2b2;
+  --background: #1f2927; /* soft evergreen-slate */
+  --foreground: #ece7de; /* warm off-white, ~12:1 (less glare than pure white) */
+  --card: #283431; /* one step up from the page */
+  --card-foreground: #ece7de;
+  --popover: #2b3734;
+  --popover-foreground: #ece7de;
+  --primary: #9ccaa4; /* sage on dark, dark text on it */
+  --primary-foreground: #16241b;
+  --secondary: #2f3e3a;
+  --secondary-foreground: #d8eadb;
+  --muted: #2b3734;
+  --muted-foreground: #b4beba; /* ~7:1 */
+  --accent: #4a352e; /* warm blush-clay tint */
+  --accent-foreground: #f6cdbe;
   --destructive: #f97066;
-  --border: #ffffff1a;
-  --input: #ffffff26;
-  --ring: #e08a70;
-  --terracotta: #e08a70;
-  --terracotta-ink: #eda08a;
-  --sage: #91c099;
-  --blush: #3a2620;
-  --panel: #1f2b29;
-  --panel-foreground: #ede9e1;
-  --chart-1: #91c099;
-  --chart-2: #e08a70;
-  --chart-3: #6fa3a0;
-  --chart-4: #e3b85c;
-  --chart-5: #b8a898;
-  --sidebar: #182120;
-  --sidebar-foreground: #ede9e1;
-  --sidebar-primary: #91c099;
-  --sidebar-primary-foreground: #142019;
-  --sidebar-accent: #3a2620;
-  --sidebar-accent-foreground: #f2c2b2;
-  --sidebar-border: #ffffff1a;
-  --sidebar-ring: #e08a70;
+  --border: #ffffff21;
+  --input: #ffffff2e;
+  --ring: #e8957b;
+  --terracotta: #e8957b;
+  --terracotta-ink: #f0a890; /* ~6.8:1 */
+  --sage: #9ccaa4;
+  --blush: #4a352e;
+  --panel: #2a3a37;
+  --panel-foreground: #ece7de;
+  --chart-1: #9ccaa4;
+  --chart-2: #e8957b;
+  --chart-3: #7db0ac;
+  --chart-4: #e6be66;
+  --chart-5: #bcae9f;
+  --sidebar: #232e2c;
+  --sidebar-foreground: #ece7de;
+  --sidebar-primary: #9ccaa4;
+  --sidebar-primary-foreground: #16241b;
+  --sidebar-accent: #4a352e;
+  --sidebar-accent-foreground: #f6cdbe;
+  --sidebar-border: #ffffff21;
+  --sidebar-ring: #e8957b;
 }
 
 @layer base {
@@ -149,6 +151,10 @@
   }
   html {
     @apply font-sans;
+    /* Always reserve the scrollbar so short pages (contact, portfolio) don't
+       render wider and shift the centred layout. `overflow-y: scroll` rather
+       than `scrollbar-gutter`, which double-pads when Radix dialogs lock scroll. */
+    overflow-y: scroll;
   }
   h1,
   h2,
@@ -213,6 +219,13 @@
     auto,
     auto,
     18px 18px;
+}
+
+/* Theme toggle: the new theme is revealed by a clip-path circle (theme-toggle.tsx). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {
