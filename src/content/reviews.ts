@@ -1,36 +1,14 @@
 import type { ServiceCategory } from "@/lib/catalog";
+import type { PublicReview } from "@/server/queries/public";
 
 /**
- * Client reviews shown on the home page and on package pages.
- *
- * HOW TO ADD ONE: copy a real review (with the client's permission) into
- * REVIEWS below. Use their first name or initials if they prefer.
- *
- *   {
- *     name: "Maria & Jun",
- *     category: "wedding",          // wedding | portrait | event | commercial | studio
- *     shoot: "Prenup session",      // what they booked, as you'd say it
- *     quote: "They made us feel so relaxed…",
- *     rating: 5,                    // optional, 1–5
- *   },
- *
- * While REVIEWS is empty the live site hides the section. On your own computer
- * (`npm run dev`) the SAMPLE_REVIEWS show instead, marked "sample", so you can
- * see the design. Samples never appear on the live site.
+ * Real reviews are managed at /admin/reviews. While none are published, the
+ * live site hides the reviews section; on your own computer (`npm run dev`)
+ * these samples show instead, marked "sample", so you can see the design.
  */
-export type Review = {
-  name: string;
-  category: ServiceCategory;
-  shoot: string;
-  quote: string;
-  rating?: 1 | 2 | 3 | 4 | 5;
-};
-
-export const REVIEWS: Review[] = [];
-
-/** Design preview only. Never shown in production. */
-const SAMPLE_REVIEWS: Review[] = [
+const SAMPLE_REVIEWS: PublicReview[] = [
   {
+    id: "sample-a",
     name: "Sample client A",
     category: "wedding",
     shoot: "Prenup session",
@@ -39,6 +17,7 @@ const SAMPLE_REVIEWS: Review[] = [
     rating: 5,
   },
   {
+    id: "sample-b",
     name: "Sample client B",
     category: "portrait",
     shoot: "Family portrait",
@@ -47,6 +26,7 @@ const SAMPLE_REVIEWS: Review[] = [
     rating: 5,
   },
   {
+    id: "sample-c",
     name: "Sample client C",
     category: "event",
     shoot: "Event coverage",
@@ -58,10 +38,13 @@ const SAMPLE_REVIEWS: Review[] = [
 
 const PREVIEW = process.env.NODE_ENV === "development";
 
-/** Real reviews, or (dev only) the samples. `sample` tells the UI to label them. */
-export function getReviews(category?: ServiceCategory): { reviews: Review[]; sample: boolean } {
-  const sample = REVIEWS.length === 0 && PREVIEW;
-  const all = sample ? SAMPLE_REVIEWS : REVIEWS;
+/** Published reviews, or (dev only, when there are none) the samples. `sample` tells the UI to label them. */
+export function pickReviews(
+  published: PublicReview[],
+  category?: ServiceCategory,
+): { reviews: PublicReview[]; sample: boolean } {
+  const sample = published.length === 0 && PREVIEW;
+  const all = sample ? SAMPLE_REVIEWS : published;
   const reviews = category ? all.filter((r) => r.category === category) : all;
   return { reviews, sample };
 }

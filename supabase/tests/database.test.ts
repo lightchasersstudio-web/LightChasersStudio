@@ -235,6 +235,49 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         expect((await c.query("select id from public.clients")).rows).toHaveLength(1);
       });
     });
+
+    it("shows only published reviews publicly; only admins can write them", async () => {
+      await inRollback(async (c) => {
+        const adminId = crypto.randomUUID();
+        const userId = crypto.randomUUID();
+        await c.query(
+          "insert into auth.users (id, email) values ($1, 'admin@test.local'), ($2, 'user@test.local')",
+          [adminId, userId],
+        );
+        await c.query("insert into public.admin_profiles (user_id, role) values ($1, 'owner')", [
+          adminId,
+        ]);
+        await c.query("delete from public.reviews");
+        await c.query(`insert into public.reviews (name, category, shoot, quote, is_published)
+          values ('Shown', 'wedding', 'Prenup', 'A lovely published review.', true),
+                 ('Draft', 'portrait', 'Family', 'A review not shown yet.', false)`);
+        const insert = `insert into public.reviews (name, category, shoot, quote)
+          values ('Fake', 'event', 'Party', 'Five stars from myself.')`;
+
+        await actAs(c, "anon");
+        expect((await c.query("select name from public.reviews")).rows).toEqual([
+          { name: "Shown" },
+        ]);
+        expect(await expectFailure(c, insert)).toMatch(/row-level security/);
+
+        await c.query("reset role");
+        await actAs(c, "authenticated", userId);
+        expect((await c.query("select name from public.reviews")).rows).toHaveLength(1);
+        expect(await expectFailure(c, insert)).toMatch(/row-level security/);
+        await c.query("update public.reviews set is_published = true");
+        await c.query("delete from public.reviews");
+
+        await c.query("reset role");
+        await actAs(c, "authenticated", adminId);
+        // The signed-in non-admin's update and delete above touched nothing.
+        expect((await c.query("select name from public.reviews order by name")).rows).toEqual([
+          { name: "Draft" },
+          { name: "Shown" },
+        ]);
+        await c.query(insert);
+        expect((await c.query("select id from public.reviews")).rows).toHaveLength(3);
+      });
+    });
   });
 
   describe("create_booking", () => {

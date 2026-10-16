@@ -5,6 +5,7 @@ import {
   ChartColumnIcon,
   ImagesIcon,
   LayoutDashboardIcon,
+  MessageSquareQuoteIcon,
   SettingsIcon,
   UserRoundIcon,
   type LucideIcon,
@@ -20,6 +21,7 @@ export const adminNav: AdminNavItem[] = [
   { href: "/admin/services", label: "Services", icon: CameraIcon },
   { href: "/admin/availability", label: "Availability", icon: CalendarClockIcon },
   { href: "/admin/portfolio", label: "Portfolio", icon: ImagesIcon },
+  { href: "/admin/reviews", label: "Reviews", icon: MessageSquareQuoteIcon },
   { href: "/admin/settings", label: "Settings", icon: SettingsIcon },
   { href: "/admin/account", label: "Account", icon: UserRoundIcon },
 ];

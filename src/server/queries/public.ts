@@ -104,6 +104,26 @@ export async function listFeaturedPhotos(limit: number): Promise<PublicPhoto[]> 
   return data;
 }
 
+export type PublicReview = Pick<
+  Tables<"reviews">,
+  "id" | "name" | "category" | "shoot" | "quote" | "rating"
+>;
+
+/** Published client reviews, in the order the admin set. */
+export async function listPublishedReviews(): Promise<PublicReview[]> {
+  "use cache";
+  cacheTag(TAGS.reviews);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("reviews")
+    .select("id, name, category, shoot, quote, rating")
+    .eq("is_published", true)
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
 export type OpeningHours = { day: number; windows: { start: string; end: string }[] }[];
 
 export async function getOpeningHours(): Promise<OpeningHours> {

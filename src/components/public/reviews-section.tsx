@@ -2,15 +2,16 @@ import { QuoteIcon, StarIcon } from "lucide-react";
 
 import { SectionHeading } from "@/components/public/section-heading";
 import { Reveal, RevealItem, RevealList } from "@/components/shared/reveal";
-import { getReviews, type Review } from "@/content/reviews";
+import { pickReviews } from "@/content/reviews";
 import type { ServiceCategory } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
+import { listPublishedReviews, type PublicReview } from "@/server/queries/public";
 
 /**
- * Client quotes from `src/content/reviews.ts`. Renders nothing when there are
- * none to show (so the live site never shows placeholder reviews).
+ * Client quotes managed at /admin/reviews. Renders nothing when there are none
+ * to show (so the live site never shows placeholder reviews).
  */
-export function ReviewsSection({
+export async function ReviewsSection({
   category,
   title = "What clients say",
   className,
@@ -20,7 +21,7 @@ export function ReviewsSection({
   title?: string;
   className?: string;
 }) {
-  const { reviews, sample } = getReviews(category);
+  const { reviews, sample } = pickReviews(await listPublishedReviews(), category);
   if (reviews.length === 0) return null;
 
   return (
@@ -33,14 +34,14 @@ export function ReviewsSection({
         {sample && (
           <p className="mx-auto mt-4 w-fit rounded-full border border-dashed border-terracotta/60 bg-blush/60 px-4 py-1.5 text-center text-sm">
             <strong>Sample reviews</strong> (only you can see these). Add real ones in{" "}
-            <code className="font-mono text-xs">src/content/reviews.ts</code>.
+            <strong>Admin → Reviews</strong>.
           </p>
         )}
       </Reveal>
       {/* Phones: swipe sideways. Wider screens: a grid. */}
       <RevealList className="-mx-4 mt-10 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3">
         {reviews.map((r, i) => (
-          <RevealItem key={`${r.name}-${i}`} className="w-[85%] shrink-0 snap-center sm:w-auto">
+          <RevealItem key={r.id} className="w-[85%] shrink-0 snap-center sm:w-auto">
             <ReviewCard review={r} tilt={i % 2 ? "rotate-1" : "-rotate-1"} />
           </RevealItem>
         ))}
@@ -49,7 +50,7 @@ export function ReviewsSection({
   );
 }
 
-function ReviewCard({ review, tilt }: { review: Review; tilt: string }) {
+function ReviewCard({ review, tilt }: { review: PublicReview; tilt: string }) {
   const initials = review.name
     .split(/[\s&]+/)
     .filter(Boolean)
@@ -75,7 +76,7 @@ function ReviewCard({ review, tilt }: { review: Review; tilt: string }) {
               key={i}
               className={cn(
                 "size-4",
-                i < review.rating! ? "fill-terracotta text-terracotta" : "text-border",
+                i < (review.rating ?? 0) ? "fill-terracotta text-terracotta" : "text-border",
               )}
               aria-hidden
             />
