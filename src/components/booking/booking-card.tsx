@@ -82,6 +82,11 @@ export function BookingCard({
             <dd className="font-bold">{balance > 0 ? formatPeso(balance) : "Paid"}</dd>
           </div>
         </dl>
+        {b.vatCents > 0 && (
+          <p className="-mt-2 text-center text-xs text-muted-foreground">
+            Total includes {formatPeso(b.vatCents)} VAT
+          </p>
+        )}
         {(b.studioPhone || b.studioEmail) && (
           <p className="text-center text-xs text-muted-foreground">
             {[b.studioPhone, b.studioEmail].filter(Boolean).join(" · ")}

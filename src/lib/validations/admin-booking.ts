@@ -117,3 +117,6 @@ export const recordPaymentSchema = z
 export type RecordPaymentInput = z.input<typeof recordPaymentSchema>;
 
 export const adminNotesSchema = z.object({ id: z.uuid(), notes: optionalText(5000) });
+
+/** Charge or waive VAT on one booking (e.g. no VAT for a friend). */
+export const bookingVatSchema = z.object({ id: z.uuid(), chargeVat: z.boolean() });

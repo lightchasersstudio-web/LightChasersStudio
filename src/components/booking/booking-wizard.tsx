@@ -20,6 +20,7 @@ import { Turnstile } from "@/components/booking/turnstile";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { formatBookingWhen } from "@/lib/booking/booking-summary";
+import { bookingTotals } from "@/lib/booking/pricing";
 import { categoryLabel } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
@@ -66,6 +67,7 @@ export function BookingWizard({
   initialServiceId,
   businessName,
   depositPercent,
+  vatPercent,
   holdMinutes,
   maxAdvanceDays,
 }: {
@@ -74,6 +76,7 @@ export function BookingWizard({
   initialServiceId: string | null;
   businessName: string;
   depositPercent: number;
+  vatPercent: number;
   holdMinutes: number;
   maxAdvanceDays: number;
 }) {
@@ -111,12 +114,15 @@ export function BookingWizard({
   const service = services.find((s) => s.id === serviceId);
   const chosenAddOns = addOns.filter((a) => addOnIds.includes(a.id));
   // Mirrors create_booking, which recomputes both on the server.
-  const total = service
-    ? service.price_cents + chosenAddOns.reduce((sum, a) => sum + a.price_cents, 0)
-    : 0;
-  const deposit = service
-    ? (service.deposit_cents ?? Math.round((total * depositPercent) / 100))
-    : 0;
+  const { subtotal, vat, total, deposit } = service
+    ? bookingTotals({
+        packageCents: service.price_cents,
+        addOnsCents: chosenAddOns.reduce((sum, a) => sum + a.price_cents, 0),
+        vatPercent,
+        fixedDepositCents: service.deposit_cents,
+        depositPercent,
+      })
+    : { subtotal: 0, vat: 0, total: 0, deposit: 0 };
   const endAt =
     service && startAt
       ? new Date(new Date(startAt).getTime() + service.duration_minutes * 60_000).toISOString()
@@ -352,6 +358,11 @@ export function BookingWizard({
                             );
                           })}
                         </div>
+                        {vatPercent > 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            Prices are before {vatPercent}% VAT, which is added at checkout.
+                          </p>
+                        )}
                         {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
                       </Field>
                     )}
@@ -512,9 +523,21 @@ export function BookingWizard({
                           <span className="font-bold">+ {formatPeso(a.price_cents)}</span>
                         </div>
                       ))}
-                      {chosenAddOns.length > 0 && (
+                      {vat > 0 && chosenAddOns.length > 0 && (
                         <div className="mt-2 flex justify-between gap-4 border-t border-accent-foreground/20 pt-2">
-                          <span>Total</span>
+                          <span>Subtotal</span>
+                          <span className="font-bold">{formatPeso(subtotal)}</span>
+                        </div>
+                      )}
+                      {vat > 0 && (
+                        <div className="mt-1 flex justify-between gap-4">
+                          <span>VAT ({vatPercent}%)</span>
+                          <span className="font-bold">+ {formatPeso(vat)}</span>
+                        </div>
+                      )}
+                      {(vat > 0 || chosenAddOns.length > 0) && (
+                        <div className="mt-2 flex justify-between gap-4 border-t border-accent-foreground/20 pt-2">
+                          <span className="font-semibold">Total</span>
                           <span className="font-bold">{formatPeso(total)}</span>
                         </div>
                       )}
@@ -526,6 +549,12 @@ export function BookingWizard({
                               {formatPeso(deposit)}
                             </span>
                           </div>
+                          {total > deposit && (
+                            <div className="mt-1 flex justify-between gap-4 text-sm">
+                              <span>Balance, paid later</span>
+                              <span>{formatPeso(total - deposit)}</span>
+                            </div>
+                          )}
                           <p className="mt-3 text-sm">
                             We hold this time for {holdMinutes} minutes while you pay securely with
                             PayMongo (GCash, card and more).
@@ -547,6 +576,8 @@ export function BookingWizard({
           addOns={chosenAddOns}
           startAt={startAt || null}
           endAt={endAt}
+          vat={vat}
+          vatPercent={vatPercent}
           total={total}
           deposit={deposit}
           step={step}

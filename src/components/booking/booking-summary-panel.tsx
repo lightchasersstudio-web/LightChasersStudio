@@ -15,6 +15,8 @@ type Props = {
   addOns: PublicAddOn[];
   startAt: string | null;
   endAt: string | null;
+  vat: number;
+  vatPercent: number;
   total: number;
   deposit: number;
   /** Current wizard step: rows for finished steps get a "Change" link. */
@@ -70,7 +72,18 @@ export function BookingSummaryPanel(props: Props) {
   );
 }
 
-function Rows({ service, addOns, startAt, endAt, total, deposit, step, onGoTo }: Props) {
+function Rows({
+  service,
+  addOns,
+  startAt,
+  endAt,
+  vat,
+  vatPercent,
+  total,
+  deposit,
+  step,
+  onGoTo,
+}: Props) {
   if (!service) return null;
   const change = (to: number, label: string) =>
     onGoTo && step > to ? (
@@ -120,6 +133,12 @@ function Rows({ service, addOns, startAt, endAt, total, deposit, step, onGoTo }:
         </li>
       </ul>
       <dl className="space-y-1 rounded-2xl bg-accent p-3 text-accent-foreground">
+        {vat > 0 && (
+          <div className="flex justify-between gap-3 text-xs">
+            <dt>VAT ({vatPercent}%)</dt>
+            <dd>+ {formatPeso(vat)}</dd>
+          </div>
+        )}
         <div className="flex justify-between gap-3">
           <dt>Total</dt>
           <dd className="font-bold">{formatPeso(total)}</dd>

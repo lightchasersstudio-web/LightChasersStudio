@@ -58,7 +58,7 @@ async function setupFixtures(c: PoolClient, capacity = 1) {
   await c.query(`update public.business_settings
     set timezone = '${TZ}', min_notice_hours = 48, max_advance_days = 180,
         slot_interval_minutes = 30, buffer_minutes = 30, default_deposit_percent = 30, hold_minutes = 20,
-        max_concurrent_bookings = ${capacity}
+        max_concurrent_bookings = ${capacity}, vat_percent = 0
     where id`);
   await c.query("delete from public.availability_rules");
   await c.query("delete from public.blackout_dates");
@@ -373,6 +373,27 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         await c.query("reset role");
         await actAs(c, "anon");
         expect((await c.query("select id from public.booking_add_ons")).rows).toHaveLength(0);
+      });
+    });
+
+    it("adds VAT on top of package + add-ons and records it on the booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        await c.query("update public.business_settings set vat_percent = 12 where id");
+        await actAs(c, "service_role");
+
+        // ₱3,500 + 12% VAT = ₱3,920; default 30% deposit of that = ₱1,176.
+        const portrait = (await book(c, s.portrait, manila(10, 10))).rows[0]!;
+        expect(portrait.deposit_cents).toBe(117600);
+        const row = await c.query(
+          "select price_cents, vat_cents from public.bookings where id = $1",
+          [portrait.booking_id],
+        );
+        expect(row.rows[0]).toEqual({ price_cents: 392000, vat_cents: 42000 });
+
+        // A fixed package deposit stays as set.
+        const wedding = (await book(c, s.wedding, manila(11, 10), "bea@example.com")).rows[0]!;
+        expect(wedding.deposit_cents).toBe(200000);
       });
     });
 

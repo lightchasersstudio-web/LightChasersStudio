@@ -217,6 +217,7 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
       slotIntervalMinutes: String(settings.slot_interval_minutes) as "15" | "30" | "60",
       bufferMinutes: String(settings.buffer_minutes),
       defaultDepositPercent: String(settings.default_deposit_percent),
+      vatPercent: String(settings.vat_percent),
       holdMinutes: String(settings.hold_minutes),
       maxConcurrentBookings: String(settings.max_concurrent_bookings),
     },
@@ -282,6 +283,13 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
               label="Default deposit (%)"
               inputMode="numeric"
               description="Services can override this with a fixed amount."
+            />
+            <TextField
+              control={control}
+              name="vatPercent"
+              label="VAT added to online bookings (%)"
+              inputMode="numeric"
+              description="Added on top of package + add-ons. Use 0 if you're not VAT-registered."
             />
             <TextField
               control={control}

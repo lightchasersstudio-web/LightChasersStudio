@@ -210,6 +210,7 @@ export type Database = {
           start_at: string
           status: Database["public"]["Enums"]["booking_status"]
           updated_at: string
+          vat_cents: number
         }
         Insert: {
           admin_notes?: string | null
@@ -235,6 +236,7 @@ export type Database = {
           start_at: string
           status?: Database["public"]["Enums"]["booking_status"]
           updated_at?: string
+          vat_cents?: number
         }
         Update: {
           admin_notes?: string | null
@@ -260,6 +262,7 @@ export type Database = {
           start_at?: string
           status?: Database["public"]["Enums"]["booking_status"]
           updated_at?: string
+          vat_cents?: number
         }
         Relationships: [
           {
@@ -302,6 +305,7 @@ export type Database = {
           tiktok_url: string | null
           timezone: string
           updated_at: string
+          vat_percent: number
         }
         Insert: {
           about?: string | null
@@ -326,6 +330,7 @@ export type Database = {
           tiktok_url?: string | null
           timezone?: string
           updated_at?: string
+          vat_percent?: number
         }
         Update: {
           about?: string | null
@@ -350,6 +355,7 @@ export type Database = {
           tiktok_url?: string | null
           timezone?: string
           updated_at?: string
+          vat_percent?: number
         }
         Relationships: []
       }

@@ -2,6 +2,7 @@
 
 import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
 import type { BookingSummary } from "@/lib/booking/booking-summary";
+import { bookingTotals } from "@/lib/booking/pricing";
 import { getPublicEnv } from "@/lib/env";
 import { createCheckoutSession, paymongoConfigured } from "@/lib/payments/paymongo";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -50,14 +51,16 @@ export async function submitBooking(
           .select("price_cents, deposit_cents")
           .eq("id", v.serviceId)
           .maybeSingle(),
-        supabase.from("business_settings").select("default_deposit_percent").single(),
+        supabase.from("business_settings").select("default_deposit_percent, vat_percent").single(),
         supabase.from("add_ons").select("price_cents").in("id", v.addOnIds),
       ]);
-      const total =
-        (service?.price_cents ?? 0) + (addOns ?? []).reduce((sum, a) => sum + a.price_cents, 0);
-      const deposit =
-        service?.deposit_cents ??
-        Math.round((total * (settings?.default_deposit_percent ?? 0)) / 100);
+      const { deposit } = bookingTotals({
+        packageCents: service?.price_cents ?? 0,
+        addOnsCents: (addOns ?? []).reduce((sum, a) => sum + a.price_cents, 0),
+        vatPercent: settings?.vat_percent ?? 0,
+        fixedDepositCents: service?.deposit_cents ?? null,
+        depositPercent: settings?.default_deposit_percent ?? 0,
+      });
       if (deposit > 0) return fail(NO_ONLINE_PAYMENT);
     }
 

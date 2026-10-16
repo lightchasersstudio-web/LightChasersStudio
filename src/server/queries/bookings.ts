@@ -116,11 +116,11 @@ export async function getBookingForAdmin(id: string) {
     supabase
       .from("bookings")
       .select(
-        "id, reference_code, status, source, start_at, end_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name), add_ons:booking_add_ons(name, price_cents), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
+        "id, reference_code, status, source, start_at, end_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name), add_ons:booking_add_ons(name, price_cents), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
       )
       .eq("id", id)
       .maybeSingle(),
-    supabase.from("business_settings").select("business_name, phone, email").single(),
+    supabase.from("business_settings").select("business_name, phone, email, vat_percent").single(),
   ]);
   if (error) throw error;
   if (settings.error) throw settings.error;
@@ -134,6 +134,7 @@ export async function getBookingForAdmin(id: string) {
     ...data,
     email: data.client?.email ?? null,
     serviceName: data.service?.name ?? "Session",
+    vatPercent: settings.data.vat_percent,
     payments,
     paidCents,
     summary: {
@@ -144,6 +145,7 @@ export async function getBookingForAdmin(id: string) {
       endAt: data.end_at,
       location: data.location,
       priceCents: data.price_cents,
+      vatCents: data.vat_cents,
       paidCents,
       contactName: data.contact_name,
       studioName: settings.data.business_name,

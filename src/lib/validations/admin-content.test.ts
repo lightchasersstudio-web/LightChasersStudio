@@ -151,6 +151,7 @@ describe("bookingRulesSchema", () => {
     slotIntervalMinutes: "30",
     bufferMinutes: "30",
     defaultDepositPercent: "30",
+    vatPercent: "12",
     holdMinutes: "20",
     maxConcurrentBookings: "3",
   } as const;
