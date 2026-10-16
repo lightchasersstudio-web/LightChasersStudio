@@ -3,6 +3,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { getServerEnv } from "@/lib/env.server";
+import { paymentsMockEnabled } from "@/lib/payments/mock";
 
 // PayMongo Checkout Sessions (https://docs.paymongo.com), called with fetch.
 // A booking is only ever marked paid by the signature-verified webhook.
@@ -13,7 +14,7 @@ const PAYMENT_METHODS = ["gcash", "card", "paymaya", "grab_pay", "qrph"];
 const SIGNATURE_MAX_AGE_SECONDS = 300;
 
 export function paymongoConfigured(): boolean {
-  return Boolean(getServerEnv().PAYMONGO_SECRET_KEY);
+  return paymentsMockEnabled() || Boolean(getServerEnv().PAYMONGO_SECRET_KEY);
 }
 
 export async function createCheckoutSession(input: {
@@ -26,6 +27,12 @@ export async function createCheckoutSession(input: {
   email?: string;
   phone?: string;
 }): Promise<{ id: string; checkoutUrl: string }> {
+  if (paymentsMockEnabled()) {
+    // Trial mode: our own pretend checkout page instead of PayMongo's.
+    const id = `mock_cs_${crypto.randomUUID().replaceAll("-", "")}`;
+    const q = new URLSearchParams({ ref: input.referenceCode, cs: id });
+    return { id, checkoutUrl: `/book/mock-checkout?${q}` };
+  }
   const key = getServerEnv().PAYMONGO_SECRET_KEY;
   if (!key) throw new Error("PAYMONGO_SECRET_KEY is not set");
 

@@ -1,9 +1,7 @@
 import { getServerEnv } from "@/lib/env.server";
 import { parsePaidEvent, verifyWebhookSignature } from "@/lib/payments/paymongo";
-import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.types";
-import { notifyBookingReceived } from "@/server/booking-notifications";
-import { loadBookingRecord } from "@/server/queries/booking-record";
+import { settlePaidEvent } from "@/server/settle-payment";
 
 /**
  * PayMongo webhook (register it for `checkout_session.payment.paid`). The only
@@ -31,40 +29,8 @@ export async function POST(req: Request) {
   const event = parsePaidEvent(body);
   if (!event) return new Response("Ignored", { status: 200 });
 
-  const supabase = createAdminClient();
-  const { error: seen } = await supabase.from("payment_webhook_events").insert({
-    event_id: event.eventId,
-    event_type: "checkout_session.payment.paid",
-    payload: body as Json,
-  });
-  if (seen?.code === "23505") return new Response("Already processed", { status: 200 });
-  if (seen) {
-    console.error("[paymongo webhook] record event", seen);
-    return new Response("Error", { status: 500 });
-  }
-
-  const { data, error } = await supabase
-    .rpc("mark_booking_paid", {
-      p_reference: event.reference,
-      p_checkout_id: event.checkoutId,
-      p_payment_id: event.paymentId,
-      p_amount_cents: event.amountCents,
-      p_raw: body as Json,
-    })
-    .single();
-  if (error || !data) {
-    console.error("[paymongo webhook] settle", error);
-    // Forget the event so PayMongo's retry is processed instead of skipped.
-    await supabase.from("payment_webhook_events").delete().eq("event_id", event.eventId);
-    return new Response("Error", { status: 500 });
-  }
-
-  if (data.booking_id && ["paid", "paid_late", "needs_review"].includes(data.outcome)) {
-    const record = await loadBookingRecord({ id: data.booking_id });
-    if (record) await notifyBookingReceived(record);
-  }
-  if (data.outcome === "unknown_booking") {
-    console.error("[paymongo webhook] payment for unknown booking", event.reference);
-  }
+  const result = await settlePaidEvent(event, body as Json);
+  if (result === "duplicate") return new Response("Already processed", { status: 200 });
+  if (result === "error") return new Response("Error", { status: 500 });
   return new Response("OK", { status: 200 });
 }

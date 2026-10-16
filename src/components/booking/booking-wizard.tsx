@@ -569,12 +569,14 @@ export function BookingWizard({
           <span />
         )}
         {last ? (
-          <Button type="submit" size="lg" disabled={submitting}>
+          // Distinct keys: React must not turn the clicked "Continue" button into this
+          // submit button mid-click, or the form submits and skips the Review step.
+          <Button key="submit" type="submit" size="lg" disabled={submitting}>
             {submitting && <Loader2Icon className="animate-spin" aria-hidden />}
             {deposit > 0 ? `Pay ${formatPeso(deposit)} deposit` : "Request booking"}
           </Button>
         ) : (
-          <Button type="button" size="lg" onClick={next}>
+          <Button key="continue" type="button" size="lg" onClick={next}>
             Continue
             <ArrowRightIcon aria-hidden />
           </Button>
