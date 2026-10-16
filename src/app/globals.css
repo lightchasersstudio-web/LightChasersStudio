@@ -279,6 +279,16 @@
   }
 }
 
+/* Photo stories: the current photo's progress bar fills over its display time. */
+@keyframes story-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 /* FAQ answers slide open where the browser supports animating <details>;
    elsewhere they simply open. */
 @supports selector(::details-content) {

@@ -21,6 +21,7 @@ export function replyTemplates(b: BookingSummary, lookupUrl: string): ReplyTempl
     balance > 0 ? `Remaining balance: ${formatPeso(balance)}.` : "You're fully paid. Thank you!";
   const where = b.location ? ` at ${b.location}` : "";
   const sign = `– ${b.studioName}`;
+  const prepareUrl = `${new URL(lookupUrl).origin}/prepare`;
 
   const templates: ReplyTemplate[] = [
     {
@@ -40,6 +41,7 @@ export function replyTemplates(b: BookingSummary, lookupUrl: string): ReplyTempl
       text: [
         `Hi ${first}! Just a friendly reminder of your ${b.serviceName} on ${day} at ${time}${where}.`,
         balance > 0 ? `Remaining balance: ${formatPeso(balance)}.` : null,
+        `A few tips to get ready: ${prepareUrl}`,
         `Message us here if anything changes. We're excited to see you! ${sign}`,
       ]
         .filter(Boolean)

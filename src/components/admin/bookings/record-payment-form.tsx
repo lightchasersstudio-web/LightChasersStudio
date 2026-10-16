@@ -7,6 +7,7 @@ import type { z } from "zod";
 
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
+import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import {
   adminNotesSchema,
@@ -68,10 +69,12 @@ export function AdminNotesForm({ id, notes }: { id: string; notes: string | null
     resolver: zodResolver(adminNotesSchema),
     defaultValues: { id, notes: notes ?? "" },
   });
+  useUnsavedChangesWarning(form.formState.isDirty);
   return (
     <form
       onSubmit={form.handleSubmit(async () => {
-        handleResult(await saveAdminNotes(form.getValues()), "Notes saved.", form);
+        const values = form.getValues();
+        if (handleResult(await saveAdminNotes(values), "Notes saved.", form)) form.reset(values);
       })}
       noValidate
       className="space-y-3"

@@ -12,6 +12,7 @@ import type { z } from "zod";
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { SlotPicker } from "@/components/booking/slot-picker";
+import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,7 @@ export function AdminBookingForm({
       allowOutsideHours: false,
     },
   });
+  useUnsavedChangesWarning(form.formState.isDirty);
   const [serviceId, date, time, deposit] = useWatch({
     control: form.control,
     name: ["serviceId", "date", "time", "deposit"],

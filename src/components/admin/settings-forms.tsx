@@ -9,6 +9,7 @@ import type { z } from "zod";
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { ImageUploadField } from "@/components/admin/image-upload-field";
+import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -62,6 +63,7 @@ export function StudioProfileForm({ settings }: { settings: BusinessSettings }) 
     },
   });
   const { control } = form;
+  useUnsavedChangesWarning(form.formState.isDirty);
 
   async function onSubmit() {
     const values = form.getValues();
@@ -223,6 +225,7 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
     },
   });
   const { control } = form;
+  useUnsavedChangesWarning(form.formState.isDirty);
 
   async function onSubmit() {
     const values = form.getValues();

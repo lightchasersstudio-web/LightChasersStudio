@@ -14,6 +14,7 @@ import type { z } from "zod";
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { rememberBooking } from "@/components/booking/add-to-calendar";
+import { clearDraft, loadDraft, saveDraft } from "@/components/booking/booking-draft";
 import { BookingSummaryPanel } from "@/components/booking/booking-summary-panel";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { Turnstile } from "@/components/booking/turnstile";
@@ -88,25 +89,61 @@ export function BookingWizard({
   const router = useRouter();
   const heading = useRef<HTMLHeadingElement>(null);
 
+  const emptyValues = (): Values => ({
+    fullName: "",
+    email: "",
+    phone: "",
+    preferredContact: "email",
+    messenger: "",
+    consent: false as unknown as true,
+    serviceId: initialServiceId ?? "",
+    addOnIds: [],
+    startAt: "",
+    location: "",
+    participants: "1",
+    specialRequests: "",
+    turnstileToken: "",
+    website: "",
+  });
   const form = useForm<Values, unknown, Output>({
     resolver: zodResolver(publicBookingSchema),
-    defaultValues: {
-      fullName: "",
-      email: "",
-      phone: "",
-      preferredContact: "email",
-      messenger: "",
-      consent: false as unknown as true,
-      serviceId: initialServiceId ?? "",
-      addOnIds: [],
-      startAt: "",
-      location: "",
-      participants: "1",
-      specialRequests: "",
-      turnstileToken: "",
-      website: "",
-    },
+    defaultValues: emptyValues(),
   });
+
+  // Bring back what they typed last time (this browser only), then keep it saved as they go.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    const draft = loadDraft();
+    if (!draft) return;
+    form.reset({
+      ...form.getValues(),
+      ...draft,
+      // A package picked with "Book now" wins over the one saved last time.
+      serviceId:
+        initialServiceId ??
+        (services.some((s) => s.id === draft.serviceId) ? (draft.serviceId ?? "") : ""),
+      addOnIds: (draft.addOnIds ?? []).filter((id) => addOns.some((a) => a.id === id)),
+    });
+    // Browser storage can only be read after hydration, so this can't be initial state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRestored(true);
+    // Once, on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const allValues = useWatch({ control: form.control });
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveDraft(allValues as Partial<Values>);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [allValues]);
+
+  function startOver() {
+    clearDraft();
+    form.reset(emptyValues());
+    setRestored(false);
+    goTo(0);
+  }
   const [serviceId, startAt, preferredContact, addOnIds, location] = useWatch({
     control: form.control,
     name: ["serviceId", "startAt", "preferredContact", "addOnIds", "location"],
@@ -166,6 +203,7 @@ export function BookingWizard({
       // Send the raw form strings: the server re-validates with the same schema.
       const result = await submitBooking(form.getValues());
       if (result.ok) {
+        clearDraft();
         if (service && endAt) {
           rememberBooking({
             reference: result.data.reference,
@@ -211,6 +249,20 @@ export function BookingWizard({
               {STEPS[step]!.title}
             </h2>
           </div>
+
+          {restored && step === 0 && (
+            <div
+              role="status"
+              className="flex animate-in flex-wrap items-center justify-between gap-3 rounded-2xl border border-sage bg-secondary px-4 py-3 text-sm text-secondary-foreground duration-300 fade-in"
+            >
+              <span>
+                <strong>Welcome back!</strong> We kept the details you entered last time.
+              </span>
+              <Button type="button" variant="link" className="h-auto px-0" onClick={startOver}>
+                Start over
+              </Button>
+            </div>
+          )}
 
           {/* Honeypot: hidden from people and screen readers; bots fill it in. */}
           <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
