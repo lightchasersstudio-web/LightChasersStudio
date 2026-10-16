@@ -6,6 +6,8 @@ export const BOOKING_ERRORS: Record<string, string> = {
   blackout_date: "We're closed that day. Please pick another date.",
   outside_business_hours: "That time is outside our opening hours.",
   service_unavailable: "That package isn't available to book right now.",
+  add_on_unavailable:
+    "One of the add-ons you picked is no longer offered. Please check them again.",
   invalid_start_time: "Please pick one of the listed times.",
   email_required: "Enter a valid email address.",
   invalid_price: "Enter a valid price.",

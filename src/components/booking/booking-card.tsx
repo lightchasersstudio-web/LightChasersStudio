@@ -1,4 +1,4 @@
-import { CalendarIcon, CameraIcon, MapPinIcon } from "lucide-react";
+import { CalendarIcon, CameraIcon, CirclePlusIcon, MapPinIcon } from "lucide-react";
 import Image from "next/image";
 
 import { StatusBadge } from "@/components/booking/status-badge";
@@ -48,6 +48,15 @@ export function BookingCard({
             <CameraIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
             <span>{b.serviceName}</span>
           </li>
+          {b.addOns.length > 0 && (
+            <li className="flex gap-2.5">
+              <CirclePlusIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
+              <span>
+                <span className="sr-only">Add-ons: </span>
+                {b.addOns.map((a) => a.name).join(", ")}
+              </span>
+            </li>
+          )}
           <li className="flex gap-2.5">
             <CalendarIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
             <span>{formatBookingWhen(b.startAt, b.endAt)}</span>

@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      add_ons: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          price_cents: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          price_cents: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          price_cents?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       admin_profiles: {
         Row: {
           created_at: string
@@ -109,6 +142,48 @@ export type Database = {
           reason?: string | null
         }
         Relationships: []
+      }
+      booking_add_ons: {
+        Row: {
+          add_on_id: string | null
+          booking_id: string
+          created_at: string
+          id: string
+          name: string
+          price_cents: number
+        }
+        Insert: {
+          add_on_id?: string | null
+          booking_id: string
+          created_at?: string
+          id?: string
+          name: string
+          price_cents: number
+        }
+        Update: {
+          add_on_id?: string | null
+          booking_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          price_cents?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_add_ons_add_on_id_fkey"
+            columns: ["add_on_id"]
+            isOneToOne: false
+            referencedRelation: "add_ons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_add_ons_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bookings: {
         Row: {
@@ -596,6 +671,7 @@ export type Database = {
       }
       create_booking: {
         Args: {
+          p_add_on_ids?: string[]
           p_consent_version: string
           p_email: string
           p_full_name: string

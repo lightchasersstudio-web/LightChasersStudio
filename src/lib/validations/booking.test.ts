@@ -58,6 +58,7 @@ describe("publicBookingSchema", () => {
     ...details,
     ...shoot,
     serviceId: "0f8fad5b-d9cb-469f-a165-70867728950e",
+    addOnIds: [],
     startAt: "2026-11-03T05:00:00.000Z",
     turnstileToken: "",
     website: "",

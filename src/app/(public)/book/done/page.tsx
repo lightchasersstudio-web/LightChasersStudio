@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { AddToCalendarFromSession } from "@/components/booking/add-to-calendar";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Thank you", robots: { index: false } };
@@ -40,6 +41,7 @@ async function Reference({ searchParams }: Pick<PageProps<"/book/done">, "search
     <div className="mt-8 rounded-3xl border bg-background p-6">
       <p className="text-sm text-muted-foreground">Your booking reference</p>
       <p className="font-heading text-3xl font-semibold tracking-wide">{reference}</p>
+      <AddToCalendarFromSession reference={reference} />
       <Button asChild variant="link" className="mt-2">
         <Link href={`/booking?ref=${reference}`}>View your booking</Link>
       </Button>

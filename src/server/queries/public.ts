@@ -124,6 +124,23 @@ export async function listPublishedReviews(): Promise<PublicReview[]> {
   return data;
 }
 
+export type PublicAddOn = Pick<Tables<"add_ons">, "id" | "name" | "description" | "price_cents">;
+
+/** Extras clients can add when booking, in the order the admin set. */
+export async function listActiveAddOns(): Promise<PublicAddOn[]> {
+  "use cache";
+  cacheTag(TAGS.addOns);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("add_ons")
+    .select("id, name, description, price_cents")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
 export type OpeningHours = { day: number; windows: { start: string; end: string }[] }[];
 
 export async function getOpeningHours(): Promise<OpeningHours> {

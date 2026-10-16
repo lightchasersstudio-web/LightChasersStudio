@@ -7,6 +7,7 @@ import { bookingConfirmedEmail, newBookingAlertEmail } from "./booking-emails";
 const booking: BookingSummary = {
   reference: "BK-2026-ABC123",
   serviceName: "Family Portrait Session",
+  addOns: [],
   startAt: "2026-11-03T05:00:00.000Z",
   endAt: "2026-11-03T06:00:00.000Z",
   location: "<script>alert(1)</script>",
