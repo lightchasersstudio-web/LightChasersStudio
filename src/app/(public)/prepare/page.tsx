@@ -70,12 +70,12 @@ export default async function PreparePage() {
               key={section.id}
               id={section.id}
               aria-labelledby={`${section.id}-heading`}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
               <Reveal>
                 <h2
                   id={`${section.id}-heading`}
-                  className="flex items-center gap-3 text-2xl font-semibold sm:text-3xl"
+                  className="topic-heading flex items-center gap-3 text-2xl font-semibold sm:text-3xl"
                 >
                   <span className="grid size-11 place-items-center rounded-2xl bg-accent text-accent-foreground">
                     <Icon className="size-5" aria-hidden />
@@ -98,11 +98,11 @@ export default async function PreparePage() {
           );
         })}
 
-        <section id="by-shoot" aria-labelledby="by-shoot-heading" className="scroll-mt-24">
+        <section id="by-shoot" aria-labelledby="by-shoot-heading" className="scroll-mt-32">
           <Reveal>
             <h2
               id="by-shoot-heading"
-              className="flex items-center gap-3 text-2xl font-semibold sm:text-3xl"
+              className="topic-heading flex items-center gap-3 text-2xl font-semibold sm:text-3xl"
             >
               <span className="grid size-11 place-items-center rounded-2xl bg-accent text-accent-foreground">
                 <HeartHandshakeIcon className="size-5" aria-hidden />

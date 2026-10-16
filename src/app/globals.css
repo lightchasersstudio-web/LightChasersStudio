@@ -279,6 +279,39 @@
   }
 }
 
+/* In-page topic links (FAQ, preparation guide): glide down, then a short
+   terracotta line draws in under the heading you landed on. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+.topic-heading {
+  position: relative;
+}
+:target .topic-heading::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -0.45rem;
+  width: 3rem;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--terracotta);
+  transform-origin: left;
+  animation: topic-underline 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both;
+}
+@keyframes topic-underline {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
 /* Photo stories: the current photo's progress bar fills over its display time. */
 @keyframes story-progress {
   from {

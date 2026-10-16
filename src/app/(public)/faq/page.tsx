@@ -75,9 +75,12 @@ export default async function FaqPage() {
             <section
               id={slug(g.title)}
               aria-labelledby={`${slug(g.title)}-heading`}
-              className="scroll-mt-24"
+              className="scroll-mt-32"
             >
-              <h2 id={`${slug(g.title)}-heading`} className="text-2xl font-semibold sm:text-3xl">
+              <h2
+                id={`${slug(g.title)}-heading`}
+                className="topic-heading text-2xl font-semibold sm:text-3xl"
+              >
                 {g.title}
               </h2>
               <div className="mt-5 space-y-3">
