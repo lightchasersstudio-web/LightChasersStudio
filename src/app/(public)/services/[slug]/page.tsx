@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { BookCta } from "@/components/public/book-cta";
+import { ReviewsSection } from "@/components/public/reviews-section";
 import { PlaceholderPolaroid } from "@/components/public/photo-polaroid";
 import { bookHref } from "@/components/public/site-nav";
 import { Sparkle } from "@/components/shared/sparkle";
@@ -178,6 +179,11 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
           </div>
         )}
       </article>
+      <ReviewsSection
+        category={service.category}
+        title="Clients who booked this"
+        className="pt-0"
+      />
       <BookCta href={bookHref(service.slug)} />
     </>
   );

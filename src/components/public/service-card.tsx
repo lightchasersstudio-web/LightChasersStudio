@@ -13,7 +13,7 @@ import type { PublicService } from "@/server/queries/public";
 /** Whole card links to the package; "Book now" sits above that link and opens the wizard with it chosen. */
 export function ServiceCard({ service }: { service: PublicService }) {
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-3xl border bg-card transition-shadow duration-300 focus-within:ring-3 focus-within:ring-ring/50 hover:shadow-xl">
+    <article className="group relative flex w-full flex-col overflow-hidden rounded-3xl border bg-card transition-all duration-300 focus-within:ring-3 focus-within:ring-ring/50 hover:-translate-y-1 hover:border-terracotta/40 hover:shadow-xl motion-reduce:hover:translate-y-0">
       <div className="relative aspect-[4/3] overflow-hidden bg-accent">
         {service.cover_image_path ? (
           <Image

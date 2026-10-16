@@ -2,6 +2,7 @@ import { CameraIcon } from "lucide-react";
 import Link from "next/link";
 
 import { BOOK_HREF } from "@/components/public/site-nav";
+import { Reveal } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 
@@ -18,11 +19,11 @@ export function BookCta({
   return (
     <section aria-labelledby="book-cta" className="mx-auto max-w-6xl px-4 sm:px-6">
       <div className="relative overflow-hidden rounded-[2rem] bg-panel px-6 py-14 text-center text-panel-foreground sm:px-12">
-        <div className="pointer-events-none absolute -top-16 -left-16 size-64 rounded-full bg-terracotta/30 blur-3xl" />
-        <div className="pointer-events-none absolute -right-16 -bottom-20 size-72 rounded-full bg-sage/30 blur-3xl" />
-        <Sparkle className="absolute top-8 right-10 size-6 text-terracotta" />
-        <Sparkle className="absolute bottom-10 left-10 size-4 text-sage" />
-        <div className="relative mx-auto max-w-xl">
+        <div className="pointer-events-none absolute -top-16 -left-16 size-64 animate-float rounded-full bg-terracotta/30 blur-3xl" />
+        <div className="pointer-events-none absolute -right-16 -bottom-20 size-72 animate-float rounded-full bg-sage/30 blur-3xl [animation-delay:-4s]" />
+        <Sparkle className="absolute top-8 right-10 size-6 animate-twinkle text-terracotta" />
+        <Sparkle className="absolute bottom-10 left-10 size-4 animate-twinkle text-sage [animation-delay:1.6s]" />
+        <Reveal className="relative mx-auto max-w-xl">
           <CameraIcon className="mx-auto size-10" strokeWidth={1.5} aria-hidden />
           <h2 id="book-cta" className="mt-4 text-3xl font-semibold sm:text-4xl">
             {title}
@@ -35,7 +36,7 @@ export function BookCta({
           >
             <Link href={href}>Book now</Link>
           </Button>
-        </div>
+        </Reveal>
       </div>
     </section>
   );

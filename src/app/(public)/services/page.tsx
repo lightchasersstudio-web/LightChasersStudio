@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
-import { Sparkle } from "@/components/shared/sparkle";
 import { BookCta } from "@/components/public/book-cta";
 import { SectionHeading } from "@/components/public/section-heading";
 import { ServiceCard } from "@/components/public/service-card";
 import { SERVICE_CATEGORIES } from "@/lib/catalog";
+import { Reveal, RevealItem, RevealList } from "@/components/shared/reveal";
+import { Sparkle } from "@/components/shared/sparkle";
 import { listActiveServices } from "@/server/queries/public";
 
 export const metadata: Metadata = {
@@ -36,7 +37,7 @@ export default async function ServicesPage() {
                 <a
                   key={g.value}
                   href={`#${g.value}`}
-                  className="inline-flex min-h-11 items-center rounded-full border bg-card px-4 text-sm font-semibold transition-colors hover:border-terracotta hover:bg-accent"
+                  className="inline-flex min-h-11 items-center rounded-full border bg-card px-4 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:border-terracotta hover:bg-accent"
                 >
                   {g.label}
                 </a>
@@ -60,23 +61,27 @@ export default async function ServicesPage() {
             aria-labelledby={`${g.value}-heading`}
             className="scroll-mt-24"
           >
-            <h2 id={`${g.value}-heading`} className="text-3xl font-semibold">
-              {g.label}
-            </h2>
+            <Reveal>
+              <h2 id={`${g.value}-heading`} className="text-3xl font-semibold">
+                {g.label}
+              </h2>
+            </Reveal>
             {g.services.length > 0 ? (
-              <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <RevealList className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {g.services.map((s) => (
-                  <ServiceCard key={s.id} service={s} />
+                  <RevealItem key={s.id} className="flex">
+                    <ServiceCard service={s} />
+                  </RevealItem>
                 ))}
-              </div>
+              </RevealList>
             ) : (
-              <div className="mt-6 flex flex-col items-start gap-3 rounded-3xl border border-dashed bg-accent/40 p-8 sm:flex-row sm:items-center">
-                <Sparkle className="size-6 shrink-0 text-terracotta" />
+              <Reveal className="mt-6 flex flex-col items-start gap-3 rounded-3xl border border-dashed bg-accent/40 p-8 sm:flex-row sm:items-center">
+                <Sparkle className="size-6 shrink-0 animate-twinkle text-terracotta" />
                 <div>
                   <p className="font-script text-2xl text-terracotta-ink">Coming soon</p>
                   <p className="text-muted-foreground">{g.label} packages will appear here soon.</p>
                 </div>
-              </div>
+              </Reveal>
             )}
           </section>
         ))}

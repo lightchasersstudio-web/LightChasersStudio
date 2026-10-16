@@ -2,6 +2,7 @@ import {
   CalendarClockIcon,
   CalendarDaysIcon,
   CameraIcon,
+  ChartColumnIcon,
   ImagesIcon,
   LayoutDashboardIcon,
   SettingsIcon,
@@ -15,6 +16,7 @@ export type AdminNavItem = { href: string; label: string; icon: LucideIcon };
 export const adminNav: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarDaysIcon },
+  { href: "/admin/reports", label: "Sales report", icon: ChartColumnIcon },
   { href: "/admin/services", label: "Services", icon: CameraIcon },
   { href: "/admin/availability", label: "Availability", icon: CalendarClockIcon },
   { href: "/admin/portfolio", label: "Portfolio", icon: ImagesIcon },

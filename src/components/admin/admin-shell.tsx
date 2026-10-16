@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOutIcon, MenuIcon } from "lucide-react";
+import { MotionConfig, motion } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -22,7 +23,7 @@ export function AdminShell({ admin, children }: { admin: ShellAdmin; children: R
   return (
     <div className="flex flex-1">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar md:flex">
-        <SidebarContent admin={admin} />
+        <SidebarContent admin={admin} pillId="admin-nav-pill" />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -42,7 +43,11 @@ export function AdminShell({ admin, children }: { admin: ShellAdmin; children: R
               <SheetHeader className="sr-only">
                 <SheetTitle>Admin navigation</SheetTitle>
               </SheetHeader>
-              <SidebarContent admin={admin} onNavigate={() => setMobileOpen(false)} />
+              <SidebarContent
+                admin={admin}
+                pillId="admin-nav-pill-sheet"
+                onNavigate={() => setMobileOpen(false)}
+              />
             </SheetContent>
           </Sheet>
           <span className="md:hidden">
@@ -60,7 +65,16 @@ export function AdminShell({ admin, children }: { admin: ShellAdmin; children: R
   );
 }
 
-function SidebarContent({ admin, onNavigate }: { admin: ShellAdmin; onNavigate?: () => void }) {
+function SidebarContent({
+  admin,
+  pillId,
+  onNavigate,
+}: {
+  admin: ShellAdmin;
+  /** Unique per rendered sidebar, so the desktop and phone menus each slide their own pill. */
+  pillId: string;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
 
   return (
@@ -74,27 +88,40 @@ function SidebarContent({ admin, onNavigate }: { admin: ShellAdmin; onNavigate?:
           <BrandMark />
         </Link>
       </div>
-      <nav aria-label="Admin" className="flex-1 space-y-1 px-3">
-        {adminNav.map(({ href, label, icon: Icon }) => {
-          const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onNavigate}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                active &&
-                  "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
-              )}
-            >
-              <Icon className="size-4" aria-hidden />
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
+      <MotionConfig reducedMotion="user">
+        <nav aria-label="Admin" className="flex-1 space-y-1 px-3">
+          {adminNav.map(({ href, label, icon: Icon }) => {
+            const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "group relative flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  active &&
+                    "text-sidebar-primary-foreground hover:bg-transparent hover:text-sidebar-primary-foreground",
+                )}
+              >
+                {active && (
+                  <motion.span
+                    layoutId={pillId}
+                    className="absolute inset-0 rounded-full bg-sidebar-primary shadow-sm"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                    aria-hidden
+                  />
+                )}
+                <Icon
+                  className="relative size-4 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"
+                  aria-hidden
+                />
+                <span className="relative">{label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </MotionConfig>
       <div className="m-3 rounded-2xl border bg-card p-3">
         <p className="truncate px-1 text-sm font-semibold">{admin.fullName ?? "Admin"}</p>
         {admin.email && (
