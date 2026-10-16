@@ -304,6 +304,19 @@
   mix-blend-mode: normal;
 }
 
+/* Printing (admin booking sheet): plain white paper, no reserved scrollbar. */
+@page {
+  margin: 14mm;
+}
+@media print {
+  html {
+    overflow-y: visible;
+  }
+  body {
+    background: white;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

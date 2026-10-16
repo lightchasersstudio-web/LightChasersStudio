@@ -6,4 +6,5 @@ export const TAGS = {
   availability: "availability",
   bookings: "bookings",
   reviews: "reviews",
+  addOns: "add-ons",
 } as const;

@@ -22,12 +22,12 @@ export function AdminShell({ admin, children }: { admin: ShellAdmin; children: R
 
   return (
     <div className="flex flex-1">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar md:flex">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar md:flex print:hidden">
         <SidebarContent admin={admin} pillId="admin-nav-pill" />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b bg-background/80 px-4 py-2 backdrop-blur">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b bg-background/80 px-4 py-2 backdrop-blur print:hidden">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button
@@ -57,7 +57,7 @@ export function AdminShell({ admin, children }: { admin: ShellAdmin; children: R
             <ThemeToggle />
           </div>
         </header>
-        <main id="main" className="flex-1 p-4 md:p-10">
+        <main id="main" className="flex-1 p-4 md:p-10 print:p-0">
           {children}
         </main>
       </div>

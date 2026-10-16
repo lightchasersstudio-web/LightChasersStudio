@@ -1,5 +1,6 @@
 import {
   bookingSummaryText,
+  formatAddOns,
   formatBookingWhen,
   type BookingSummary,
 } from "@/lib/booking/booking-summary";
@@ -32,6 +33,7 @@ function layout(
   const rows: [string, string][] = [
     ["Reference", b.reference],
     ["Package", b.serviceName],
+    ...(b.addOns.length > 0 ? [["Add-ons", formatAddOns(b.addOns)!] as [string, string]] : []),
     ["When", formatBookingWhen(b.startAt, b.endAt)],
     ...(b.location ? [["Location", b.location] as [string, string]] : []),
     ["Total", formatPeso(b.priceCents)],

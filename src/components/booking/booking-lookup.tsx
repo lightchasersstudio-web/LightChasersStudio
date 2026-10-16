@@ -8,6 +8,7 @@ import type { z } from "zod";
 
 import { TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
+import { AddToCalendar } from "@/components/booking/add-to-calendar";
 import { BookingCard } from "@/components/booking/booking-card";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
@@ -50,6 +51,17 @@ export function BookingLookup({
           <p className="text-center text-sm text-muted-foreground">
             Your time is held until {manilaTime(booking.holdExpiresAt)} while the deposit is paid.
           </p>
+        )}
+        {(booking.status === "pending" || booking.status === "confirmed") && (
+          <AddToCalendar
+            event={{
+              reference: booking.summary.reference,
+              title: `${booking.summary.serviceName} · ${booking.summary.studioName}`,
+              startAt: booking.summary.startAt,
+              endAt: booking.summary.endAt,
+              location: booking.summary.location,
+            }}
+          />
         )}
         <p className="text-center text-sm text-muted-foreground">
           Tip: screenshot this card to keep it handy.

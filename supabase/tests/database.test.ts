@@ -301,6 +301,81 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("adds add-on prices to the total and deposit, and keeps a copy on the booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        const { rows: addOns } = await c.query<{ id: string; name: string }>(`
+          insert into public.add_ons (name, price_cents, is_active, sort_order) values
+            ('Test Extra Photographer', 200000, true, 0),
+            ('Test Videographer', 500000, true, 1),
+            ('Test Hidden Extra', 100000, false, 2)
+          returning id, name`);
+        const id = (name: string) => addOns.find((a) => a.name === name)!.id;
+        const both = [id("Test Extra Photographer"), id("Test Videographer")];
+
+        await actAs(c, "anon");
+        const visible = await c.query("select name from public.add_ons where name like 'Test %'");
+        expect(visible.rows.map((r) => r.name).sort()).toEqual([
+          "Test Extra Photographer",
+          "Test Videographer",
+        ]);
+
+        await c.query("reset role");
+        await actAs(c, "service_role");
+        const withExtras = `select * from public.create_booking(
+          p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+          p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+          p_start_at => $3, p_add_on_ids => $4)`;
+
+        // Default 30% deposit applies to package + add-ons: (350,000 + 700,000) × 30%.
+        const portrait = (
+          await c.query(withExtras, [
+            "ana@example.com",
+            s.portrait,
+            manila(10, 10).toISOString(),
+            [...both, both[0]], // a repeated id counts once
+          ])
+        ).rows[0]!;
+        expect(portrait.deposit_cents).toBe(315000);
+        const booking = await c.query("select price_cents from public.bookings where id = $1", [
+          portrait.booking_id,
+        ]);
+        expect(booking.rows[0].price_cents).toBe(1050000);
+        const copies = await c.query(
+          "select name, price_cents from public.booking_add_ons where booking_id = $1 order by name",
+          [portrait.booking_id],
+        );
+        expect(copies.rows).toEqual([
+          { name: "Test Extra Photographer", price_cents: 200000 },
+          { name: "Test Videographer", price_cents: 500000 },
+        ]);
+
+        // A package's fixed deposit stays fixed.
+        const wedding = (
+          await c.query(withExtras, [
+            "bea@example.com",
+            s.wedding,
+            manila(11, 10).toISOString(),
+            both,
+          ])
+        ).rows[0]!;
+        expect(wedding.deposit_cents).toBe(200000);
+
+        expect(
+          await expectFailure(c, withExtras, [
+            "cy@example.com",
+            s.portrait,
+            manila(12, 10).toISOString(),
+            [id("Test Hidden Extra")],
+          ]),
+        ).toMatch(/add_on_unavailable/);
+
+        await c.query("reset role");
+        await actAs(c, "anon");
+        expect((await c.query("select id from public.booking_add_ons")).rows).toHaveLength(0);
+      });
+    });
+
     it("prevents overlapping bookings, including the buffer", async () => {
       await inRollback(async (c) => {
         const s = await setupFixtures(c);
