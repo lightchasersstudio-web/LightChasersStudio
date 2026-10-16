@@ -11,7 +11,7 @@ export async function SiteFooter() {
   const socials = socialLinks(s);
 
   return (
-    <footer className="mt-24 bg-panel text-panel-foreground">
+    <footer id="site-footer" className="mt-24 bg-panel text-panel-foreground">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
         <div className="space-y-4">
           <BrandLogo logoPath={s.logo_path} name={s.business_name} size={72} />

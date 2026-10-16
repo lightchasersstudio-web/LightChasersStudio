@@ -1,4 +1,4 @@
-import { ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, CalendarCheckIcon, CameraIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 
 import { BookCta } from "@/components/public/book-cta";
@@ -6,14 +6,34 @@ import { BrandLogo } from "@/components/public/brand-logo";
 import { CATEGORY_ICONS } from "@/components/public/category-icons";
 import { HeroDeck } from "@/components/public/hero-deck";
 import { PhotoPolaroid } from "@/components/public/photo-polaroid";
+import { ReviewsSection } from "@/components/public/reviews-section";
 import { SectionHeading } from "@/components/public/section-heading";
 import { ServiceCard } from "@/components/public/service-card";
 import { BOOK_HREF } from "@/components/public/site-nav";
+import { Reveal, RevealItem, RevealList } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { SERVICE_CATEGORIES } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { getPublicSettings, listActiveServices, listFeaturedPhotos } from "@/server/queries/public";
+
+const HOW_IT_WORKS = [
+  {
+    title: "Pick a package",
+    text: "Browse clear prices and what's included, then choose the session that fits.",
+    Icon: CameraIcon,
+  },
+  {
+    title: "Choose your date",
+    text: "See open days and times live, and pick the one that works for you.",
+    Icon: CalendarCheckIcon,
+  },
+  {
+    title: "Pay a small deposit",
+    text: "Hold your slot with GCash or card. We'll confirm and get in touch.",
+    Icon: WalletIcon,
+  },
+];
 
 export default async function HomePage() {
   const [settings, services, featured] = await Promise.all([
@@ -67,8 +87,8 @@ export default async function HomePage() {
           </div>
 
           <div className="relative mx-auto flex w-full max-w-md flex-col items-center py-6 md:max-w-none">
-            <Sparkle className="absolute top-0 right-6 size-6 text-terracotta" />
-            <Sparkle className="absolute bottom-16 left-4 size-4 text-sage" />
+            <Sparkle className="absolute top-0 right-6 size-6 animate-twinkle text-terracotta" />
+            <Sparkle className="absolute bottom-16 left-4 size-4 animate-twinkle text-sage [animation-delay:1.4s]" />
             <HeroDeck photos={heroPhotos} />
           </div>
         </div>
@@ -76,23 +96,25 @@ export default async function HomePage() {
 
       {/* What we shoot */}
       <section aria-labelledby="what-we-shoot" className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <SectionHeading
-          id="what-we-shoot"
-          eyebrow="what we shoot"
-          title="Every kind of story"
-          align="center"
-        />
-        <ul className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+        <Reveal>
+          <SectionHeading
+            id="what-we-shoot"
+            eyebrow="what we shoot"
+            title="Every kind of story"
+            align="center"
+          />
+        </Reveal>
+        <RevealList className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
           {shootCards.map(({ key, label, href, soon, Icon }, i) => {
             // Odd count: the last card spans the full row on 2-column screens.
             const isOrphan = shootCards.length % 2 === 1 && i === shootCards.length - 1;
             return (
-              <li key={key} className={cn(isOrphan && "col-span-2 lg:col-span-1")}>
+              <RevealItem key={key} className={cn(isOrphan && "col-span-2 lg:col-span-1")}>
                 <Link
                   href={href}
                   className="group flex h-full flex-col items-center gap-3 rounded-3xl border bg-card p-5 text-center transition-all duration-300 hover:-translate-y-1 hover:border-terracotta hover:shadow-lg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:p-7"
                 >
-                  <span className="grid size-14 place-items-center rounded-full bg-accent text-accent-foreground transition-colors group-hover:bg-terracotta group-hover:text-white">
+                  <span className="grid size-14 place-items-center rounded-full bg-accent text-accent-foreground transition-all duration-300 group-hover:scale-110 group-hover:-rotate-6 group-hover:bg-terracotta group-hover:text-white">
                     <Icon className="size-6" aria-hidden />
                   </span>
                   <span className="font-heading text-lg leading-tight font-semibold">{label}</span>
@@ -102,17 +124,17 @@ export default async function HomePage() {
                     </span>
                   )}
                 </Link>
-              </li>
+              </RevealItem>
             );
           })}
-        </ul>
+        </RevealList>
       </section>
 
       {/* Highlights */}
       {highlights.length > 0 && (
         <section aria-labelledby="highlights" className="bg-accent/50 py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="flex flex-wrap items-end justify-between gap-4">
+            <Reveal className="flex flex-wrap items-end justify-between gap-4">
               <SectionHeading
                 id="highlights"
                 eyebrow="recent favourites"
@@ -124,25 +146,29 @@ export default async function HomePage() {
                   <ArrowRightIcon aria-hidden />
                 </Link>
               </Button>
-            </div>
-            <ul className="mt-10 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3">
+            </Reveal>
+            <RevealList
+              className="mt-10 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3"
+              stagger={0.1}
+            >
               {highlights.map((photo, i) => (
-                <li
-                  key={photo.id}
-                  className={cn(
-                    i % 2 ? "rotate-1" : "-rotate-1",
-                    "transition-transform duration-300 hover:rotate-0",
-                  )}
-                >
-                  <PhotoPolaroid
-                    photo={photo}
-                    caption={photo.caption}
-                    sizes="(min-width: 1024px) 33vw, 50vw"
-                    className="pb-8"
-                  />
-                </li>
+                <RevealItem key={photo.id}>
+                  <div
+                    className={cn(
+                      i % 2 ? "rotate-1" : "-rotate-1",
+                      "transition-transform duration-300 hover:-translate-y-1 hover:rotate-0",
+                    )}
+                  >
+                    <PhotoPolaroid
+                      photo={photo}
+                      caption={photo.caption}
+                      sizes="(min-width: 1024px) 33vw, 50vw"
+                      className="pb-8"
+                    />
+                  </div>
+                </RevealItem>
               ))}
-            </ul>
+            </RevealList>
           </div>
         </section>
       )}
@@ -150,7 +176,7 @@ export default async function HomePage() {
       {/* Services */}
       {services.length > 0 && (
         <section aria-labelledby="packages" className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+          <Reveal className="flex flex-wrap items-end justify-between gap-4">
             <SectionHeading
               id="packages"
               eyebrow="packages"
@@ -163,19 +189,66 @@ export default async function HomePage() {
                 <ArrowRightIcon aria-hidden />
               </Link>
             </Button>
-          </div>
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          </Reveal>
+          <RevealList className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {services.slice(0, 3).map((s) => (
-              <ServiceCard key={s.id} service={s} />
+              <RevealItem key={s.id} className="flex">
+                <ServiceCard service={s} />
+              </RevealItem>
             ))}
-          </div>
+          </RevealList>
         </section>
       )}
+
+      {/* How booking works */}
+      <section aria-labelledby="how-it-works" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+        <Reveal>
+          <SectionHeading
+            id="how-it-works"
+            eyebrow="easy as 1, 2, 3"
+            title="How booking works"
+            align="center"
+          />
+        </Reveal>
+        <div className="relative mt-10">
+          {/* Dashed line joining the steps on wide screens. */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-14 right-[16%] left-[16%] hidden border-t-2 border-dashed border-terracotta/40 md:block"
+          />
+          <RevealList className="relative grid gap-4 md:grid-cols-3" stagger={0.12}>
+            {HOW_IT_WORKS.map(({ title, text, Icon }, i) => (
+              <RevealItem key={title}>
+                <div className="flex h-full flex-col items-center rounded-3xl border bg-card p-6 text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <span className="relative grid size-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-md">
+                    <Icon className="size-7" aria-hidden />
+                    <span className="absolute -top-1 -right-1 grid size-7 place-items-center rounded-full bg-terracotta font-heading text-sm font-semibold text-white ring-4 ring-card">
+                      {i + 1}
+                    </span>
+                  </span>
+                  <h3 className="mt-4 text-xl font-semibold">{title}</h3>
+                  <p className="mt-2 text-muted-foreground">{text}</p>
+                </div>
+              </RevealItem>
+            ))}
+          </RevealList>
+        </div>
+        <Reveal className="mt-8 text-center">
+          <Button asChild variant="link" className="text-terracotta-ink">
+            <Link href="/faq">
+              Questions about deposits or payment? Read our FAQ
+              <ArrowRightIcon aria-hidden />
+            </Link>
+          </Button>
+        </Reveal>
+      </section>
+
+      <ReviewsSection className="pt-0" />
 
       {/* About */}
       {settings.about && (
         <section aria-labelledby="about-us" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-          <div className="grid items-center gap-10 rounded-[2rem] border bg-card p-6 sm:p-10 md:grid-cols-[auto_1fr]">
+          <Reveal className="grid items-center gap-10 rounded-[2rem] border bg-card p-6 sm:p-10 md:grid-cols-[auto_1fr]">
             <div className="mx-auto -rotate-3">
               <div className="polaroid pb-9">
                 <BrandLogo
@@ -201,7 +274,7 @@ export default async function HomePage() {
                 </Link>
               </Button>
             </div>
-          </div>
+          </Reveal>
         </section>
       )}
 

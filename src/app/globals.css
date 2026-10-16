@@ -25,6 +25,9 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
@@ -85,6 +88,11 @@
   --chart-3: #91c099;
   --chart-4: #d9a441;
   --chart-5: #8a7a6b;
+  /* Categorical series (sales report). Validated with the dataviz palette
+     checker against the card surface; the brand greens are too grey to tell apart. */
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
   --radius: 1rem;
   --sidebar: #f5f1ea;
   --sidebar-foreground: #2b3a38;
@@ -128,6 +136,9 @@
   --chart-3: #7db0ac;
   --chart-4: #e6be66;
   --chart-5: #bcae9f;
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
   --sidebar: #232e2c;
   --sidebar-foreground: #ece7de;
   --sidebar-primary: #9ccaa4;
@@ -219,6 +230,71 @@
     auto,
     auto,
     18px 18px;
+}
+
+/* Gentle decorative motion (all disabled by the reduced-motion rule below). */
+@theme {
+  --animate-twinkle: twinkle 3.2s ease-in-out infinite;
+  --animate-float: float 9s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-page-in: page-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes twinkle {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.7) rotate(20deg);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(1.5rem, -1rem) scale(1.08);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* FAQ answers slide open where the browser supports animating <details>;
+   elsewhere they simply open. */
+@supports selector(::details-content) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+  details.faq::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition:
+      block-size 0.3s ease,
+      content-visibility 0.3s allow-discrete;
+  }
+  details.faq[open]::details-content {
+    block-size: auto;
+  }
 }
 
 /* Theme toggle: the new theme is revealed by a clip-path circle (theme-toggle.tsx). */

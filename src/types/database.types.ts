@@ -468,6 +468,45 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          category: Database["public"]["Enums"]["service_category"]
+          created_at: string
+          id: string
+          is_published: boolean
+          name: string
+          quote: string
+          rating: number | null
+          shoot: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["service_category"]
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          name: string
+          quote: string
+          rating?: number | null
+          shoot: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["service_category"]
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          name?: string
+          quote?: string
+          rating?: number | null
+          shoot?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       services: {
         Row: {
           category: Database["public"]["Enums"]["service_category"]
