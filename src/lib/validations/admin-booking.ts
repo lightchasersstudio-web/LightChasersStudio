@@ -13,6 +13,24 @@ import {
 
 const contactValues = CONTACT_METHODS.map((c) => c.value) as [ContactMethod, ...ContactMethod[]];
 
+/**
+ * Add-ons staff put on a booking: from the catalog (addOnId) or a custom extra
+ * (addOnId ""). Prices are editable; output matches the RPCs' p_add_ons jsonb.
+ */
+export const addOnLines = z
+  .array(
+    z.object({
+      addOnId: z.union([z.literal(""), z.uuid()]),
+      name: z.string().trim().min(2, "Name the add-on.").max(80),
+      price: pesoString,
+    }),
+  )
+  .max(20, "Up to 20 add-ons.")
+  .transform((lines) =>
+    lines.map((l) => ({ add_on_id: l.addOnId || null, name: l.name, price_cents: l.price })),
+  );
+export type AddOnLineInput = z.input<typeof addOnLines>[number];
+
 /** Staff booking a client in. Inputs stay strings; the output is ready for admin_create_booking. */
 export const adminBookingSchema = z
   .object({
@@ -36,6 +54,7 @@ export const adminBookingSchema = z
     gcashReference: optionalText(100),
     consent: z.literal(true, "Confirm the client agreed to the privacy notice."),
     allowOutsideHours: z.boolean(),
+    addOns: addOnLines,
   })
   .superRefine((v, ctx) => {
     if (v.preferredContact === "email" && !v.email) {
@@ -91,11 +110,63 @@ export const adminBookingSchema = z
               reference: v.deposit === "gcash" ? v.gcashReference : null,
             },
       allowOutsideHours: v.allowOutsideHours,
+      addOns: v.addOns,
     };
   });
 
 export type AdminBookingInput = z.input<typeof adminBookingSchema>;
 export type AdminBookingValues = z.output<typeof adminBookingSchema>;
+
+/** Staff changing an existing booking (time, package, price, add-ons, VAT, details). */
+export const adminBookingEditSchema = z
+  .object({
+    bookingId: z.uuid(),
+    serviceId: z.uuid("Pick a package."),
+    date: dateString,
+    time: timeString,
+    price: pesoString,
+    fullName: z.string().trim().min(2, "Enter the client's name.").max(120),
+    phone: z.string().trim().min(7, "Enter a phone number.").max(32),
+    preferredContact: z.enum(contactValues),
+    messenger: optionalText(300),
+    location: optionalText(300),
+    participants: intString(1, 500),
+    specialRequests: optionalText(2000),
+    addOns: addOnLines,
+    chargeVat: z.boolean(),
+    emailClient: z.boolean(),
+    allowOutsideHours: z.boolean(),
+  })
+  .refine((v) => v.preferredContact !== "messenger" || Boolean(v.messenger), {
+    path: ["messenger"],
+    message: "Add their Facebook name or link.",
+  })
+  .transform((v) => ({
+    bookingId: v.bookingId,
+    serviceId: v.serviceId,
+    startAt: businessDateTimeToIso(v.date, v.time),
+    packageCents: v.price,
+    fullName: v.fullName,
+    phone: v.phone,
+    preferredContact: v.preferredContact,
+    messenger: v.messenger,
+    location: v.location,
+    participants: v.participants,
+    specialRequests: v.specialRequests,
+    addOns: v.addOns,
+    chargeVat: v.chargeVat,
+    emailClient: v.emailClient,
+    allowOutsideHours: v.allowOutsideHours,
+  }));
+export type AdminBookingEditInput = z.input<typeof adminBookingEditSchema>;
+
+/** Owner deleting a booking: they type its reference to confirm. */
+export const deleteBookingSchema = z
+  .object({ id: z.uuid(), confirmReference: z.string().trim().toUpperCase() })
+  .refine((v) => /^BK-\d{4}-[0-9A-F]{6}$/.test(v.confirmReference), {
+    path: ["confirmReference"],
+    message: "Type the booking reference exactly.",
+  });
 
 export const bookingIdSchema = z.object({ id: z.uuid() });
 

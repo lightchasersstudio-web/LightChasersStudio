@@ -116,7 +116,7 @@ export async function getBookingForAdmin(id: string) {
     supabase
       .from("bookings")
       .select(
-        "id, reference_code, status, source, start_at, end_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name), add_ons:booking_add_ons(name, price_cents), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
+        "id, reference_code, status, source, service_id, start_at, end_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name), add_ons:booking_add_ons(add_on_id, name, price_cents), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -238,4 +238,37 @@ export async function getDashboard(now: Date = new Date()): Promise<Dashboard> {
     upcoming: shoots.slice(0, 8),
     attention: needs.slice(0, 6),
   };
+}
+
+export type HistoryEntry = {
+  id: number;
+  action: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor: string;
+};
+
+/** Who changed this booking and when, newest first (audit_logs; RLS: admins only). */
+export async function listBookingHistory(bookingId: string): Promise<HistoryEntry[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, action, metadata, created_at, actor_id")
+    .eq("entity", "booking")
+    .eq("entity_id", bookingId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const actorIds = [...new Set(data.map((r) => r.actor_id).filter((id): id is string => !!id))];
+  const { data: admins } = actorIds.length
+    ? await supabase.from("admin_profiles").select("user_id, full_name").in("user_id", actorIds)
+    : { data: [] };
+  const names = new Map((admins ?? []).map((a) => [a.user_id, a.full_name]));
+  return data.map((r) => ({
+    id: r.id,
+    action: r.action,
+    metadata: (r.metadata ?? {}) as Record<string, unknown>,
+    createdAt: r.created_at,
+    actor: (r.actor_id && names.get(r.actor_id)) || "Staff",
+  }));
 }

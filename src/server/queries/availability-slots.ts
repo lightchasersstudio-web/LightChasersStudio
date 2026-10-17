@@ -12,13 +12,14 @@ import type { Database } from "@/types/database.types";
  * Bookable start times for every day of `month` ("YYYY-MM") for one package.
  * Uses whichever client the caller passes: the anon client for the public
  * wizard (active packages only, by RLS) or the admin's client (any package,
- * `staff` skips the notice period and booking window).
+ * `staff` skips the notice period and booking window). `excludeBookingId`
+ * (staff only, when moving a booking) leaves that booking's own time free.
  */
 export async function loadMonthAvailability(
   supabase: SupabaseClient<Database>,
   serviceId: string,
   month: string,
-  { staff = false }: { staff?: boolean } = {},
+  { staff = false, excludeBookingId }: { staff?: boolean; excludeBookingId?: string } = {},
 ): Promise<DaySlots[] | null> {
   const [year, monthIndex] = month.split("-").map(Number) as [number, number];
   const first = new TZDate(year, monthIndex - 1, 1, BUSINESS_TZ);
@@ -37,7 +38,9 @@ export async function loadMonthAvailability(
       .single(),
     supabase.from("availability_rules").select("day_of_week, start_time, end_time"),
     supabase.from("blackout_dates").select("date").gte("date", `${month}-01`).lte("date", lastDate),
-    supabase.rpc("get_busy_ranges", { p_from: from, p_to: to }),
+    excludeBookingId
+      ? busyExcluding(supabase, from, to, excludeBookingId)
+      : supabase.rpc("get_busy_ranges", { p_from: from, p_to: to }),
   ]);
   for (const r of [service, settings, hours, blackouts, busy]) if (r.error) throw r.error;
   if (!service.data) return null;
@@ -74,4 +77,29 @@ export function toPayload(days: DaySlots[]): MonthSlotsPayload {
     status: d.status,
     slots: d.slots.map((s) => s.toISOString()),
   }));
+}
+
+/** Like get_busy_ranges, minus one booking (admin RLS can read bookings directly). */
+async function busyExcluding(
+  supabase: SupabaseClient<Database>,
+  from: string,
+  to: string,
+  excludeId: string,
+) {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("start_at, blocked_until, status, hold_expires_at")
+    .lt("start_at", to)
+    .gt("blocked_until", from)
+    .neq("id", excludeId)
+    .in("status", ["pending_payment", "pending", "confirmed", "completed"]);
+  const now = Date.now();
+  return {
+    error,
+    data: (data ?? []).filter(
+      (b) =>
+        b.status !== "pending_payment" ||
+        (b.hold_expires_at !== null && Date.parse(b.hold_expires_at) > now),
+    ),
+  };
 }

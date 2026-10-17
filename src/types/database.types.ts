@@ -649,6 +649,7 @@ export type Database = {
     Functions: {
       admin_create_booking: {
         Args: {
+          p_add_ons?: Json
           p_admin_id: string
           p_allow_outside_hours: boolean
           p_email: string
@@ -670,6 +671,37 @@ export type Database = {
           booking_id: string
           reference_code: string
         }[]
+      }
+      admin_update_booking: {
+        Args: {
+          p_add_ons: Json
+          p_allow_outside_hours: boolean
+          p_booking_id: string
+          p_charge_vat: boolean
+          p_contact_name: string
+          p_contact_phone: string
+          p_location: string
+          p_messenger: string
+          p_package_cents: number
+          p_participants: number
+          p_preferred_contact: Database["public"]["Enums"]["contact_method"]
+          p_service_id: string
+          p_special_requests: string
+          p_start_at: string
+        }
+        Returns: {
+          booking_id: string
+          reference_code: string
+        }[]
+      }
+      apply_booking_pricing: {
+        Args: {
+          p_add_ons: Json
+          p_booking_id: string
+          p_charge_vat: boolean
+          p_package_cents: number
+        }
+        Returns: undefined
       }
       assert_capacity: {
         Args: { p_blocked_until: string; p_exclude?: string; p_start: string }
@@ -696,6 +728,13 @@ export type Database = {
           hold_expires_at: string
           reference_code: string
           status: Database["public"]["Enums"]["booking_status"]
+        }[]
+      }
+      delete_booking: {
+        Args: { p_booking_id: string }
+        Returns: {
+          contact_name: string
+          reference_code: string
         }[]
       }
       expire_stale_holds: { Args: never; Returns: number }

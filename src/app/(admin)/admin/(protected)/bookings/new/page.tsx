@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { FormSkeleton } from "@/components/admin/skeletons";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/server/auth";
+import { listAddOnsForAdmin } from "@/server/queries/add-ons";
 import { listServicesForAdmin } from "@/server/queries/services";
 
 export const metadata: Metadata = { title: "New booking" };
@@ -37,7 +38,11 @@ async function NewBooking({
   searchParams,
 }: Pick<PageProps<"/admin/bookings/new">, "searchParams">) {
   await requireAdmin();
-  const [params, services] = await Promise.all([searchParams, listServicesForAdmin()]);
+  const [params, services, addOns] = await Promise.all([
+    searchParams,
+    listServicesForAdmin(),
+    listAddOnsForAdmin(),
+  ]);
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(one(params.date) ?? "") ? one(params.date)! : null;
   const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(one(params.time) ?? "") ? one(params.time)! : null;
@@ -58,6 +63,12 @@ async function NewBooking({
         name: s.name,
         priceCents: s.price_cents,
         active: s.is_active,
+      }))}
+      addOnCatalog={addOns.map((a) => ({
+        id: a.id,
+        name: a.name,
+        priceCents: a.price_cents,
+        active: a.is_active,
       }))}
       initialDate={date}
       initialTime={time}

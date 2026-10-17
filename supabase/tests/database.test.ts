@@ -138,6 +138,30 @@ function adminBook(
   ]);
 }
 
+const UPDATE = `select * from public.admin_update_booking(
+  p_booking_id => $1, p_service_id => $2, p_start_at => $3, p_package_cents => $4,
+  p_add_ons => $5::jsonb, p_charge_vat => $6, p_allow_outside_hours => false,
+  p_location => 'Studio', p_participants => 2, p_special_requests => null,
+  p_contact_name => 'Walk In', p_contact_phone => '09171234567',
+  p_preferred_contact => 'phone', p_messenger => null)`;
+
+function updateBooking(
+  c: PoolClient,
+  id: string,
+  serviceId: string,
+  start: Date,
+  opts: { pkg?: number; addOns?: unknown[]; vat?: boolean } = {},
+) {
+  return c.query(UPDATE, [
+    id,
+    serviceId,
+    start.toISOString(),
+    opts.pkg ?? 350000,
+    JSON.stringify(opts.addOns ?? []),
+    opts.vat ?? false,
+  ]);
+}
+
 const PAID = "select * from public.mark_booking_paid($1, $2, $3, $4, '{}'::jsonb)";
 
 describe.skipIf(!url)("database (RLS + booking rules)", () => {
@@ -784,6 +808,191 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         true,
         false,
       ]);
+    });
+  });
+  describe("admin_update_booking (edit after booking)", () => {
+    it("moves a booking, changes the package and recomputes add-ons, VAT and total", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await c.query("update public.business_settings set vat_percent = 12 where id");
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        await updateBooking(c, b.booking_id, s.wedding, manila(150, 13), {
+          pkg: 900000,
+          addOns: [{ add_on_id: null, name: "Extra prints", price_cents: 50000 }],
+          vat: true,
+        });
+        const { rows } = await c.query(
+          `select service_id, start_at, end_at, price_cents, vat_cents, location, participants,
+             (select count(*)::int from public.booking_add_ons a where a.booking_id = b.id) as add_ons
+           from public.bookings b where id = $1`,
+          [b.booking_id],
+        );
+        expect(rows[0]).toMatchObject({
+          service_id: s.wedding,
+          price_cents: 1064000, // (9,000 + 500) + 12% VAT
+          vat_cents: 114000,
+          location: "Studio",
+          participants: 2,
+          add_ons: 1,
+        });
+        expect(new Date(rows[0].start_at).getTime()).toBe(manila(150, 13).getTime());
+        expect(new Date(rows[0].end_at).getTime()).toBe(manila(150, 15).getTime()); // 2h package
+      });
+    });
+
+    it("keeps its own time slot but refuses a full one", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const a = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        await adminBook(c, s.portrait, manila(150, 13), { email: "other@example.com" });
+        // Same time, new details: its own booking doesn't count against it.
+        await expect(
+          updateBooking(c, a.booking_id, s.portrait, manila(150, 10)),
+        ).resolves.toBeDefined();
+        expect(
+          await expectFailure(c, UPDATE, [
+            a.booking_id,
+            s.portrait,
+            manila(150, 13).toISOString(),
+            350000,
+            "[]",
+            false,
+          ]),
+        ).toMatch(/slot_unavailable/);
+      });
+    });
+
+    it("refuses cancelled bookings and caps the deposit at a lower total", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!; // deposit 105,000
+        await updateBooking(c, b.booking_id, s.portrait, manila(150, 10), { pkg: 50000 });
+        const { rows } = await c.query(
+          "select price_cents, deposit_cents from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        expect(rows[0]).toEqual({ price_cents: 50000, deposit_cents: 50000 });
+
+        await c.query("update public.bookings set status = 'cancelled' where id = $1", [
+          b.booking_id,
+        ]);
+        expect(
+          await expectFailure(c, UPDATE, [
+            b.booking_id,
+            s.portrait,
+            manila(150, 10).toISOString(),
+            350000,
+            "[]",
+            false,
+          ]),
+        ).toMatch(/booking_not_editable/);
+      });
+    });
+
+    it("rejects malformed add-ons", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        const bad = JSON.stringify([{ add_on_id: null, name: "X", price_cents: -5 }]);
+        expect(
+          await expectFailure(c, UPDATE, [
+            b.booking_id,
+            s.portrait,
+            manila(150, 10).toISOString(),
+            350000,
+            bad,
+            false,
+          ]),
+        ).toMatch(/invalid_add_ons/);
+      });
+    });
+  });
+
+  it("admin_create_booking includes staff-chosen add-ons in the total", async () => {
+    await inRollback(async (c) => {
+      const s = await setupFixtures(c, 1);
+      await actAs(c, "service_role");
+      const { rows } = await c.query<{ booking_id: string }>(
+        `select * from public.admin_create_booking(
+          p_full_name => 'Walk In', p_email => null, p_phone => '09171234567',
+          p_preferred_contact => 'phone', p_messenger => null, p_service_id => $1,
+          p_start_at => $2, p_price_cents => 300000, p_allow_outside_hours => false,
+          p_location => null, p_participants => 1, p_special_requests => null,
+          p_payment_provider => null, p_payment_amount_cents => null, p_payment_reference => null,
+          p_admin_id => null, p_add_ons => $3::jsonb)`,
+        [
+          s.portrait,
+          manila(150, 10).toISOString(),
+          JSON.stringify([{ add_on_id: null, name: "Videographer", price_cents: 200000 }]),
+        ],
+      );
+      const b = await c.query("select price_cents from public.bookings where id = $1", [
+        rows[0]!.booking_id,
+      ]);
+      expect(b.rows[0].price_cents).toBe(500000);
+    });
+  });
+
+  describe("delete_booking (owner, safeguarded)", () => {
+    it("deletes an unpaid booking and its client if they have no other bookings", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10), { email: null })).rows[0]!;
+        const { rows: before } = await c.query(
+          "select client_id from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        await c.query("select * from public.delete_booking($1)", [b.booking_id]);
+        expect(
+          (await c.query("select 1 from public.bookings where id = $1", [b.booking_id])).rows,
+        ).toHaveLength(0);
+        expect(
+          (await c.query("select 1 from public.clients where id = $1", [before[0].client_id])).rows,
+        ).toHaveLength(0);
+      });
+    });
+
+    it("refuses a booking with real payments but allows trial-mode ones", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const paid = (await adminBook(c, s.portrait, manila(150, 10), { pay: ["cash", 50000] }))
+          .rows[0]!;
+        expect(
+          await expectFailure(c, "select * from public.delete_booking($1)", [paid.booking_id]),
+        ).toMatch(/booking_has_payments/);
+
+        const online = (await book(c, s.portrait, manila(151, 10), "trial@example.com")).rows[0]!;
+        await c.query(PAID, [online.reference_code, "mock_cs_1", "mock_pay_1", 105000]);
+        await expect(
+          c.query("select * from public.delete_booking($1)", [online.booking_id]),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("can't be run by anon or signed-in users", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        for (const role of ["anon", "authenticated"] as const) {
+          await actAs(c, role);
+          expect(
+            await expectFailure(c, "select * from public.delete_booking(gen_random_uuid())"),
+          ).toMatch(/permission denied/);
+          expect(
+            await expectFailure(
+              c,
+              `select * from public.admin_update_booking(gen_random_uuid(), gen_random_uuid(), now(),
+                 1, '[]'::jsonb, false, false, null, 1, null, 'A B', '0917000000', 'phone', null)`,
+            ),
+          ).toMatch(/permission denied/);
+          await c.query("reset role");
+        }
+      });
     });
   });
 });

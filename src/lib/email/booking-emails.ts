@@ -95,6 +95,16 @@ export const bookingConfirmedEmail = (b: BookingSummary, siteUrl: string) =>
     "your booking is confirmed. We can't wait to see you.",
   );
 
+/** After staff change a booking (time, package, add-ons, price or details). */
+export const bookingUpdatedEmail = (b: BookingSummary, siteUrl: string) =>
+  clientEmail(
+    b,
+    siteUrl,
+    `Your booking ${b.reference} was updated`,
+    "Your booking was updated",
+    "we've updated your booking. Here are the latest details.",
+  );
+
 export const bookingClosedEmail = (
   b: BookingSummary,
   siteUrl: string,

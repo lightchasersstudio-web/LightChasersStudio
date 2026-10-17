@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { AdminOnly } from "@/components/admin/admin-only";
 import { PageHeader } from "@/components/admin/page-header";
+import { ExportBookings } from "@/components/admin/reports/export-bookings";
 import { SalesReport } from "@/components/admin/reports/sales-report";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -17,6 +18,7 @@ export default function ReportsPage() {
         title="Sales report"
         description="Sales, bookings and payments at a glance."
       />
+      <ExportBookings />
       <p className="mb-6 flex items-start gap-2 rounded-2xl border border-dashed border-terracotta/50 bg-blush/50 px-4 py-3 text-sm">
         <InfoIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
         <span>

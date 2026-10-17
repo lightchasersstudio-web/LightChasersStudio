@@ -4,6 +4,7 @@ import {
   bookingClosedEmail,
   bookingConfirmedEmail,
   bookingReceivedEmail,
+  bookingUpdatedEmail,
   newBookingAlertEmail,
 } from "@/lib/email/booking-emails";
 import { sendEmail } from "@/lib/email/send";
@@ -32,6 +33,10 @@ export async function notifyBookingReceived(b: BookingRecord) {
 
 export async function notifyBookingConfirmed(b: BookingRecord) {
   if (b.email) await sendEmail({ to: b.email, ...bookingConfirmedEmail(b.summary, siteUrl()) });
+}
+
+export async function notifyBookingUpdated(b: BookingRecord) {
+  if (b.email) await sendEmail({ to: b.email, ...bookingUpdatedEmail(b.summary, siteUrl()) });
 }
 
 export async function notifyBookingClosed(b: BookingRecord, status: "declined" | "cancelled") {

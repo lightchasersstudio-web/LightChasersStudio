@@ -1,26 +1,25 @@
 "use client";
 
-import { TZDate } from "@date-fns/tz";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { addMonths, format } from "date-fns";
 import { AlertTriangleIcon, Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
 
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
+import { AddOnsEditor, type AddOnChoice } from "@/components/admin/bookings/add-ons-editor";
+import { BookingTotals } from "@/components/admin/bookings/booking-totals";
+import { ScheduleField } from "@/components/admin/bookings/schedule-field";
 import { handleResult } from "@/components/admin/form-utils";
-import { SlotPicker } from "@/components/booking/slot-picker";
 import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
-import { BUSINESS_TZ, businessDateTimeToIso } from "@/lib/utils/business-date";
 import { centsToPesoInput } from "@/lib/utils/money";
 import { adminBookingSchema, type AdminBookingInput } from "@/lib/validations/admin-booking";
 import { CONTACT_METHODS } from "@/lib/validations/booking";
-import { createAdminBooking, getAdminMonthSlots } from "@/server/actions/admin-bookings";
+import { createAdminBooking } from "@/server/actions/admin-bookings";
 
 export type PackageChoice = { id: string; name: string; priceCents: number; active: boolean };
 
@@ -33,16 +32,16 @@ const DEPOSITS = [
 /** Staff book a client in (confirmed straight away). */
 export function AdminBookingForm({
   packages,
+  addOnCatalog,
   initialDate,
   initialTime,
 }: {
   packages: PackageChoice[];
+  addOnCatalog: AddOnChoice[];
   initialDate: string | null;
   initialTime: string | null;
 }) {
   const router = useRouter();
-  // A time picked from the calendar's free lane opens in "any time" mode, already filled in.
-  const [anyTime, setAnyTime] = useState(Boolean(initialTime));
   const [outsideWarning, setOutsideWarning] = useState<string | null>(null);
 
   const form = useForm<AdminBookingInput, unknown, z.output<typeof adminBookingSchema>>({
@@ -65,23 +64,22 @@ export function AdminBookingForm({
       gcashReference: "",
       consent: false as unknown as true,
       allowOutsideHours: false,
+      addOns: [],
     },
   });
   useUnsavedChangesWarning(form.formState.isDirty);
-  const [serviceId, date, time, deposit] = useWatch({
+  const [serviceId, deposit, price, addOns] = useWatch({
     control: form.control,
-    name: ["serviceId", "date", "time", "deposit"],
+    name: ["serviceId", "deposit", "price", "addOns"],
   });
 
-  const now = TZDate.tz(BUSINESS_TZ);
-  const loadMonth = useCallback(
-    (month: string) => getAdminMonthSlots({ serviceId, month }),
-    [serviceId],
-  );
-  const pickedIso = date && time ? businessDateTimeToIso(date, time) : null;
-
-  // A new package starts from its listed price (staff can still change it).
+  // A newly chosen package starts from its listed price (staff can still change it).
+  const firstRun = useRef(true);
   useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
     const pkg = packages.find((p) => p.id === serviceId);
     if (pkg) form.setValue("price", centsToPesoInput(pkg.priceCents));
   }, [serviceId, packages, form]);
@@ -123,44 +121,20 @@ export function AdminBookingForm({
         </div>
       </Section>
 
-      <Section
-        title="Date & time"
-        action={
-          <Button
-            type="button"
-            variant="link"
-            className="px-0"
-            onClick={() => setAnyTime((v) => !v)}
-          >
-            {anyTime ? "Show free times" : "Pick any time instead"}
-          </Button>
-        }
-      >
-        {anyTime ? (
-          <div className="grid gap-6 sm:grid-cols-2">
-            <TextField control={form.control} name="date" label="Date" type="date" />
-            <TextField control={form.control} name="time" label="Start time" type="time" />
-          </div>
-        ) : (
-          <Field data-invalid={Boolean(form.formState.errors.date || form.formState.errors.time)}>
-            <SlotPicker
-              key={serviceId}
-              load={loadMonth}
-              minMonth={format(now, "yyyy-MM")}
-              maxMonth={format(addMonths(now, 24), "yyyy-MM")}
-              value={pickedIso}
-              initialDate={initialDate ?? undefined}
-              onChange={(iso) => {
-                const t = iso ? new TZDate(iso, BUSINESS_TZ) : null;
-                form.setValue("date", t ? format(t, "yyyy-MM-dd") : "");
-                form.setValue("time", t ? format(t, "HH:mm") : "");
-              }}
-            />
-            {(form.formState.errors.date || form.formState.errors.time) && (
-              <FieldError errors={[form.formState.errors.date ?? form.formState.errors.time]} />
-            )}
-          </Field>
-        )}
+      <Section title="Add-ons">
+        <AddOnsEditor control={form.control} catalog={addOnCatalog} />
+        <BookingTotals packagePrice={price} addOns={addOns} vatPercent={0} chargeVat={false} />
+        <p className="text-xs text-muted-foreground">
+          VAT can be added on the booking page after it&apos;s created.
+        </p>
+      </Section>
+
+      <Section title="Date & time">
+        <ScheduleField
+          form={form}
+          initialDate={initialDate}
+          startInAnyTime={Boolean(initialTime)}
+        />
       </Section>
 
       <Section title="Client">
