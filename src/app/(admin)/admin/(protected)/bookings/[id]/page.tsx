@@ -1,6 +1,6 @@
 import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, PencilIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,6 +8,7 @@ import { Suspense } from "react";
 
 import { BookingVat } from "@/components/admin/bookings/booking-vat";
 import { ContactActions } from "@/components/admin/bookings/contact-actions";
+import { DeleteBooking } from "@/components/admin/bookings/delete-booking";
 import { PrintSheet } from "@/components/admin/bookings/print-sheet";
 import { AdminNotesForm, RecordPaymentForm } from "@/components/admin/bookings/record-payment-form";
 import { ShareBooking } from "@/components/admin/bookings/share-booking";
@@ -18,12 +19,13 @@ import { DetailSkeleton } from "@/components/admin/skeletons";
 import { StatusBadge } from "@/components/booking/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAddOns, formatBookingWhen } from "@/lib/booking/booking-summary";
+import { describeHistoryEntry } from "@/lib/booking/history";
 import { replyTemplates } from "@/lib/booking/reply-templates";
 import { getPublicEnv } from "@/lib/env";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatPeso } from "@/lib/utils/money";
 import { requireAdmin } from "@/server/auth";
-import { getBookingForAdmin } from "@/server/queries/bookings";
+import { getBookingForAdmin, listBookingHistory } from "@/server/queries/bookings";
 
 export const metadata: Metadata = { title: "Booking" };
 
@@ -38,10 +40,12 @@ export default function BookingPage({ params }: PageProps<"/admin/bookings/[id]"
 }
 
 async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "params">) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { id } = await params;
   const b = /^[0-9a-f-]{36}$/i.test(id) ? await getBookingForAdmin(id) : null;
   if (!b) notFound();
+  const history = await listBookingHistory(b.id);
+  const editable = ["pending", "confirmed"].includes(b.status);
   const balance = Math.max(b.price_cents - b.paidCents, 0);
   const active = ["pending_payment", "pending", "confirmed"].includes(b.status);
   const day = format(new TZDate(b.start_at, BUSINESS_TZ), "yyyy-MM-dd");
@@ -62,7 +66,19 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
           eyebrow={b.source === "admin" ? "booked by staff" : "booked online"}
           title={b.contact_name}
           description={`${b.serviceName} · ${formatBookingWhen(b.start_at, b.end_at)}`}
-          actions={<StatusBadge status={b.status} className="px-3 py-1 text-sm" />}
+          actions={
+            <>
+              <StatusBadge status={b.status} className="px-3 py-1 text-sm" />
+              {editable && (
+                <Button asChild variant="outline">
+                  <Link href={`/admin/bookings/${b.id}/edit`}>
+                    <PencilIcon aria-hidden />
+                    Edit booking
+                  </Link>
+                </Button>
+              )}
+            </>
+          }
         />
 
         <div className="grid gap-8 lg:grid-cols-[1fr_24rem]">
@@ -201,6 +217,29 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
               </h2>
               <AdminNotesForm id={b.id} notes={b.admin_notes} />
             </section>
+
+            <section aria-labelledby="history" className="space-y-3 rounded-3xl border bg-card p-5">
+              <h2 id="history" className="text-xl font-semibold">
+                History
+              </h2>
+              {history.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No changes recorded yet.</p>
+              ) : (
+                <ol className="space-y-2.5 text-sm">
+                  {history.map((h) => (
+                    <li key={h.id} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                      <span>{describeHistoryEntry(h.action, h.metadata)}</span>
+                      <span className="text-muted-foreground">
+                        {h.actor} ·{" "}
+                        {format(new TZDate(h.createdAt, BUSINESS_TZ), "d MMM yyyy, h:mm a")}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            {admin.role === "owner" && <DeleteBooking id={b.id} reference={b.reference_code} />}
           </div>
 
           <aside aria-label="Share booking" className="lg:sticky lg:top-6 lg:self-start">

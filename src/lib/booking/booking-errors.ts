@@ -12,6 +12,11 @@ export const BOOKING_ERRORS: Record<string, string> = {
   email_required: "Enter a valid email address.",
   invalid_price: "Enter a valid price.",
   invalid_payment: "Pick GCash or cash for the payment.",
+  invalid_add_ons: "Check the add-ons: each needs a name (2–80 letters) and a price.",
+  booking_not_editable: "Only bookings that need your OK or are confirmed can be changed.",
+  booking_not_found: "That booking no longer exists.",
+  booking_has_payments:
+    "This booking has real payments, so it can't be deleted. Cancel it instead (and refund if needed).",
 };
 
 /** The booking error code inside a Postgres error message, if any. */
