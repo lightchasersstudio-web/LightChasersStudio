@@ -2,6 +2,7 @@
 
 import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
 import type { BookingSummary } from "@/lib/booking/booking-summary";
+import { bookingTotals } from "@/lib/booking/pricing";
 import { getPublicEnv } from "@/lib/env";
 import { createCheckoutSession, paymongoConfigured } from "@/lib/payments/paymongo";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -28,7 +29,7 @@ function fieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
  */
 export async function submitBooking(
   input: unknown,
-): Promise<ActionResult<{ redirectUrl: string }>> {
+): Promise<ActionResult<{ redirectUrl: string; reference: string }>> {
   const parsed = publicBookingSchema.safeParse(input);
   if (!parsed.success) {
     return fail("Please check the highlighted fields.", fieldErrors(parsed.error.issues));
@@ -44,17 +45,22 @@ export async function submitBooking(
     // Refuse before holding a slot if a deposit is due but payments aren't set up
     // (checked before Turnstile so visitors get the clear message, not a security error).
     if (!paymongoConfigured()) {
-      const [{ data: service }, { data: settings }] = await Promise.all([
+      const [{ data: service }, { data: settings }, { data: addOns }] = await Promise.all([
         supabase
           .from("services")
           .select("price_cents, deposit_cents")
           .eq("id", v.serviceId)
           .maybeSingle(),
-        supabase.from("business_settings").select("default_deposit_percent").single(),
+        supabase.from("business_settings").select("default_deposit_percent, vat_percent").single(),
+        supabase.from("add_ons").select("price_cents").in("id", v.addOnIds),
       ]);
-      const deposit =
-        service?.deposit_cents ??
-        Math.round(((service?.price_cents ?? 0) * (settings?.default_deposit_percent ?? 0)) / 100);
+      const { deposit } = bookingTotals({
+        packageCents: service?.price_cents ?? 0,
+        addOnsCents: (addOns ?? []).reduce((sum, a) => sum + a.price_cents, 0),
+        vatPercent: settings?.vat_percent ?? 0,
+        fixedDepositCents: service?.deposit_cents ?? null,
+        depositPercent: settings?.default_deposit_percent ?? 0,
+      });
       if (deposit > 0) return fail(NO_ONLINE_PAYMENT);
     }
 
@@ -75,15 +81,15 @@ export async function submitBooking(
         p_participants: v.participants,
         p_special_requests: v.specialRequests ?? undefined,
         p_messenger: v.messenger ?? undefined,
+        p_add_on_ids: v.addOnIds,
       })
       .single();
     if (error) {
       const code = bookingErrorCode(error.message);
       if (!code) throw error;
-      return fail(
-        BOOKING_ERRORS[code]!,
-        code === "slot_unavailable" ? { startAt: [BOOKING_ERRORS[code]!] } : undefined,
-      );
+      const field =
+        code === "slot_unavailable" ? "startAt" : code === "add_on_unavailable" ? "addOnIds" : null;
+      return fail(BOOKING_ERRORS[code]!, field ? { [field]: [BOOKING_ERRORS[code]!] } : undefined);
     }
 
     if (data.deposit_cents > 0) {
@@ -93,12 +99,15 @@ export async function submitBooking(
         await supabase.from("bookings").update({ status: "cancelled" }).eq("id", data.booking_id);
         return fail("We couldn't start the payment. Please try again in a moment.");
       }
-      return ok({ redirectUrl: url });
+      return ok({ redirectUrl: url, reference: data.reference_code });
     }
 
     const record = await loadBookingRecord({ id: data.booking_id });
     if (record) await notifyBookingReceived(record);
-    return ok({ redirectUrl: `/book/done?ref=${data.reference_code}` });
+    return ok({
+      redirectUrl: `/book/done?ref=${data.reference_code}`,
+      reference: data.reference_code,
+    });
   } catch (error) {
     console.error("[submitBooking]", error);
     return fail("Something went wrong. Please try again.");

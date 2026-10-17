@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -8,6 +9,7 @@ import type { z } from "zod";
 
 import { TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
+import { AddToCalendar } from "@/components/booking/add-to-calendar";
 import { BookingCard } from "@/components/booking/booking-card";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
@@ -51,8 +53,25 @@ export function BookingLookup({
             Your time is held until {manilaTime(booking.holdExpiresAt)} while the deposit is paid.
           </p>
         )}
+        {(booking.status === "pending" || booking.status === "confirmed") && (
+          <AddToCalendar
+            event={{
+              reference: booking.summary.reference,
+              title: `${booking.summary.serviceName} · ${booking.summary.studioName}`,
+              startAt: booking.summary.startAt,
+              endAt: booking.summary.endAt,
+              location: booking.summary.location,
+            }}
+          />
+        )}
         <p className="text-center text-sm text-muted-foreground">
-          Tip: screenshot this card to keep it handy.
+          Tip: screenshot this card to keep it handy.{" "}
+          <Link
+            href="/prepare"
+            className="font-semibold text-terracotta-ink underline-offset-4 hover:underline"
+          >
+            How to prepare for your shoot
+          </Link>
         </p>
       </div>
     );

@@ -5,10 +5,12 @@ import { bookingSummaryText, type BookingSummary } from "./booking-summary";
 const booking: BookingSummary = {
   reference: "BK-2026-ABC123",
   serviceName: "Family Portrait Session",
+  addOns: [],
   startAt: "2026-11-03T05:00:00.000Z", // 1:00 PM in Manila
   endAt: "2026-11-03T06:00:00.000Z",
   location: "Studio",
   priceCents: 350000,
+  vatCents: 0,
   paidCents: 105000,
   contactName: "Ana Cruz",
   studioName: "Light Chasers Studio",

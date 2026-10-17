@@ -1,5 +1,6 @@
 "use client";
 
+import { MotionConfig, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
@@ -26,25 +27,36 @@ function ActiveNavLinks() {
 
 function Links({ pathname }: { pathname: string | null }) {
   return (
-    <ul className="hidden items-center gap-1 md:flex">
-      {SITE_NAV.map(({ href, label }) => {
-        const active = isActive(href, pathname);
-        return (
-          <li key={href}>
-            <Link
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold transition-colors duration-200 hover:bg-accent hover:text-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                active && "text-terracotta-ink",
+    <MotionConfig reducedMotion="user">
+      <ul className="hidden items-center gap-1 md:flex">
+        {SITE_NAV.map(({ href, label }) => {
+          const active = isActive(href, pathname);
+          return (
+            <li key={href} className="relative">
+              {/* One shared pill that slides to the current page. */}
+              {active && (
+                <motion.span
+                  layoutId="site-nav-pill"
+                  className="absolute inset-0 rounded-full bg-accent"
+                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                  aria-hidden
+                />
               )}
-            >
-              {label}
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+              <Link
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold transition-colors duration-200 hover:text-terracotta-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  active && "text-accent-foreground",
+                )}
+              >
+                {label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </MotionConfig>
   );
 }
 

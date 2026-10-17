@@ -113,3 +113,29 @@ test("Book now on a different package replaces the earlier choice", async ({ pag
   await expect(page.getByRole("radio", { name: new RegExp(second) })).toBeChecked();
   await expect(page.getByRole("radio", { name: new RegExp(first) })).not.toBeChecked();
 });
+
+test("the browser Back button steps back through the wizard before leaving it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Book now" }).first().click();
+  await expect(page).toHaveURL(/\/book/);
+  await page.getByLabel("Full name").fill("E2E Client Back");
+  await page.getByLabel("Email").fill("e2e-back@example.com");
+  await page.getByLabel("Mobile number").fill("0917 123 4567");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Package" })).toBeVisible();
+  await page.getByRole("radiogroup").locator("label").first().click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Date & time" })).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/book/);
+  await expect(page.getByRole("heading", { name: "Package" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Your details" })).toBeVisible();
+  await expect(page.getByLabel("Full name")).toHaveValue("E2E Client Back"); // nothing lost
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/book/); // only now does Back leave the wizard
+});

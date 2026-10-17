@@ -115,9 +115,9 @@ export default async function ContactPage() {
 
           {facebook && (
             <div className="relative overflow-hidden rounded-[2rem] bg-panel p-7 text-panel-foreground shadow-xl sm:p-9">
-              <div className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-terracotta/30 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-20 -left-10 size-56 rounded-full bg-sage/25 blur-3xl" />
-              <Sparkle className="absolute top-7 right-8 size-5 text-terracotta" />
+              <div className="pointer-events-none absolute -top-16 -right-16 size-56 animate-float rounded-full bg-terracotta/30 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-20 -left-10 size-56 animate-float rounded-full bg-sage/25 blur-3xl [animation-delay:-4s]" />
+              <Sparkle className="absolute top-7 right-8 size-5 animate-twinkle text-terracotta" />
               <div className="relative">
                 <span className="grid size-14 place-items-center rounded-full bg-panel-foreground text-panel">
                   <FacebookIcon className="size-7" />

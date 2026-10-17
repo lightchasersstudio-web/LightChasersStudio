@@ -6,11 +6,15 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { BookCta } from "@/components/public/book-cta";
+import { PackageCompare } from "@/components/public/package-compare";
+import { ReviewsSection } from "@/components/public/reviews-section";
 import { PlaceholderPolaroid } from "@/components/public/photo-polaroid";
 import { bookHref } from "@/components/public/site-nav";
+import { ShareButton } from "@/components/shared/share-button";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { bookingTotals } from "@/lib/booking/pricing";
 import { categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
 import { formatDuration } from "@/lib/utils/format";
@@ -58,17 +62,22 @@ export default function ServicePage({ params }: PageProps<"/services/[slug]">) {
 
 async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "params">) {
   const { slug } = await params;
-  const [service, settings] = await Promise.all([
+  const [service, settings, allServices] = await Promise.all([
     getActiveServiceBySlug(slug),
     getPublicSettings(),
+    listActiveServices(),
   ]);
   if (!service) notFound();
 
   const inclusions = service.inclusions as string[];
-  // Same rule as create_booking(): fixed deposit, else round(price × default %).
-  const depositCents =
-    service.deposit_cents ??
-    Math.round((service.price_cents * settings.default_deposit_percent) / 100);
+  // Same rule as create_booking() for the package on its own (add-ons raise it).
+  const { deposit: depositCents } = bookingTotals({
+    packageCents: service.price_cents,
+    addOnsCents: 0,
+    vatPercent: settings.vat_percent,
+    fixedDepositCents: service.deposit_cents,
+    depositPercent: settings.default_deposit_percent,
+  });
 
   return (
     <>
@@ -119,6 +128,9 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
                 <dd className="font-heading text-2xl font-semibold">
                   {formatPeso(service.price_cents)}
                 </dd>
+                {settings.vat_percent > 0 && (
+                  <dd className="text-xs text-muted-foreground">+ {settings.vat_percent}% VAT</dd>
+                )}
               </div>
               <div className="rounded-2xl border bg-card p-4">
                 <dt className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -140,9 +152,18 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
               </p>
             )}
 
-            <Button asChild size="lg" className="mt-6 w-full sm:w-auto">
-              <Link href={bookHref(service.slug)}>Book now</Link>
-            </Button>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button asChild size="lg" className="w-full sm:w-auto">
+                <Link href={bookHref(service.slug)}>Book now</Link>
+              </Button>
+              <ShareButton
+                path={`/services/${service.slug}`}
+                title={service.name}
+                text={service.summary ?? `${service.name} at ${settings.business_name}`}
+                size="lg"
+                className="w-full sm:w-auto"
+              />
+            </div>
           </div>
         </div>
 
@@ -178,6 +199,17 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
           </div>
         )}
       </article>
+      <PackageCompare
+        packages={allServices.filter((s) => s.category === service.category)}
+        currentId={service.id}
+        categoryName={categoryLabel(service.category)}
+        vatPercent={settings.vat_percent}
+      />
+      <ReviewsSection
+        category={service.category}
+        title="Clients who booked this"
+        className="pt-0"
+      />
       <BookCta href={bookHref(service.slug)} />
     </>
   );

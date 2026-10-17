@@ -72,7 +72,7 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
       {services.map((service, index) => (
         <li
           key={service.id}
-          className="flex flex-col gap-4 rounded-2xl border bg-card p-3 sm:flex-row sm:items-center sm:p-4"
+          className="flex flex-col gap-4 rounded-2xl border bg-card p-3 transition-all duration-200 hover:border-terracotta/40 hover:shadow-md sm:flex-row sm:items-center sm:p-4"
         >
           <div className="flex min-w-0 flex-1 items-center gap-4">
             <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-24">

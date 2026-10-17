@@ -59,6 +59,7 @@ export const publicBookingSchema = z
     ...clientFields,
     ...shootFields,
     serviceId: z.uuid("Pick a package."),
+    addOnIds: z.array(z.uuid()).max(20),
     startAt: z.iso.datetime({ offset: true, message: "Pick a date and time." }),
     turnstileToken: z.string().max(4096),
     // Honeypot: hidden from people, filled in by bots.

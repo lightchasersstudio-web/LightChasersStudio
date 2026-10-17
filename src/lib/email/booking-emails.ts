@@ -1,5 +1,6 @@
 import {
   bookingSummaryText,
+  formatAddOns,
   formatBookingWhen,
   type BookingSummary,
 } from "@/lib/booking/booking-summary";
@@ -32,8 +33,10 @@ function layout(
   const rows: [string, string][] = [
     ["Reference", b.reference],
     ["Package", b.serviceName],
+    ...(b.addOns.length > 0 ? [["Add-ons", formatAddOns(b.addOns)!] as [string, string]] : []),
     ["When", formatBookingWhen(b.startAt, b.endAt)],
     ...(b.location ? [["Location", b.location] as [string, string]] : []),
+    ...(b.vatCents > 0 ? [["VAT included", formatPeso(b.vatCents)] as [string, string]] : []),
     ["Total", formatPeso(b.priceCents)],
     ["Paid", formatPeso(b.paidCents)],
     ["Balance", balance > 0 ? formatPeso(balance) : "Fully paid"],
@@ -90,6 +93,16 @@ export const bookingConfirmedEmail = (b: BookingSummary, siteUrl: string) =>
     `Your booking ${b.reference} is confirmed`,
     "You're booked!",
     "your booking is confirmed. We can't wait to see you.",
+  );
+
+/** After staff change a booking (time, package, add-ons, price or details). */
+export const bookingUpdatedEmail = (b: BookingSummary, siteUrl: string) =>
+  clientEmail(
+    b,
+    siteUrl,
+    `Your booking ${b.reference} was updated`,
+    "Your booking was updated",
+    "we've updated your booking. Here are the latest details.",
   );
 
 export const bookingClosedEmail = (

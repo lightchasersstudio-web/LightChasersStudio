@@ -1,6 +1,6 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-16. Phases 0–5 are on `main`; online payments and emails wait on the owner's PayMongo, Resend and Turnstile keys._
+_Last updated: 2026-10-17. Phases 0–5 are on `main`; online payments and emails wait on the owner's PayMongo, Resend and Turnstile keys._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -94,17 +94,48 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Admin pages load instantly:** each admin page shows its title right away and a skeleton while the admin check and data load (`src/components/admin/skeletons.tsx`). This removed the dev warning "uncached data during a navigation".
 - **Fixes:** "Book now" on a different package now replaces an earlier choice in the wizard (and the same for staff bookings from the calendar); a PayMongo payment that lands on a cancelled/declined/already-paid booking is kept and flagged for a refund check; online booking without PayMongo says "Online payment isn't available yet" instead of a security-check error.
 
+### 2026-10-17: merged `front-end-extras`, booking fixes
+
+- **Merged into `main`:** everything from `front-end-extras` / `payment-testing`: add-ons, 12% VAT (the studio is VAT-registered; set `vat_percent` to 0 in Settings to turn it off), stories, before/after, package compare, prep guide, draft save, share, unsaved-changes warning, and trial mode (`PAYMENTS_MOCK=true`, local testing only).
+- **One booking per time slot:** two clients can no longer book the same time. A slot that's booked, or being paid for, plus the buffer after it, disappears for everyone else, and the database refuses a second booking even when two people click at once. It can be changed back in Settings → "Shoots that can run at the same time".
+- **Back button in the booking form** now steps back through the steps (and keeps what was typed) instead of leaving for the home page.
+- **Fixed:** "Continue" on Shoot details could submit the booking and skip the Review step.
+- **Still to build** (plan: see the owner's approved plan):
+  - Phase 6: bookings table, clients list + history, privacy anonymise, activity log (editing/rescheduling is done).
+  - Phase 7: sitemap/robots, error pages, CSP/HSTS, accessibility/performance pass.
+  - Phase 8: production Supabase + domain.
+
+### 2026-10-17: booking management (branch `booking-management`)
+
+- **Edit any booking** that's waiting for approval or confirmed: Booking page → **Edit booking**. Staff can change the date and time (the booking's own slot counts as free), package, package price, add-ons (from the catalog or a custom extra with its own price), VAT on/off, client contact and shoot details. The total, paid-so-far and balance update live. The slot, opening hours and days off are checked again on save, and "Save anyway" allows outside-hours times. **"Email the client the updated booking"** is ticked by default (skipped if the client has no email). Completed, cancelled, declined and expired bookings can't be edited.
+- **Staff bookings can include add-ons** now (New booking form).
+- **History panel** on each booking: who changed what, and when (from the audit log).
+- **Permanent delete, owner only:** Booking page → Danger zone. The owner types the booking reference to confirm. Bookings with a real paid payment can't be deleted, only cancelled, so sales records stay true. Trial-mode payments don't count. The client is removed too if they have no other bookings.
+- **Monthly CSV for accounting:** Sales report → Download CSV (`/admin/reports/export?month=YYYY-MM`). One row per booking in that month with package, add-ons, before-VAT, VAT, total, paid, balance and payment method. (The Sales report charts themselves still show sample data.)
+- **Database:** migration `20261018000100_booking_management.sql` adds `admin_update_booking` and `delete_booking` (both service role only) and lets `admin_create_booking` take add-ons.
+
+## Managing data
+
+- **Two databases.** The dev project (`mkpjxrhjynbjuiovloiy`) is for testing and keeps all test bookings. The production project starts **empty** at go-live; never test there.
+- **Clean test data on dev:** `npm run data:clean-tests` removes everything the e2e tests create (`E2E Client…` bookings and their payments/clients, `E2E Package…`, `E2E photo…`, `E2E test…` days off) and resets rate-limit counters. `npm run data:clean-tests -- --all-bookings` also wipes **every** booking, payment and client on dev (only with the owner's OK). The script refuses to run against any project other than dev.
+- **Go-live copy:** `scripts/copy-catalog.mjs` copies packages, add-ons, opening hours, upcoming days off, portfolio, reviews, settings and their image files from dev to the new production project. It never copies bookings, payments or clients, and refuses a target that already has bookings. Run `npm run db:push` against production first, then `--dry-run`, then for real. **Not yet tested end to end** (needs the second project).
+- **Real bookings:** cancel, don't delete. Every change is in the booking's History.
+- **Backups:** turn on Supabase daily backups (and point-in-time recovery if the budget allows) on the production project before launch.
+- **Accounting:** download the month's CSV from the Sales report.
+- **Privacy requests (RA 10173):** handled later by an anonymise routine (Phase 6) that keeps the money records.
+
 ## How it's verified
 
-| Check                 | Command                                                         | Last result                                                |
-| --------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- |
-| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build) | ✅ passing, 85 unit tests                                  |
-| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                   | ✅ 21 passing against the dev project                      |
-| Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                   | ✅ passing on desktop and phone (Pixel 7), touch included  |
-| Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)   | ✅ passing, includes public-page refresh after edits       |
-| Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`             | ✅ wizard up to payment; staff booking, share, pay, cancel |
+| Check                 | Command                                                                           | Last result                                                |
+| --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 109 unit tests                                 |
+| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ 32 passing against the dev project                      |
+| Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                                     | ✅ passing on desktop and phone (Pixel 7), touch included  |
+| Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)                     | ✅ passing, includes public-page refresh after edits       |
+| Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`                               | ✅ wizard up to payment; staff booking, share, pay, cancel |
+| Booking edit/delete   | `e2e/admin-booking-edit.spec.ts` (admin + `E2E_OWNER_EMAIL`/`E2E_OWNER_PASSWORD`) | ✅ edit time/package/add-ons/VAT; owner delete             |
 
-The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **temporary** admin account, delete it afterwards, and never use the owner account. The tests clean up what they create: services named `E2E Package…`, photos with alt text `E2E photo…` and blackouts with reason `E2E test…`. Booking tests leave cancelled bookings named `E2E Client…`; delete those (and their payments and clients) after a run.
+The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **temporary** admin account, delete it afterwards, and never use the owner account. The tests clean up what they create: services named `E2E Package…`, photos with alt text `E2E photo…` and blackouts with reason `E2E test…`. Booking tests leave cancelled bookings named `E2E Client…`; run `npm run data:clean-tests` after a run.
 
 On this machine a full parallel e2e run is sometimes flaky under load (an admin sign-in or the hero swipe test timing out); those tests pass when rerun on their own.
 
@@ -162,4 +193,4 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 
 Add each key in Vercel (then redeploy) and in `.env.local`. `docs/SETUP.md` has the local details.
 
-**Phase 6:** dashboard stats, searchable bookings table, clients list with history, rescheduling, and the privacy anonymisation routine.
+**Phase 6:** searchable bookings table, clients list with history, and the privacy anonymisation routine. (Editing/rescheduling, history and owner delete are done.)

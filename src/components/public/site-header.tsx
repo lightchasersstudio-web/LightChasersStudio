@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BrandLogo } from "@/components/public/brand-logo";
+import { HeaderFrame } from "@/components/public/header-frame";
 import { MobileNav } from "@/components/public/mobile-nav";
 import { NavLinks } from "@/components/public/nav-links";
 import { BOOK_HREF } from "@/components/public/site-nav";
@@ -12,7 +13,7 @@ export async function SiteHeader() {
   const settings = await getPublicSettings();
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur-md">
+    <HeaderFrame>
       <a
         href="#main"
         className="sr-only rounded-full bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
@@ -42,6 +43,6 @@ export async function SiteHeader() {
         </Button>
         <MobileNav businessName={settings.business_name} />
       </nav>
-    </header>
+    </HeaderFrame>
   );
 }

@@ -61,7 +61,7 @@ export default async function AboutPage() {
                 className="mt-24 w-3/5 rotate-6 justify-self-end [grid-area:stack]"
               />
             )}
-            <Sparkle className="absolute -top-2 right-6 size-6 text-terracotta" />
+            <Sparkle className="absolute -top-2 right-6 size-6 animate-twinkle text-terracotta" />
           </div>
         </div>
       </section>
@@ -77,8 +77,11 @@ export default async function AboutPage() {
           {SERVICE_CATEGORIES.map(({ value, label }) => {
             const Icon = CATEGORY_ICONS[value];
             return (
-              <li key={value} className="flex items-center gap-4 rounded-3xl border bg-card p-5">
-                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground">
+              <li
+                key={value}
+                className="group flex items-center gap-4 rounded-3xl border bg-card p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-terracotta/40 hover:shadow-md"
+              >
+                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
                   <Icon className="size-5" aria-hidden />
                 </span>
                 <span className="font-heading text-xl font-semibold">{label}</span>

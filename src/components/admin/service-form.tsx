@@ -9,6 +9,7 @@ import type { z } from "zod";
 import { handleResult } from "@/components/admin/form-utils";
 import { SelectField, SwitchField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { ImageUploadField } from "@/components/admin/image-upload-field";
+import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -54,6 +55,7 @@ export function ServiceForm({ service }: { service?: Service }) {
         },
   });
   const { control } = form;
+  useUnsavedChangesWarning(form.formState.isDirty);
   const depositMode = useWatch({ control, name: "depositMode" });
 
   async function onSubmit() {

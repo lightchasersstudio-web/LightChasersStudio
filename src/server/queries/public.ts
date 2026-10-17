@@ -29,6 +29,7 @@ export type PublicSettings = Pick<
   | "instagram_url"
   | "tiktok_url"
   | "default_deposit_percent"
+  | "vat_percent"
   | "hold_minutes"
   | "max_advance_days"
 >;
@@ -40,7 +41,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   const { data, error } = await createPublicClient()
     .from("business_settings")
     .select(
-      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent, hold_minutes, max_advance_days",
+      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent, vat_percent, hold_minutes, max_advance_days",
     )
     .single();
   if (error) throw error;
@@ -100,6 +101,43 @@ export async function listFeaturedPhotos(limit: number): Promise<PublicPhoto[]> 
     .eq("is_featured", true)
     .order("sort_order")
     .limit(limit);
+  if (error) throw error;
+  return data;
+}
+
+export type PublicReview = Pick<
+  Tables<"reviews">,
+  "id" | "name" | "category" | "shoot" | "quote" | "rating"
+>;
+
+/** Published client reviews, in the order the admin set. */
+export async function listPublishedReviews(): Promise<PublicReview[]> {
+  "use cache";
+  cacheTag(TAGS.reviews);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("reviews")
+    .select("id, name, category, shoot, quote, rating")
+    .eq("is_published", true)
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
+export type PublicAddOn = Pick<Tables<"add_ons">, "id" | "name" | "description" | "price_cents">;
+
+/** Extras clients can add when booking, in the order the admin set. */
+export async function listActiveAddOns(): Promise<PublicAddOn[]> {
+  "use cache";
+  cacheTag(TAGS.addOns);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("add_ons")
+    .select("id, name, description, price_cents")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("created_at");
   if (error) throw error;
   return data;
 }

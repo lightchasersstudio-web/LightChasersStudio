@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      add_ons: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          price_cents: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          price_cents: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          price_cents?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       admin_profiles: {
         Row: {
           created_at: string
@@ -110,6 +143,48 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_add_ons: {
+        Row: {
+          add_on_id: string | null
+          booking_id: string
+          created_at: string
+          id: string
+          name: string
+          price_cents: number
+        }
+        Insert: {
+          add_on_id?: string | null
+          booking_id: string
+          created_at?: string
+          id?: string
+          name: string
+          price_cents: number
+        }
+        Update: {
+          add_on_id?: string | null
+          booking_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          price_cents?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_add_ons_add_on_id_fkey"
+            columns: ["add_on_id"]
+            isOneToOne: false
+            referencedRelation: "add_ons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_add_ons_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           admin_notes: string | null
@@ -135,6 +210,7 @@ export type Database = {
           start_at: string
           status: Database["public"]["Enums"]["booking_status"]
           updated_at: string
+          vat_cents: number
         }
         Insert: {
           admin_notes?: string | null
@@ -160,6 +236,7 @@ export type Database = {
           start_at: string
           status?: Database["public"]["Enums"]["booking_status"]
           updated_at?: string
+          vat_cents?: number
         }
         Update: {
           admin_notes?: string | null
@@ -185,6 +262,7 @@ export type Database = {
           start_at?: string
           status?: Database["public"]["Enums"]["booking_status"]
           updated_at?: string
+          vat_cents?: number
         }
         Relationships: [
           {
@@ -227,6 +305,7 @@ export type Database = {
           tiktok_url: string | null
           timezone: string
           updated_at: string
+          vat_percent: number
         }
         Insert: {
           about?: string | null
@@ -251,6 +330,7 @@ export type Database = {
           tiktok_url?: string | null
           timezone?: string
           updated_at?: string
+          vat_percent?: number
         }
         Update: {
           about?: string | null
@@ -275,6 +355,7 @@ export type Database = {
           tiktok_url?: string | null
           timezone?: string
           updated_at?: string
+          vat_percent?: number
         }
         Relationships: []
       }
@@ -468,6 +549,45 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          category: Database["public"]["Enums"]["service_category"]
+          created_at: string
+          id: string
+          is_published: boolean
+          name: string
+          quote: string
+          rating: number | null
+          shoot: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["service_category"]
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          name: string
+          quote: string
+          rating?: number | null
+          shoot: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["service_category"]
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          name?: string
+          quote?: string
+          rating?: number | null
+          shoot?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       services: {
         Row: {
           category: Database["public"]["Enums"]["service_category"]
@@ -529,6 +649,7 @@ export type Database = {
     Functions: {
       admin_create_booking: {
         Args: {
+          p_add_ons?: Json
           p_admin_id: string
           p_allow_outside_hours: boolean
           p_email: string
@@ -551,12 +672,44 @@ export type Database = {
           reference_code: string
         }[]
       }
+      admin_update_booking: {
+        Args: {
+          p_add_ons: Json
+          p_allow_outside_hours: boolean
+          p_booking_id: string
+          p_charge_vat: boolean
+          p_contact_name: string
+          p_contact_phone: string
+          p_location: string
+          p_messenger: string
+          p_package_cents: number
+          p_participants: number
+          p_preferred_contact: Database["public"]["Enums"]["contact_method"]
+          p_service_id: string
+          p_special_requests: string
+          p_start_at: string
+        }
+        Returns: {
+          booking_id: string
+          reference_code: string
+        }[]
+      }
+      apply_booking_pricing: {
+        Args: {
+          p_add_ons: Json
+          p_booking_id: string
+          p_charge_vat: boolean
+          p_package_cents: number
+        }
+        Returns: undefined
+      }
       assert_capacity: {
         Args: { p_blocked_until: string; p_exclude?: string; p_start: string }
         Returns: undefined
       }
       create_booking: {
         Args: {
+          p_add_on_ids?: string[]
           p_consent_version: string
           p_email: string
           p_full_name: string
@@ -575,6 +728,13 @@ export type Database = {
           hold_expires_at: string
           reference_code: string
           status: Database["public"]["Enums"]["booking_status"]
+        }[]
+      }
+      delete_booking: {
+        Args: { p_booking_id: string }
+        Returns: {
+          contact_name: string
+          reference_code: string
         }[]
       }
       expire_stale_holds: { Args: never; Returns: number }
