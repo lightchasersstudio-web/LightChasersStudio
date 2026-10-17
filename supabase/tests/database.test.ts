@@ -231,8 +231,15 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
 
         await c.query("reset role");
         await actAs(c, "authenticated", adminId);
-        expect((await c.query("select id from public.bookings")).rows).toHaveLength(1);
-        expect((await c.query("select id from public.clients")).rows).toHaveLength(1);
+        // Scoped to this test's rows: the shared dev DB also holds real bookings.
+        const own = await c.query("select id from public.bookings where service_id = $1", [
+          s.portrait,
+        ]);
+        expect(own.rows).toHaveLength(1);
+        const client = await c.query(
+          "select id from public.clients where email = 'ana@example.com'",
+        );
+        expect(client.rows).toHaveLength(1);
       });
     });
 
@@ -485,7 +492,10 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           "select full_name, email from public.clients where email = 'ana@example.com'",
         );
         expect(clients.rows).toEqual([{ full_name: "Ana Cruz", email: "ana@example.com" }]);
-        const names = await c.query("select contact_name from public.bookings order by start_at");
+        const names = await c.query(
+          "select contact_name from public.bookings where service_id = $1 order by start_at",
+          [s.portrait],
+        );
         expect(names.rows.map((r) => r.contact_name)).toEqual(["Ana Cruz", "Impostor"]);
       });
     });

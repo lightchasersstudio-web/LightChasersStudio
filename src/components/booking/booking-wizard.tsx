@@ -174,10 +174,37 @@ export function BookingWizard({
   );
   const onToken = useCallback((token: string) => form.setValue("turnstileToken", token), [form]);
 
+  // Each step forward gets its own browser-history entry, so the browser's Back
+  // button (or a phone's back swipe) steps back through the wizard instead of
+  // leaving the page. Moving back in the page goes through history too, keeping
+  // history and step in line; popstate then shows the step.
   function goTo(to: number) {
-    setDirection(to < step ? -1 : 1);
+    if (to === step) return;
+    if (to < step) {
+      window.history.go(to - step);
+      return;
+    }
+    for (let s = step + 1; s <= to; s++) {
+      window.history.pushState({ ...window.history.state, wizardStep: s }, "");
+    }
+    setDirection(1);
     setStep(to);
   }
+  // After a reload the wizard restarts at step 1: make this history entry match.
+  useEffect(() => {
+    if (window.history.state?.wizardStep) {
+      window.history.replaceState({ ...window.history.state, wizardStep: 0 }, "");
+    }
+  }, []);
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const to = (e.state as { wizardStep?: number } | null)?.wizardStep ?? 0;
+      setDirection(to < step ? -1 : 1);
+      setStep(to);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [step]);
   // Move focus to the new step's heading so screen readers announce it (not on first load).
   const firstRender = useRef(true);
   useEffect(() => {
