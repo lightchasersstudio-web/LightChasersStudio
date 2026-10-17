@@ -29,6 +29,7 @@ export type PublicSettings = Pick<
   | "instagram_url"
   | "tiktok_url"
   | "default_deposit_percent"
+  | "vat_percent"
   | "hold_minutes"
   | "max_advance_days"
 >;
@@ -40,7 +41,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   const { data, error } = await createPublicClient()
     .from("business_settings")
     .select(
-      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent, hold_minutes, max_advance_days",
+      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent, vat_percent, hold_minutes, max_advance_days",
     )
     .single();
   if (error) throw error;

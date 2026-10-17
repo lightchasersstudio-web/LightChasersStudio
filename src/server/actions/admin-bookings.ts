@@ -10,6 +10,7 @@ import {
   adminNotesSchema,
   bookingIdSchema,
   bookingStatusSchema,
+  bookingVatSchema,
   recordPaymentSchema,
 } from "@/lib/validations/admin-booking";
 import { CONSENT_VERSION } from "@/lib/validations/booking";
@@ -142,6 +143,45 @@ export async function recordPayment(input: unknown): Promise<ActionResult> {
     await audit(ctx, "payment.record", "booking", v.bookingId, {
       provider: v.provider,
       amount_cents: v.amountCents,
+    });
+    revalidate(TAGS.bookings);
+    return ok(undefined);
+  });
+}
+
+/**
+ * Adds or waives VAT on one booking. VAT is worked out from the price before VAT
+ * at the studio's current rate; the total (and so the balance) changes, while
+ * payments already made and the deposit stay as they are.
+ */
+export async function setBookingVat(input: unknown): Promise<ActionResult> {
+  return adminAction(bookingVatSchema, input, async ({ id, chargeVat }, ctx) => {
+    const [{ data: booking, error }, { data: settings, error: settingsError }] = await Promise.all([
+      ctx.supabase.from("bookings").select("price_cents, vat_cents").eq("id", id).maybeSingle(),
+      ctx.supabase.from("business_settings").select("vat_percent").single(),
+    ]);
+    if (error) throw error;
+    if (settingsError) throw settingsError;
+    if (!booking) return fail("Booking not found.");
+
+    const beforeVat = booking.price_cents - booking.vat_cents;
+    const vat = chargeVat ? Math.round((beforeVat * settings.vat_percent) / 100) : 0;
+    const { data, error: updateError } = await ctx.supabase
+      .from("bookings")
+      .update({ price_cents: beforeVat + vat, vat_cents: vat })
+      .eq("id", id)
+      .eq("vat_cents", booking.vat_cents) // someone else changed it meanwhile: don't double up
+      .select("id")
+      .maybeSingle();
+    if (updateError?.code === PG.check) {
+      return fail("The total can't go below the deposit for this booking.");
+    }
+    if (updateError) throw updateError;
+    if (!data) return fail("This booking just changed. Refresh and try again.");
+
+    await audit(ctx, chargeVat ? "booking.vat_add" : "booking.vat_remove", "booking", id, {
+      vat_cents: vat,
+      previous_vat_cents: booking.vat_cents,
     });
     revalidate(TAGS.bookings);
     return ok(undefined);

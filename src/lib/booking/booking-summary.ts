@@ -14,6 +14,8 @@ export type BookingSummary = {
   endAt: string;
   location: string | null;
   priceCents: number;
+  /** VAT included in priceCents (0 when none was charged). */
+  vatCents: number;
   paidCents: number;
   contactName: string;
   studioName: string;
@@ -45,7 +47,7 @@ export function bookingSummaryText(b: BookingSummary): string {
     b.addOns.length > 0 && `Add-ons: ${formatAddOns(b.addOns)}`,
     `When: ${formatBookingWhen(b.startAt, b.endAt)}`,
     b.location && `Location: ${b.location}`,
-    `Total: ${formatPeso(b.priceCents)}`,
+    `Total: ${formatPeso(b.priceCents)}${b.vatCents > 0 ? ` (incl. ${formatPeso(b.vatCents)} VAT)` : ""}`,
     `Paid: ${formatPeso(b.paidCents)}`,
     balance > 0 ? `Balance: ${formatPeso(balance)}` : "Fully paid",
     [b.studioPhone, b.studioEmail].filter(Boolean).join(" · ") &&

@@ -19,7 +19,7 @@ export type FaqGroup = { title: string; items: FaqItem[] };
 
 type Settings = Pick<
   PublicSettings,
-  "default_deposit_percent" | "hold_minutes" | "max_advance_days" | "city"
+  "default_deposit_percent" | "vat_percent" | "hold_minutes" | "max_advance_days" | "city"
 >;
 
 export function faqGroups(s: Settings): FaqGroup[] {
@@ -59,8 +59,16 @@ export function faqGroups(s: Settings): FaqGroup[] {
       items: [
         {
           question: "How much is the deposit?",
-          answer: `Each package shows its deposit before you pay. Usually it's ${s.default_deposit_percent}% of the package price, and the rest is paid to us separately.`,
+          answer: `Each booking shows its deposit before you pay. Usually it's ${s.default_deposit_percent}% of your total${s.vat_percent > 0 ? " (package, any add-ons and VAT)" : ""}, and the rest is paid to us separately.`,
         },
+        ...(s.vat_percent > 0
+          ? [
+              {
+                question: "Do your prices include VAT?",
+                answer: `Package and add-on prices are shown before VAT. ${s.vat_percent}% VAT is added to your total when you book, and you'll see the full breakdown before you pay.`,
+              },
+            ]
+          : []),
         {
           question: "How can I pay?",
           answer:
@@ -98,8 +106,9 @@ export function faqGroups(s: Settings): FaqGroup[] {
         },
         {
           question: "What should we wear?",
-          answer: "Write your styling tips here, or say you'll send a guide after booking.",
-          draft: true,
+          answer:
+            "Comfortable, well-fitting outfits in two or three colours that go together work best. Solid colours and small textures photograph better than big logos or busy prints. Our preparation guide has more tips on outfits, what to bring and the day itself.",
+          link: { href: "/prepare", label: "How to prepare for your shoot" },
         },
       ],
     },

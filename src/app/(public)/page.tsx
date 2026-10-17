@@ -1,11 +1,13 @@
 import { ArrowRightIcon, CalendarCheckIcon, CameraIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 
+import { BeforeAfterSection } from "@/components/public/before-after-section";
 import { BookCta } from "@/components/public/book-cta";
 import { BrandLogo } from "@/components/public/brand-logo";
 import { CATEGORY_ICONS } from "@/components/public/category-icons";
 import { HeroDeck } from "@/components/public/hero-deck";
 import { PhotoPolaroid } from "@/components/public/photo-polaroid";
+import { PhotoStories, type Story } from "@/components/public/photo-stories";
 import { ReviewsSection } from "@/components/public/reviews-section";
 import { SectionHeading } from "@/components/public/section-heading";
 import { ServiceCard } from "@/components/public/service-card";
@@ -14,8 +16,14 @@ import { Reveal, RevealItem, RevealList } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { SERVICE_CATEGORIES } from "@/lib/catalog";
+import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
-import { getPublicSettings, listActiveServices, listFeaturedPhotos } from "@/server/queries/public";
+import {
+  getPublicSettings,
+  listActiveServices,
+  listFeaturedPhotos,
+  listPortfolio,
+} from "@/server/queries/public";
 
 const HOW_IT_WORKS = [
   {
@@ -36,11 +44,32 @@ const HOW_IT_WORKS = [
 ];
 
 export default async function HomePage() {
-  const [settings, services, featured] = await Promise.all([
+  const [settings, services, featured, portfolio] = await Promise.all([
     getPublicSettings(),
     listActiveServices(),
     listFeaturedPhotos(9),
+    listPortfolio(),
   ]);
+  // One highlight reel per kind of shoot, newest-first up to 8 photos each.
+  const stories: Story[] = SERVICE_CATEGORIES.flatMap(({ value, label }) => {
+    const photos = portfolio.filter((p) => p.category === value).slice(0, 8);
+    return photos.length
+      ? [
+          {
+            id: value,
+            label,
+            href: `/services#${value}`,
+            photos: photos.map((p) => ({
+              id: p.id,
+              src: publicImageUrl("portfolio", p.storage_path),
+              alt: p.alt_text,
+              caption: p.caption,
+              blur: p.blur_data_url,
+            })),
+          },
+        ]
+      : [];
+  });
   const heroPhotos = featured.slice(0, 3);
   // One card per category (Versa Space is the studio rental one). A category without
   // packages shows "Coming soon" if flagged, otherwise points to the contact page.
@@ -93,6 +122,16 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Highlight reels */}
+      {stories.length > 0 && (
+        <section aria-labelledby="stories" className="mx-auto max-w-6xl px-4 pt-12 sm:px-6">
+          <h2 id="stories" className="mb-4 text-center font-script text-2xl text-terracotta-ink">
+            tap to watch our highlights
+          </h2>
+          <PhotoStories stories={stories} />
+        </section>
+      )}
 
       {/* What we shoot */}
       <section aria-labelledby="what-we-shoot" className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
@@ -172,6 +211,8 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      <BeforeAfterSection samplePhoto={featured[0]} />
 
       {/* Services */}
       {services.length > 0 && (

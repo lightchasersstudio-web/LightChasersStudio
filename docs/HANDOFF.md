@@ -94,6 +94,17 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Admin pages load instantly:** each admin page shows its title right away and a skeleton while the admin check and data load (`src/components/admin/skeletons.tsx`). This removed the dev warning "uncached data during a navigation".
 - **Fixes:** "Book now" on a different package now replaces an earlier choice in the wizard (and the same for staff bookings from the calendar); a PayMongo payment that lands on a cancelled/declined/already-paid booking is kept and flagged for a refund check; online booking without PayMongo says "Online payment isn't available yet" instead of a security-check error.
 
+### 2026-10-17: merged `front-end-extras`, booking fixes
+
+- **Merged into `main`:** everything from `front-end-extras` / `payment-testing`: add-ons, 12% VAT (the studio is VAT-registered; set `vat_percent` to 0 in Settings to turn it off), stories, before/after, package compare, prep guide, draft save, share, unsaved-changes warning, and trial mode (`PAYMENTS_MOCK=true`, local testing only).
+- **One booking per time slot:** two clients can no longer book the same time. A slot that's booked, or being paid for, plus the buffer after it, disappears for everyone else, and the database refuses a second booking even when two people click at once. It can be changed back in Settings → "Shoots that can run at the same time".
+- **Back button in the booking form** now steps back through the steps (and keeps what was typed) instead of leaving for the home page.
+- **Fixed:** "Continue" on Shoot details could submit the booking and skip the Review step.
+- **Still to build** (plan: see the owner's approved plan):
+  - Phase 6: bookings table, clients list + history, reschedule, privacy anonymise, activity log.
+  - Phase 7: sitemap/robots, error pages, CSP/HSTS, accessibility/performance pass.
+  - Phase 8: production Supabase + domain.
+
 ## How it's verified
 
 | Check                 | Command                                                         | Last result                                                |

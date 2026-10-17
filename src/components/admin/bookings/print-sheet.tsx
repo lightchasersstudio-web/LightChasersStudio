@@ -77,7 +77,9 @@ export function PrintSheet({
             <tr className="border-b">
               <td className="py-1">{b.serviceName}</td>
               <td className="py-1 text-right">
-                {formatPeso(b.price_cents - s.addOns.reduce((sum, a) => sum + a.priceCents, 0))}
+                {formatPeso(
+                  b.price_cents - s.vatCents - s.addOns.reduce((sum, a) => sum + a.priceCents, 0),
+                )}
               </td>
             </tr>
             {s.addOns.map((a) => (
@@ -86,6 +88,12 @@ export function PrintSheet({
                 <td className="py-1 text-right">{formatPeso(a.priceCents)}</td>
               </tr>
             ))}
+            {s.vatCents > 0 && (
+              <tr className="border-b">
+                <td className="py-1">VAT</td>
+                <td className="py-1 text-right">{formatPeso(s.vatCents)}</td>
+              </tr>
+            )}
             <tr className="border-b font-semibold">
               <td className="py-1">Total</td>
               <td className="py-1 text-right">{formatPeso(b.price_cents)}</td>

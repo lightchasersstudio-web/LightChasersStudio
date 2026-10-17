@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -64,7 +65,13 @@ export function BookingLookup({
           />
         )}
         <p className="text-center text-sm text-muted-foreground">
-          Tip: screenshot this card to keep it handy.
+          Tip: screenshot this card to keep it handy.{" "}
+          <Link
+            href="/prepare"
+            className="font-semibold text-terracotta-ink underline-offset-4 hover:underline"
+          >
+            How to prepare for your shoot
+          </Link>
         </p>
       </div>
     );

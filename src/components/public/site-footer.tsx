@@ -52,6 +52,14 @@ export async function SiteFooter() {
                 </Link>
               </li>
             ))}
+            <li>
+              <Link
+                href="/prepare"
+                className="inline-flex min-h-10 items-center text-panel-foreground/85 hover:text-panel-foreground hover:underline"
+              >
+                Preparing for your shoot
+              </Link>
+            </li>
           </ul>
         </nav>
 

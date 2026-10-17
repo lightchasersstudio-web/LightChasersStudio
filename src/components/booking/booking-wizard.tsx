@@ -14,12 +14,14 @@ import type { z } from "zod";
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { rememberBooking } from "@/components/booking/add-to-calendar";
+import { clearDraft, loadDraft, saveDraft } from "@/components/booking/booking-draft";
 import { BookingSummaryPanel } from "@/components/booking/booking-summary-panel";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { Turnstile } from "@/components/booking/turnstile";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { formatBookingWhen } from "@/lib/booking/booking-summary";
+import { bookingTotals } from "@/lib/booking/pricing";
 import { categoryLabel } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
@@ -66,6 +68,7 @@ export function BookingWizard({
   initialServiceId,
   businessName,
   depositPercent,
+  vatPercent,
   holdMinutes,
   maxAdvanceDays,
 }: {
@@ -74,6 +77,7 @@ export function BookingWizard({
   initialServiceId: string | null;
   businessName: string;
   depositPercent: number;
+  vatPercent: number;
   holdMinutes: number;
   maxAdvanceDays: number;
 }) {
@@ -85,25 +89,61 @@ export function BookingWizard({
   const router = useRouter();
   const heading = useRef<HTMLHeadingElement>(null);
 
+  const emptyValues = (): Values => ({
+    fullName: "",
+    email: "",
+    phone: "",
+    preferredContact: "email",
+    messenger: "",
+    consent: false as unknown as true,
+    serviceId: initialServiceId ?? "",
+    addOnIds: [],
+    startAt: "",
+    location: "",
+    participants: "1",
+    specialRequests: "",
+    turnstileToken: "",
+    website: "",
+  });
   const form = useForm<Values, unknown, Output>({
     resolver: zodResolver(publicBookingSchema),
-    defaultValues: {
-      fullName: "",
-      email: "",
-      phone: "",
-      preferredContact: "email",
-      messenger: "",
-      consent: false as unknown as true,
-      serviceId: initialServiceId ?? "",
-      addOnIds: [],
-      startAt: "",
-      location: "",
-      participants: "1",
-      specialRequests: "",
-      turnstileToken: "",
-      website: "",
-    },
+    defaultValues: emptyValues(),
   });
+
+  // Bring back what they typed last time (this browser only), then keep it saved as they go.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    const draft = loadDraft();
+    if (!draft) return;
+    form.reset({
+      ...form.getValues(),
+      ...draft,
+      // A package picked with "Book now" wins over the one saved last time.
+      serviceId:
+        initialServiceId ??
+        (services.some((s) => s.id === draft.serviceId) ? (draft.serviceId ?? "") : ""),
+      addOnIds: (draft.addOnIds ?? []).filter((id) => addOns.some((a) => a.id === id)),
+    });
+    // Browser storage can only be read after hydration, so this can't be initial state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRestored(true);
+    // Once, on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const allValues = useWatch({ control: form.control });
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveDraft(allValues as Partial<Values>);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [allValues]);
+
+  function startOver() {
+    clearDraft();
+    form.reset(emptyValues());
+    setRestored(false);
+    goTo(0);
+  }
   const [serviceId, startAt, preferredContact, addOnIds, location] = useWatch({
     control: form.control,
     name: ["serviceId", "startAt", "preferredContact", "addOnIds", "location"],
@@ -111,12 +151,15 @@ export function BookingWizard({
   const service = services.find((s) => s.id === serviceId);
   const chosenAddOns = addOns.filter((a) => addOnIds.includes(a.id));
   // Mirrors create_booking, which recomputes both on the server.
-  const total = service
-    ? service.price_cents + chosenAddOns.reduce((sum, a) => sum + a.price_cents, 0)
-    : 0;
-  const deposit = service
-    ? (service.deposit_cents ?? Math.round((total * depositPercent) / 100))
-    : 0;
+  const { subtotal, vat, total, deposit } = service
+    ? bookingTotals({
+        packageCents: service.price_cents,
+        addOnsCents: chosenAddOns.reduce((sum, a) => sum + a.price_cents, 0),
+        vatPercent,
+        fixedDepositCents: service.deposit_cents,
+        depositPercent,
+      })
+    : { subtotal: 0, vat: 0, total: 0, deposit: 0 };
   const endAt =
     service && startAt
       ? new Date(new Date(startAt).getTime() + service.duration_minutes * 60_000).toISOString()
@@ -131,10 +174,37 @@ export function BookingWizard({
   );
   const onToken = useCallback((token: string) => form.setValue("turnstileToken", token), [form]);
 
+  // Each step forward gets its own browser-history entry, so the browser's Back
+  // button (or a phone's back swipe) steps back through the wizard instead of
+  // leaving the page. Moving back in the page goes through history too, keeping
+  // history and step in line; popstate then shows the step.
   function goTo(to: number) {
-    setDirection(to < step ? -1 : 1);
+    if (to === step) return;
+    if (to < step) {
+      window.history.go(to - step);
+      return;
+    }
+    for (let s = step + 1; s <= to; s++) {
+      window.history.pushState({ ...window.history.state, wizardStep: s }, "");
+    }
+    setDirection(1);
     setStep(to);
   }
+  // After a reload the wizard restarts at step 1: make this history entry match.
+  useEffect(() => {
+    if (window.history.state?.wizardStep) {
+      window.history.replaceState({ ...window.history.state, wizardStep: 0 }, "");
+    }
+  }, []);
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const to = (e.state as { wizardStep?: number } | null)?.wizardStep ?? 0;
+      setDirection(to < step ? -1 : 1);
+      setStep(to);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [step]);
   // Move focus to the new step's heading so screen readers announce it (not on first load).
   const firstRender = useRef(true);
   useEffect(() => {
@@ -160,6 +230,7 @@ export function BookingWizard({
       // Send the raw form strings: the server re-validates with the same schema.
       const result = await submitBooking(form.getValues());
       if (result.ok) {
+        clearDraft();
         if (service && endAt) {
           rememberBooking({
             reference: result.data.reference,
@@ -205,6 +276,20 @@ export function BookingWizard({
               {STEPS[step]!.title}
             </h2>
           </div>
+
+          {restored && step === 0 && (
+            <div
+              role="status"
+              className="flex animate-in flex-wrap items-center justify-between gap-3 rounded-2xl border border-sage bg-secondary px-4 py-3 text-sm text-secondary-foreground duration-300 fade-in"
+            >
+              <span>
+                <strong>Welcome back!</strong> We kept the details you entered last time.
+              </span>
+              <Button type="button" variant="link" className="h-auto px-0" onClick={startOver}>
+                Start over
+              </Button>
+            </div>
+          )}
 
           {/* Honeypot: hidden from people and screen readers; bots fill it in. */}
           <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
@@ -352,6 +437,11 @@ export function BookingWizard({
                             );
                           })}
                         </div>
+                        {vatPercent > 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            Prices are before {vatPercent}% VAT, which is added at checkout.
+                          </p>
+                        )}
                         {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
                       </Field>
                     )}
@@ -512,9 +602,21 @@ export function BookingWizard({
                           <span className="font-bold">+ {formatPeso(a.price_cents)}</span>
                         </div>
                       ))}
-                      {chosenAddOns.length > 0 && (
+                      {vat > 0 && chosenAddOns.length > 0 && (
                         <div className="mt-2 flex justify-between gap-4 border-t border-accent-foreground/20 pt-2">
-                          <span>Total</span>
+                          <span>Subtotal</span>
+                          <span className="font-bold">{formatPeso(subtotal)}</span>
+                        </div>
+                      )}
+                      {vat > 0 && (
+                        <div className="mt-1 flex justify-between gap-4">
+                          <span>VAT ({vatPercent}%)</span>
+                          <span className="font-bold">+ {formatPeso(vat)}</span>
+                        </div>
+                      )}
+                      {(vat > 0 || chosenAddOns.length > 0) && (
+                        <div className="mt-2 flex justify-between gap-4 border-t border-accent-foreground/20 pt-2">
+                          <span className="font-semibold">Total</span>
                           <span className="font-bold">{formatPeso(total)}</span>
                         </div>
                       )}
@@ -526,6 +628,12 @@ export function BookingWizard({
                               {formatPeso(deposit)}
                             </span>
                           </div>
+                          {total > deposit && (
+                            <div className="mt-1 flex justify-between gap-4 text-sm">
+                              <span>Balance, paid later</span>
+                              <span>{formatPeso(total - deposit)}</span>
+                            </div>
+                          )}
                           <p className="mt-3 text-sm">
                             We hold this time for {holdMinutes} minutes while you pay securely with
                             PayMongo (GCash, card and more).
@@ -547,6 +655,8 @@ export function BookingWizard({
           addOns={chosenAddOns}
           startAt={startAt || null}
           endAt={endAt}
+          vat={vat}
+          vatPercent={vatPercent}
           total={total}
           deposit={deposit}
           step={step}
@@ -569,12 +679,14 @@ export function BookingWizard({
           <span />
         )}
         {last ? (
-          <Button type="submit" size="lg" disabled={submitting}>
+          // Distinct keys: React must not turn the clicked "Continue" button into this
+          // submit button mid-click, or the form submits and skips the Review step.
+          <Button key="submit" type="submit" size="lg" disabled={submitting}>
             {submitting && <Loader2Icon className="animate-spin" aria-hidden />}
             {deposit > 0 ? `Pay ${formatPeso(deposit)} deposit` : "Request booking"}
           </Button>
         ) : (
-          <Button type="button" size="lg" onClick={next}>
+          <Button key="continue" type="button" size="lg" onClick={next}>
             Continue
             <ArrowRightIcon aria-hidden />
           </Button>

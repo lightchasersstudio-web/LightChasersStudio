@@ -10,6 +10,7 @@ const booking: BookingSummary = {
   endAt: "2026-11-03T06:00:00.000Z",
   location: "Studio",
   priceCents: 350000,
+  vatCents: 0,
   paidCents: 105000,
   contactName: "Ana Cruz",
   studioName: "Light Chasers Studio",

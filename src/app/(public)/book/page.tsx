@@ -73,6 +73,7 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
       initialServiceId={initial?.id ?? null}
       businessName={settings.business_name}
       depositPercent={settings.default_deposit_percent}
+      vatPercent={settings.vat_percent}
       holdMinutes={settings.hold_minutes}
       maxAdvanceDays={settings.max_advance_days}
     />

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { BookingVat } from "@/components/admin/bookings/booking-vat";
 import { ContactActions } from "@/components/admin/bookings/contact-actions";
 import { PrintSheet } from "@/components/admin/bookings/print-sheet";
 import { AdminNotesForm, RecordPaymentForm } from "@/components/admin/bookings/record-payment-form";
@@ -180,6 +181,15 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
               ) : (
                 <p className="text-sm text-muted-foreground">No payments yet.</p>
               )}
+              <BookingVat
+                // Remount after a change so the switch shows the saved state.
+                key={b.vat_cents}
+                bookingId={b.id}
+                vatCents={b.vat_cents}
+                beforeVatCents={b.price_cents - b.vat_cents}
+                vatPercent={b.vatPercent}
+                disabled={["cancelled", "declined", "expired"].includes(b.status)}
+              />
               {balance > 0 && b.status !== "cancelled" && b.status !== "declined" && (
                 <RecordPaymentForm bookingId={b.id} />
               )}

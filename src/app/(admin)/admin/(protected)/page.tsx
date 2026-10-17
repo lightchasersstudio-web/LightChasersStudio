@@ -7,6 +7,7 @@ import {
   CalendarPlusIcon,
   CameraIcon,
   ExternalLinkIcon,
+  FlaskConicalIcon,
   ImagePlusIcon,
   InboxIcon,
   PartyPopperIcon,
@@ -23,6 +24,7 @@ import { RevealItem, RevealList } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { paymentsMockEnabled } from "@/lib/payments/mock";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ, businessToday, manilaDate, manilaTime } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
@@ -41,6 +43,15 @@ const QUICK_ACTIONS: { href: string; label: string; icon: LucideIcon; external?:
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-8">
+      {paymentsMockEnabled() && (
+        <p className="flex flex-wrap items-center gap-2 rounded-2xl border border-terracotta bg-blush px-4 py-3 text-sm text-terracotta-ink">
+          <FlaskConicalIcon className="size-4 shrink-0" aria-hidden />
+          <strong>Trial mode:</strong> payments are pretend and emails aren&apos;t sent.
+          <Link href="/admin/trial-emails" className="font-semibold underline underline-offset-4">
+            See the emails
+          </Link>
+        </p>
+      )}
       <section className="relative overflow-hidden rounded-3xl border bg-accent/60 p-6 md:p-10">
         <div className="pointer-events-none absolute -top-20 -right-20 size-64 animate-float rounded-full bg-terracotta/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 left-1/3 size-64 animate-float rounded-full bg-sage/25 blur-3xl [animation-delay:-4s]" />

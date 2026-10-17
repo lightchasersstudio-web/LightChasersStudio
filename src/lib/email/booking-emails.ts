@@ -36,6 +36,7 @@ function layout(
     ...(b.addOns.length > 0 ? [["Add-ons", formatAddOns(b.addOns)!] as [string, string]] : []),
     ["When", formatBookingWhen(b.startAt, b.endAt)],
     ...(b.location ? [["Location", b.location] as [string, string]] : []),
+    ...(b.vatCents > 0 ? [["VAT included", formatPeso(b.vatCents)] as [string, string]] : []),
     ["Total", formatPeso(b.priceCents)],
     ["Paid", formatPeso(b.paidCents)],
     ["Balance", balance > 0 ? formatPeso(balance) : "Fully paid"],

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { bookHref } from "@/components/public/site-nav";
+import { ShareButton } from "@/components/shared/share-button";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -158,6 +159,13 @@ function Lightbox({
                   </Link>
                 )}
               </Button>
+              <ShareButton
+                path={photo.service ? `/services/${photo.service.slug}` : "/portfolio"}
+                title={photo.service ? photo.service.name : "Our portfolio"}
+                text={photo.caption ?? photo.alt_text}
+                variant="ghost"
+                className="h-12 rounded-full bg-white/10 px-4 text-white hover:bg-white/20 hover:text-white"
+              />
               {photos.length > 1 && (
                 <div className="flex gap-2">
                   <LightboxButton label="Previous photo" onClick={() => go(-1)}>
