@@ -1,7 +1,6 @@
 import { ArrowRightIcon, CalendarCheckIcon, CameraIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 
-import { BeforeAfterSection } from "@/components/public/before-after-section";
 import { BookCta } from "@/components/public/book-cta";
 import { BrandLogo } from "@/components/public/brand-logo";
 import { CATEGORY_ICONS } from "@/components/public/category-icons";
@@ -211,8 +210,6 @@ export default async function HomePage() {
           </div>
         </section>
       )}
-
-      <BeforeAfterSection samplePhoto={featured[0]} />
 
       {/* Services */}
       {services.length > 0 && (

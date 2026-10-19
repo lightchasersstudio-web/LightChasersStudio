@@ -96,7 +96,7 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 
 ### 2026-10-17: merged `front-end-extras`, booking fixes
 
-- **Merged into `main`:** everything from `front-end-extras` / `payment-testing`: add-ons, 12% VAT (the studio is VAT-registered; set `vat_percent` to 0 in Settings to turn it off), stories, before/after, package compare, prep guide, draft save, share, unsaved-changes warning, and trial mode (`PAYMENTS_MOCK=true`, local testing only).
+- **Merged into `main`:** everything from `front-end-extras` / `payment-testing`: add-ons, 12% VAT (the studio is VAT-registered; set `vat_percent` to 0 in Settings to turn it off), stories, package compare (the before/after slider was removed on 2026-10-19), prep guide, draft save, share, unsaved-changes warning, and trial mode (`PAYMENTS_MOCK=true`, local testing only).
 - **One booking per time slot:** two clients can no longer book the same time. A slot that's booked, or being paid for, plus the buffer after it, disappears for everyone else, and the database refuses a second booking even when two people click at once. It can be changed back in Settings → "Shoots that can run at the same time".
 - **Back button in the booking form** now steps back through the steps (and keeps what was typed) instead of leaving for the home page.
 - **Fixed:** "Continue" on Shoot details could submit the booking and skip the Review step.
