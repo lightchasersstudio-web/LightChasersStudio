@@ -10,6 +10,8 @@ export const serverEnvSchema = publicEnvSchema.extend({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
+  GMAIL_USER: z.email().optional(),
+  GMAIL_APP_PASSWORD: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   PAYMONGO_SECRET_KEY: z.string().optional(),
   PAYMONGO_WEBHOOK_SECRET: z.string().optional(),

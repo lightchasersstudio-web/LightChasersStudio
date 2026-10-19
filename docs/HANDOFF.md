@@ -1,6 +1,6 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-17. Phases 0–5 are on `main`; online payments and emails wait on the owner's PayMongo, Resend and Turnstile keys._
+_Last updated: 2026-10-17. Phases 0–5 are on `main`; online payments and emails wait on the owner's PayMongo and Turnstile keys; emails go out from the studio Gmail._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -84,7 +84,7 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Admin calendar (`/admin/calendar`):** month grid with colour-coded bookings, hatched closed/blocked days, and a day timeline with a dashed "free" lane. Click a free block to book a client into it.
 - **Staff bookings (`/admin/bookings/new`):** confirmed straight away; email optional; custom price; deposit recorded as GCash, cash or "pay at the shoot"; times outside opening hours or on blocked days need a "Book anyway" click.
 - **Booking page (`/admin/bookings/[id]`):** Call / Text / Email / Messenger buttons (preferred one highlighted, no Viber), a branded booking card to screenshot plus "Copy as text" for Messenger, confirm / decline / complete / cancel, record GCash or cash payments, private notes, resend email, and a warning banner if a PayMongo deposit arrived after the slot filled up.
-- **Emails (Resend):** booking received, booking confirmed, declined/cancelled to the client; "new booking needs review" to the studio email in Settings.
+- **Emails (studio Gmail, or Resend):** booking received, booking confirmed, declined/cancelled to the client; "new booking needs review" to the studio email in Settings.
 
 ### After Phase 5 (polish, 2026-10-15 → 16)
 
@@ -186,7 +186,7 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 **Finish Phase 5 (needs the owner's accounts), in this order:**
 
 1. **Cloudflare Turnstile:** add a widget for the Vercel address + `localhost`; set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`.
-2. **Resend:** API key in `RESEND_API_KEY`; verify a domain the studio owns and set `EMAIL_FROM` (a Gmail address can't be a sender; `onboarding@resend.dev` only reaches the account's own inbox).
+2. **Email (done on dev, 2026-10-19):** the studio has no domain, so emails go out from lightchasers.studio@gmail.com through a Google app password (`GMAIL_USER`, `GMAIL_APP_PASSWORD`; see `.env.example`). Add both in Vercel and redeploy. Changing the Gmail password cancels the app password: make a new one and update both places. Resend (`RESEND_API_KEY`, `EMAIL_FROM`) is only for a future owned domain.
 3. **PayMongo (test mode first):** `PAYMONGO_SECRET_KEY` (`sk_test_…`); webhook at `https://<site>/api/webhooks/paymongo` for `checkout_session.payment.paid`, secret in `PAYMONGO_WEBHOOK_SECRET`. Make one test booking on the live site and check that it becomes "Deposit paid · needs your OK", the payment shows on the booking page, and the emails arrive. Confirm `parsePaidEvent` against the real payload (Vercel logs). If checkout fails, match `PAYMENT_METHODS` in `src/lib/payments/paymongo.ts` to the methods enabled on the account.
 4. **Live payments:** activate the PayMongo account, then swap in the live key and a new live-mode webhook secret.
 5. **Owner wording:** deposit rules and the cancellation/refund policy, to add to the review step and emails.
