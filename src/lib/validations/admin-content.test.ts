@@ -11,7 +11,8 @@ const service: ServiceFormInput = {
   category: "wedding",
   summary: "",
   description: "",
-  durationMinutes: "120",
+  hasSetLength: false,
+  lengthHours: "",
   price: "15,000",
   depositMode: "default",
   deposit: "",
@@ -25,7 +26,7 @@ describe("serviceSchema", () => {
     const row = serviceSchema.parse(service);
     expect(row).toMatchObject({
       price_cents: 1_500_000,
-      duration_minutes: 120,
+      duration_minutes: null,
       deposit_cents: null,
       summary: null,
       inclusions: ["2 locations", "50 edited photos"],
@@ -45,9 +46,19 @@ describe("serviceSchema", () => {
     }
   });
 
-  it("rejects bad slugs and too-short sessions", () => {
+  it("stores a set length in minutes, only when switched on", () => {
+    const timed = { ...service, hasSetLength: true, lengthHours: "4.5" };
+    expect(serviceSchema.parse(timed).duration_minutes).toBe(270);
+    expect(serviceSchema.parse({ ...service, lengthHours: "4" }).duration_minutes).toBeNull();
+  });
+
+  it("rejects bad slugs and bad lengths", () => {
     expect(serviceSchema.safeParse({ ...service, slug: "Bad Slug!" }).success).toBe(false);
-    expect(serviceSchema.safeParse({ ...service, durationMinutes: "10" }).success).toBe(false);
+    for (const lengthHours of ["", "0.25", "25", "4.1", "abc"]) {
+      const r = serviceSchema.safeParse({ ...service, hasSetLength: true, lengthHours });
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]?.path).toEqual(["lengthHours"]);
+    }
   });
 });
 

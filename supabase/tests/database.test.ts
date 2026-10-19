@@ -937,6 +937,162 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     });
   });
 
+  describe("package lengths and add-on rules", () => {
+    /** A package without a set length, the photobooth (4 h) and two add-ons with rules. */
+    async function lengthFixtures(c: PoolClient) {
+      const s = await setupFixtures(c, 1);
+      const { rows } = await c.query<{ id: string; slug: string }>(`
+        insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents, is_active)
+        values ('Test Session', 'test-session', 'portrait', null, 300000, 0, true),
+               ('Test Photobooth', 'test-photobooth', 'event', 240, 1000000, 0, true)
+        returning id, slug`);
+      const session = rows.find((r) => r.slug === "test-session")!.id;
+      const booth = rows.find((r) => r.slug === "test-photobooth")!.id;
+      const { rows: addOns } = await c.query<{ id: string; name: string }>(
+        `insert into public.add_ons (name, price_cents, extra_minutes, service_ids, is_active) values
+           ('Test Extension', 100000, 60, array[$1::uuid], true),
+           ('Test Second Shooter', 200000, 0, array[$2::uuid], true)
+         returning id, name`,
+        [booth, session],
+      );
+      const extension = addOns.find((a) => a.name === "Test Extension")!.id;
+      const shooter = addOns.find((a) => a.name === "Test Second Shooter")!.id;
+      return { ...s, session, booth, extension, shooter };
+    }
+
+    const WITH_ADD_ONS = `select * from public.create_booking(
+      p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+      p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+      p_start_at => $3, p_add_on_ids => $4)`;
+
+    it("books a package without a set length as a start time holding one slot", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        await actAs(c, "service_role");
+        const start = manila(10, 10);
+        const { booking_id } = (await book(c, s.session, start)).rows[0]!;
+        const b = await c.query(
+          "select end_at, blocked_until, has_end_time from public.bookings where id = $1",
+          [booking_id],
+        );
+        expect(b.rows[0].has_end_time).toBe(false);
+        expect(b.rows[0].end_at.getTime() - start.getTime()).toBe(30 * 60_000);
+        expect(b.rows[0].blocked_until.getTime() - start.getTime()).toBe(60 * 60_000); // + buffer
+
+        expect(
+          await expectFailure(c, CREATE, [
+            "Bea",
+            "bea@example.com",
+            "09171234567",
+            s.session,
+            manila(10, 10, 30).toISOString(),
+          ]),
+        ).toMatch(/slot_unavailable/);
+        await book(c, s.session, manila(10, 11), "cy@example.com");
+        // Any start up to the last slot before closing (19:00) fits.
+        await book(c, s.session, manila(10, 18, 30), "di@example.com");
+      });
+    });
+
+    it("lengthens the photobooth by its extensions and enforces which add-ons go where", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        await actAs(c, "service_role");
+        const start = manila(20, 10);
+        const { booking_id } = (
+          await c.query(WITH_ADD_ONS, [
+            "ana@example.com",
+            s.booth,
+            start.toISOString(),
+            [s.extension],
+          ])
+        ).rows[0]!;
+        const b = await c.query(
+          "select end_at, has_end_time, price_cents from public.bookings where id = $1",
+          [booking_id],
+        );
+        expect(b.rows[0].has_end_time).toBe(true);
+        expect(b.rows[0].end_at.getTime() - start.getTime()).toBe(5 * 60 * 60_000);
+        expect(b.rows[0].price_cents).toBe(1100000);
+
+        // 15:00 + 4 h + 1 h runs past closing.
+        expect(
+          await expectFailure(c, WITH_ADD_ONS, [
+            "bea@example.com",
+            s.booth,
+            manila(21, 15).toISOString(),
+            [s.extension],
+          ]),
+        ).toMatch(/outside_business_hours/);
+        // Add-ons only go with their packages.
+        for (const [service, addOn] of [
+          [s.session, s.extension],
+          [s.booth, s.shooter],
+        ]) {
+          expect(
+            await expectFailure(c, WITH_ADD_ONS, [
+              "cy@example.com",
+              service,
+              manila(22, 10).toISOString(),
+              [addOn],
+            ]),
+          ).toMatch(/add_on_unavailable/);
+        }
+      });
+    });
+
+    it("re-checks the slot when staff add an extension to a booking", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        await actAs(c, "service_role");
+        const { booking_id } = (await adminBook(c, s.booth, manila(30, 10))).rows[0]!;
+        // 10:00–14:00 + 30 min buffer; another shoot at 15:00.
+        await adminBook(c, s.session, manila(30, 15), { email: "next@example.com" });
+
+        const extension = JSON.stringify([
+          { add_on_id: s.extension, name: "Test Extension", price_cents: 100000 },
+        ]);
+        expect(
+          await expectFailure(c, UPDATE, [
+            booking_id,
+            s.booth,
+            manila(30, 10).toISOString(),
+            1000000,
+            extension,
+            false,
+          ]),
+        ).toMatch(/slot_unavailable/);
+
+        // Moved earlier, the extended booking (9:00–14:00) fits.
+        await c.query(UPDATE, [
+          booking_id,
+          s.booth,
+          manila(30, 9).toISOString(),
+          1000000,
+          extension,
+          false,
+        ]);
+        const b = await c.query("select end_at from public.bookings where id = $1", [booking_id]);
+        expect(b.rows[0].end_at.getTime()).toBe(manila(30, 14).getTime());
+      });
+    });
+
+    it("allows up to 10,000 people", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        const { booking_id } = (await adminBook(c, s.session, manila(40, 10))).rows[0]!;
+        await c.query("update public.bookings set participants = 10000 where id = $1", [
+          booking_id,
+        ]);
+        expect(
+          await expectFailure(c, "update public.bookings set participants = 10001 where id = $1", [
+            booking_id,
+          ]),
+        ).toMatch(/participants_check/);
+      });
+    });
+  });
+
   describe("delete_booking (owner, safeguarded)", () => {
     it("deletes an unpaid booking and its client if they have no other bookings", async () => {
       await inRollback(async (c) => {

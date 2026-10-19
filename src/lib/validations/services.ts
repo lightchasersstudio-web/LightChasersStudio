@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { SERVICE_CATEGORY_VALUES } from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
-import { intString, optionalText, pesoString } from "@/lib/validations/shared";
+import { optionalText, pesoString } from "@/lib/validations/shared";
 
 export const serviceSchema = z
   .object({
@@ -17,7 +17,9 @@ export const serviceSchema = z
     category: z.enum(SERVICE_CATEGORY_VALUES, "Pick a category."),
     summary: optionalText(300),
     description: optionalText(5000),
-    durationMinutes: intString(15, 24 * 60),
+    // Only packages like the Photobooth have a set length; others are just a start time.
+    hasSetLength: z.boolean(),
+    lengthHours: z.string().trim(),
     price: pesoString,
     depositMode: z.enum(["default", "fixed"]),
     deposit: z.string(),
@@ -39,6 +41,28 @@ export const serviceSchema = z
     isActive: z.boolean(),
   })
   .transform((v, ctx) => {
+    let durationMinutes: number | null = null;
+    if (v.hasSetLength) {
+      const hours = Number(v.lengthHours);
+      if (!/^\d+(\.\d+)?$/.test(v.lengthHours) || hours < 0.5 || hours > 24) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["lengthHours"],
+          message: "Enter the length in hours, from 0.5 to 24.",
+        });
+        return z.NEVER;
+      }
+      if (!Number.isInteger(hours * 4)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["lengthHours"],
+          message: "Use quarter hours, like 4 or 4.5.",
+        });
+        return z.NEVER;
+      }
+      durationMinutes = hours * 60;
+    }
+
     let depositCents: number | null = null;
     if (v.depositMode === "fixed") {
       const parsed = pesoString.safeParse(v.deposit);
@@ -66,7 +90,7 @@ export const serviceSchema = z
       category: v.category,
       summary: v.summary,
       description: v.description,
-      duration_minutes: v.durationMinutes,
+      duration_minutes: durationMinutes,
       price_cents: v.price,
       deposit_cents: depositCents,
       inclusions: v.inclusions,

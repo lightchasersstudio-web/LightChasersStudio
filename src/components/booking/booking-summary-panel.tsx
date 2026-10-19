@@ -104,7 +104,9 @@ function Rows({
           <span className="min-w-0 flex-1">
             <span className="block font-semibold">{service.name}</span>
             <span className="text-muted-foreground">
-              {formatDuration(service.duration_minutes)} · {formatPeso(service.price_cents)}
+              {service.duration_minutes !== null &&
+                `${formatDuration(service.duration_minutes)} · `}
+              {formatPeso(service.price_cents)}
             </span>
           </span>
           {change(1, "package")}
@@ -127,7 +129,7 @@ function Rows({
         <li className="flex gap-2.5">
           <CalendarIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
           <span className={cn("min-w-0 flex-1", !startAt && "text-muted-foreground")}>
-            {startAt && endAt ? formatBookingWhen(startAt, endAt) : "Date and time not picked yet"}
+            {startAt ? formatBookingWhen(startAt, endAt) : "Date and time not picked yet"}
           </span>
           {startAt && change(2, "date and time")}
         </li>

@@ -69,6 +69,8 @@ async function NewBooking({
         name: a.name,
         priceCents: a.price_cents,
         active: a.is_active,
+        serviceIds: a.service_ids,
+        extraMinutes: a.extra_minutes,
       }))}
       initialDate={date}
       initialTime={time}

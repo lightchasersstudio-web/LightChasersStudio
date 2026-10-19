@@ -99,10 +99,12 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
               <p className="text-sm text-muted-foreground">{categoryLabel(service.category)}</p>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 text-sm">
                 <span className="font-semibold">{formatPeso(service.price_cents)}</span>
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <ClockIcon className="size-3.5" aria-hidden />
-                  {formatDuration(service.duration_minutes)}
-                </span>
+                {service.duration_minutes !== null && (
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <ClockIcon className="size-3.5" aria-hidden />
+                    {formatDuration(service.duration_minutes)}
+                  </span>
+                )}
               </p>
             </div>
           </div>

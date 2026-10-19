@@ -62,10 +62,12 @@ export function PackageCompare({
                 <span className="font-heading text-2xl font-semibold">
                   {formatPeso(p.price_cents)}
                 </span>
-                <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <ClockIcon className="size-3.5" aria-hidden />
-                  {formatDuration(p.duration_minutes)}
-                </span>
+                {p.duration_minutes !== null && (
+                  <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <ClockIcon className="size-3.5" aria-hidden />
+                    {formatDuration(p.duration_minutes)}
+                  </span>
+                )}
               </p>
               {inclusions.length > 0 ? (
                 <ul className="mt-4 flex-1 space-y-2 text-sm">

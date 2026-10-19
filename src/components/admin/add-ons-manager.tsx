@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CirclePlusIcon, Loader2Icon, PencilIcon, PlusIcon } from "lucide-react";
 import { useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
 
 import { ConfirmDelete } from "@/components/admin/confirm-delete";
@@ -20,9 +20,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FieldGroup } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/utils/format";
 import { centsToPesoInput, formatPeso } from "@/lib/utils/money";
 import { addOnSchema, type AddOnFormInput } from "@/lib/validations/add-ons";
 import {
@@ -34,8 +35,16 @@ import {
 } from "@/server/actions/add-ons";
 import type { AddOn } from "@/server/queries/add-ons";
 
+export type AddOnPackage = { id: string; name: string; hasSetLength: boolean };
+
 /** Extras clients can tick when booking online; their price is added to the total. */
-export function AddOnsManager({ addOns: initial }: { addOns: AddOn[] }) {
+export function AddOnsManager({
+  addOns: initial,
+  packages,
+}: {
+  addOns: AddOn[];
+  packages: AddOnPackage[];
+}) {
   const [addOns, setAddOns] = useState(initial);
   const [pending, startTransition] = useTransition();
   // null = closed, "new" = adding, otherwise the add-on being edited.
@@ -79,8 +88,9 @@ export function AddOnsManager({ addOns: initial }: { addOns: AddOn[] }) {
             Add-ons
           </h2>
           <p className="mt-1 max-w-prose text-muted-foreground">
-            Extras clients can tick when booking online, like an extra photographer. The price is
-            added to their total and deposit.
+            Extras clients can tick when booking online, like an extra photographer or more
+            photobooth time. The price is added to their total and deposit. Each add-on can be
+            limited to the packages it suits.
           </p>
         </div>
         <Button variant="outline" onClick={() => setEditing("new")}>
@@ -116,6 +126,14 @@ export function AddOnsManager({ addOns: initial }: { addOns: AddOn[] }) {
                   {addOn.description && (
                     <span className="text-muted-foreground"> · {addOn.description}</span>
                   )}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {addOn.extra_minutes > 0 && (
+                    <span className="font-semibold text-terracotta-ink">
+                      Adds {formatDuration(addOn.extra_minutes)} ·{" "}
+                    </span>
+                  )}
+                  {offeredWith(addOn, packages)}
                 </p>
               </div>
               <div className="flex items-center justify-between gap-2 border-t pt-3 sm:border-0 sm:pt-0">
@@ -165,6 +183,7 @@ export function AddOnsManager({ addOns: initial }: { addOns: AddOn[] }) {
             <AddOnForm
               key={editing === "new" ? "new" : editing.id}
               addOn={editing === "new" ? undefined : editing}
+              packages={packages}
               onDone={() => setEditing(null)}
             />
           )}
@@ -174,7 +193,30 @@ export function AddOnsManager({ addOns: initial }: { addOns: AddOn[] }) {
   );
 }
 
-function AddOnForm({ addOn, onDone }: { addOn?: AddOn; onDone: () => void }) {
+/** "With every package" / "Only with: Photobooth" / "Not offered with: …" */
+function offeredWith(addOn: AddOn, packages: AddOnPackage[]): string {
+  if (addOn.service_ids.length === 0) return "With every package";
+  const names = (ids: string[]) =>
+    packages
+      .filter((p) => ids.includes(p.id))
+      .map((p) => p.name)
+      .join(", ");
+  const left = packages.filter((p) => !addOn.service_ids.includes(p.id));
+  if (left.length === 0) return "With every package";
+  return addOn.service_ids.length <= left.length
+    ? `Only with: ${names(addOn.service_ids) || "no packages"}`
+    : `Not with: ${names(left.map((p) => p.id))}`;
+}
+
+function AddOnForm({
+  addOn,
+  packages,
+  onDone,
+}: {
+  addOn?: AddOn;
+  packages: AddOnPackage[];
+  onDone: () => void;
+}) {
   const form = useForm<AddOnFormInput, unknown, z.output<typeof addOnSchema>>({
     resolver: zodResolver(addOnSchema),
     defaultValues: addOn
@@ -184,9 +226,13 @@ function AddOnForm({ addOn, onDone }: { addOn?: AddOn; onDone: () => void }) {
           price: centsToPesoInput(addOn.price_cents),
           // Starter add-ons arrive hidden at ₱0: switch on once a price is set.
           isActive: addOn.is_active,
+          addsHours: addOn.extra_minutes ? String(addOn.extra_minutes / 60) : "",
+          serviceIds: addOn.service_ids,
         }
-      : { name: "", description: "", price: "", isActive: true },
+      : { name: "", description: "", price: "", isActive: true, addsHours: "", serviceIds: [] },
   });
+  const serviceIds = useWatch({ control: form.control, name: "serviceIds" });
+  const timedPackages = packages.filter((p) => p.hasSetLength);
 
   async function onSubmit() {
     const values = form.getValues();
@@ -227,6 +273,69 @@ function AddOnForm({ addOn, onDone }: { addOn?: AddOn; onDone: () => void }) {
           rows={2}
           maxLength={300}
           description="Shown under the name when clients book."
+        />
+        <Controller
+          control={form.control}
+          name="serviceIds"
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <fieldset className="space-y-2">
+                <legend className="mb-1 text-sm font-medium">Offered with</legend>
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border bg-card px-3 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={field.value.length === 0}
+                    onChange={(e) =>
+                      field.onChange(e.target.checked ? [] : packages.map((p) => p.id))
+                    }
+                    className="size-5 accent-primary"
+                  />
+                  Every package
+                </label>
+                {serviceIds.length > 0 && (
+                  <div className="grid gap-1 sm:grid-cols-2">
+                    {packages.map((p) => (
+                      <label
+                        key={p.id}
+                        className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 text-sm hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={field.value.includes(p.id)}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.checked
+                                ? [...field.value, p.id]
+                                : field.value.filter((id) => id !== p.id),
+                            )
+                          }
+                          className="size-5 shrink-0 accent-primary"
+                        />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </fieldset>
+              <FieldDescription>
+                Clients only see it when they pick one of these packages.
+              </FieldDescription>
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+        <TextField
+          control={form.control}
+          name="addsHours"
+          label="Adds time (hours, optional)"
+          inputMode="decimal"
+          placeholder="e.g. 1"
+          className="max-w-48"
+          description={
+            timedPackages.length > 0
+              ? `For extensions: lengthens packages with a set length (${timedPackages.map((p) => p.name).join(", ")}). Leave empty otherwise.`
+              : "For extensions of packages with a set length. Leave empty otherwise."
+          }
         />
         <SwitchField
           control={form.control}

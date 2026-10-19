@@ -17,16 +17,42 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { centsToPesoInput } from "@/lib/utils/money";
 import type { AddOnLineInput } from "@/lib/validations/admin-booking";
 
-export type AddOnChoice = { id: string; name: string; priceCents: number; active: boolean };
+export type AddOnChoice = {
+  id: string;
+  name: string;
+  priceCents: number;
+  active: boolean;
+  /** Packages it's offered with (empty = all). */
+  serviceIds: string[];
+  /** Time it adds to a package with a set length (photobooth extensions). */
+  extraMinutes: number;
+};
+
+/** Catalog add-ons on these lines that add time, for the free-times calendar. */
+export function timeAddOnIds(lines: { addOnId: string }[], catalog: AddOnChoice[]): string[] {
+  return lines
+    .map((l) => l.addOnId)
+    .filter((id) => catalog.some((a) => a.id === id && a.extraMinutes > 0));
+}
 
 /**
  * Add-ons on a staff booking or an edit: pick from the catalog (price filled in,
  * still editable) or add a custom extra. Works with any form that has `addOns`.
+ * The list only suggests add-ons offered with the chosen package.
  */
 export function AddOnsEditor<
   F extends FieldValues & { addOns: AddOnLineInput[] },
   T extends FieldValues,
->({ control, catalog }: { control: Control<F, unknown, T>; catalog: AddOnChoice[] }) {
+>({
+  control,
+  catalog: all,
+  serviceId,
+}: {
+  control: Control<F, unknown, T>;
+  catalog: AddOnChoice[];
+  serviceId: string;
+}) {
+  const catalog = all.filter((a) => a.serviceIds.length === 0 || a.serviceIds.includes(serviceId));
   const { fields, append, remove } = useFieldArray({ control, name: "addOns" as ArrayPath<F> });
   const [pick, setPick] = useState("");
   const add = (line: AddOnLineInput) => append(line as FieldArray<F, ArrayPath<F>>);

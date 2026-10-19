@@ -43,7 +43,14 @@ async function Services() {
   return (
     <>
       <ServicesList services={services} />
-      <AddOnsManager addOns={addOns} />
+      <AddOnsManager
+        addOns={addOns}
+        packages={services.map((s) => ({
+          id: s.id,
+          name: s.name,
+          hasSetLength: s.duration_minutes !== null,
+        }))}
+      />
     </>
   );
 }

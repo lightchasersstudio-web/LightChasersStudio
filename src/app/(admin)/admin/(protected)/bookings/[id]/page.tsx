@@ -65,7 +65,7 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
         <PageHeader
           eyebrow={b.source === "admin" ? "booked by staff" : "booked online"}
           title={b.contact_name}
-          description={`${b.serviceName} · ${formatBookingWhen(b.start_at, b.end_at)}`}
+          description={`${b.serviceName} · ${formatBookingWhen(b.start_at, b.summary.endAt)}`}
           actions={
             <>
               <StatusBadge status={b.status} className="px-3 py-1 text-sm" />

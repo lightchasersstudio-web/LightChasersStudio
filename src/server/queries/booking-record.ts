@@ -28,7 +28,7 @@ export async function loadBookingRecord(
   const query = supabase
     .from("bookings")
     .select(
-      "id, reference_code, status, start_at, end_at, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name), add_ons:booking_add_ons(name, price_cents), client:clients(email), payments(amount_cents, status)",
+      "id, reference_code, status, start_at, end_at, has_end_time, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name), add_ons:booking_add_ons(name, price_cents), client:clients(email), payments(amount_cents, status)",
     );
   const [{ data, error }, settings] = await Promise.all([
     "id" in where
@@ -55,7 +55,7 @@ export async function loadBookingRecord(
       serviceName: data.service?.name ?? "Photo session",
       addOns: data.add_ons.map((a) => ({ name: a.name, priceCents: a.price_cents })),
       startAt: data.start_at,
-      endAt: data.end_at,
+      endAt: data.has_end_time ? data.end_at : null,
       location: data.location,
       priceCents: data.price_cents,
       vatCents: data.vat_cents,

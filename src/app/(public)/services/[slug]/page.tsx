@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { bookingTotals } from "@/lib/booking/pricing";
 import { categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
+import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
 import {
@@ -122,7 +123,12 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
               <p className="mt-4 text-lg text-muted-foreground">{service.summary}</p>
             )}
 
-            <dl className="mt-6 grid grid-cols-2 gap-3">
+            <dl
+              className={cn(
+                "mt-6 grid gap-3",
+                service.duration_minutes !== null ? "grid-cols-2" : "max-w-xs",
+              )}
+            >
               <div className="rounded-2xl border bg-card p-4">
                 <dt className="text-sm text-muted-foreground">Package price</dt>
                 <dd className="font-heading text-2xl font-semibold">
@@ -132,15 +138,17 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
                   <dd className="text-xs text-muted-foreground">+ {settings.vat_percent}% VAT</dd>
                 )}
               </div>
-              <div className="rounded-2xl border bg-card p-4">
-                <dt className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <ClockIcon className="size-3.5" aria-hidden />
-                  Session
-                </dt>
-                <dd className="font-heading text-2xl font-semibold">
-                  {formatDuration(service.duration_minutes)}
-                </dd>
-              </div>
+              {service.duration_minutes !== null && (
+                <div className="rounded-2xl border bg-card p-4">
+                  <dt className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <ClockIcon className="size-3.5" aria-hidden />
+                    Session
+                  </dt>
+                  <dd className="font-heading text-2xl font-semibold">
+                    {formatDuration(service.duration_minutes)}
+                  </dd>
+                </div>
+              )}
             </dl>
             {depositCents > 0 && (
               <p className="mt-3 flex items-start gap-2 rounded-2xl bg-accent p-4 text-sm text-accent-foreground">
