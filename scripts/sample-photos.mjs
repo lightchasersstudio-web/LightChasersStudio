@@ -2,7 +2,7 @@
 // looks finished: portfolio photos (some featured, some linked to a package)
 // and cover photos for packages that don't have one yet.
 //
-//   npm run data:sample-photos             # add them (skips if already there)
+//   npm run data:sample-photos             # add them (only the ones not there yet)
 //   npm run data:sample-photos -- --remove # take every sample photo out again
 //
 // Sample files are named with a fixed id prefix (SAMPLE), so removing them never
@@ -63,22 +63,77 @@ const PHOTOS = [
     "wedding",
     "Close-up of the couple's hands and wedding rings",
     false,
-    null,
+    "wedding-day-coverage",
   ],
   [
     "1522673607200-164d1b6ce486",
     "wedding",
     "Two decorated chairs for the couple on a lawn",
     false,
-    null,
+    "wedding-day-coverage",
   ],
-  ["1515934751635-c81c6bc9a2d8", "wedding", "Wedding rings resting on pink roses", false, null],
+  [
+    "1515934751635-c81c6bc9a2d8",
+    "wedding",
+    "Wedding rings resting on pink roses",
+    false,
+    "wedding-day-coverage",
+  ],
   [
     "1529636798458-92182e662485",
     "wedding",
     "Bridal bouquet held against a white dress",
     false,
     "prenup-session",
+  ],
+  [
+    "1460978812857-470ed1c77af0",
+    "wedding",
+    "Bride and groom under a windblown veil, in black and white",
+    false,
+    "wedding-day-coverage",
+  ],
+  [
+    "1591604466107-ec97de577aff",
+    "wedding",
+    "Couple embracing by a lake in autumn",
+    false,
+    "wedding-day-coverage",
+  ],
+  [
+    "1537633552985-df8429e8048b",
+    "wedding",
+    "Bride's long veil on a pebble beach",
+    false,
+    "wedding-day-coverage",
+  ],
+  [
+    "1469371670807-013ccf25f16a",
+    "wedding",
+    "Ceremony aisle lined with pink flowers",
+    false,
+    "wedding-day-coverage",
+  ],
+  [
+    "1550005809-91ad75fb315f",
+    "wedding",
+    "Bride holding her bouquet beside the groom",
+    false,
+    "wedding-day-coverage",
+  ],
+  [
+    "1532712938310-34cb3982ef74",
+    "wedding",
+    "Newlyweds walking across a hilltop",
+    false,
+    "wedding-day-coverage",
+  ],
+  [
+    "1507504031003-b417219a0fde",
+    "wedding",
+    "Wooden Mr & Mrs sign at the venue",
+    false,
+    "wedding-day-coverage",
   ],
   [
     "1609220136736-443140cffec6",
@@ -233,12 +288,12 @@ async function upload(path, data) {
 }
 
 async function add() {
-  const { data: existing, error } = await sb.from("portfolio_images").select("storage_path");
+  const { data: existing, error } = await sb
+    .from("portfolio_images")
+    .select("storage_path, alt_text");
   if (error) fail("Reading photos", error);
-  if (existing.some((p) => isSample(p.storage_path))) {
-    console.log("Sample photos are already there. Use --remove first to load them again.");
-    return;
-  }
+  // Only add samples that aren't there yet, so this can run again after adding to PHOTOS.
+  const have = new Set(existing.filter((p) => isSample(p.storage_path)).map((p) => p.alt_text));
   const { data: services, error: sErr } = await sb
     .from("services")
     .select("id, slug, cover_image_path");
@@ -247,6 +302,7 @@ async function add() {
 
   const rows = [];
   for (const [i, [id, category, alt, featured, slug]] of PHOTOS.entries()) {
+    if (have.has(alt)) continue;
     const img = await prepare(id, 2000);
     const path = `${category}/${sampleId()}.webp`;
     await upload(path, img.data);
@@ -263,8 +319,10 @@ async function add() {
     });
     process.stdout.write(".");
   }
-  const { error: insErr } = await sb.from("portfolio_images").insert(rows);
-  if (insErr) fail("Saving photos", insErr);
+  if (rows.length) {
+    const { error: insErr } = await sb.from("portfolio_images").insert(rows);
+    if (insErr) fail("Saving photos", insErr);
+  }
   console.log(`\nAdded ${rows.length} portfolio photos.`);
 
   let covers = 0;

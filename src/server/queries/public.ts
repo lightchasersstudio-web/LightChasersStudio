@@ -105,6 +105,31 @@ export async function listFeaturedPhotos(limit: number): Promise<PublicPhoto[]> 
   return data;
 }
 
+/**
+ * Highlights for a package page: photos linked to the package first (Admin →
+ * Portfolio → "Book this package"), then others of the same kind, up to `limit`.
+ */
+export async function listPackagePhotos(
+  service: Pick<PublicService, "id" | "category">,
+  limit = 6,
+): Promise<PublicPhoto[]> {
+  "use cache";
+  cacheTag(TAGS.portfolio);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("portfolio_images")
+    // RLS only exposes active services to anon, so a hidden package joins as null.
+    .select("*, service:services(slug, name)")
+    .or(`service_id.eq.${service.id},category.eq.${service.category}`)
+    .order("sort_order")
+    .order("created_at", { ascending: false })
+    .limit(48);
+  if (error) throw error;
+  const linked = data.filter((p) => p.service_id === service.id);
+  const sameKind = data.filter((p) => p.service_id !== service.id);
+  return [...linked, ...sameKind].slice(0, limit);
+}
+
 export type PublicReview = Pick<
   Tables<"reviews">,
   "id" | "name" | "category" | "shoot" | "quote" | "rating"

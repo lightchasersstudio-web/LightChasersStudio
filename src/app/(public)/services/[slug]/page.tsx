@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, CheckIcon, ClockIcon, WalletIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, WalletIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import { Suspense } from "react";
 import { BookCta } from "@/components/public/book-cta";
 import { PackageCompare } from "@/components/public/package-compare";
 import { ReviewsSection } from "@/components/public/reviews-section";
-import { PlaceholderPolaroid } from "@/components/public/photo-polaroid";
+import { PhotoPolaroid, PlaceholderPolaroid } from "@/components/public/photo-polaroid";
 import { bookHref } from "@/components/public/site-nav";
 import { ShareButton } from "@/components/shared/share-button";
 import { Sparkle } from "@/components/shared/sparkle";
@@ -24,6 +24,7 @@ import {
   getActiveServiceBySlug,
   getPublicSettings,
   listActiveServices,
+  listPackagePhotos,
 } from "@/server/queries/public";
 
 // Cache Components needs at least one param to validate the route at build time.
@@ -69,6 +70,7 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
     listActiveServices(),
   ]);
   if (!service) notFound();
+  const photos = await listPackagePhotos(service);
 
   const inclusions = service.inclusions as string[];
   // Same rule as create_booking() for the package on its own (add-ons raise it).
@@ -205,6 +207,43 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
               </section>
             )}
           </div>
+        )}
+
+        {photos.length > 0 && (
+          <section aria-labelledby="package-highlights" className="mt-16">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="font-script text-2xl text-terracotta-ink">highlights</p>
+                <h2 id="package-highlights" className="text-3xl font-semibold">
+                  Moments we&apos;ve captured
+                </h2>
+              </div>
+              <Button asChild variant="outline">
+                <Link href="/portfolio">
+                  View portfolio
+                  <ArrowRightIcon aria-hidden />
+                </Link>
+              </Button>
+            </div>
+            <ul className="mt-8 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3">
+              {photos.map((photo, i) => (
+                <li
+                  key={photo.id}
+                  className={cn(
+                    i % 2 ? "rotate-1" : "-rotate-1",
+                    "transition-transform duration-300 hover:-translate-y-1 hover:rotate-0",
+                  )}
+                >
+                  <PhotoPolaroid
+                    photo={photo}
+                    caption={photo.caption}
+                    sizes="(min-width: 1024px) 33vw, 50vw"
+                    className="pb-8"
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </article>
       <PackageCompare

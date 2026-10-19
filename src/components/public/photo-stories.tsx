@@ -17,7 +17,14 @@ export type StoryPhoto = {
   caption: string | null;
   blur: string | null;
 };
-export type Story = { id: string; label: string; href: string; photos: StoryPhoto[] };
+export type Story = {
+  id: string;
+  label: string;
+  href: string;
+  /** Button text at the bottom; defaults to "See <label> packages". */
+  cta?: string;
+  photos: StoryPhoto[];
+};
 
 const SECONDS_PER_PHOTO = 5;
 
@@ -211,7 +218,7 @@ function StoryViewer({
         {photo.caption && <p className="text-sm text-white/90">{photo.caption}</p>}
         <Button asChild className="w-full bg-white text-black hover:bg-white/90">
           <Link href={story.href} onClick={() => onMove(null)}>
-            See {story.label} packages
+            {story.cta ?? `See ${story.label} packages`}
             <ArrowRightIcon aria-hidden />
           </Link>
         </Button>
