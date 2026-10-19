@@ -18,30 +18,36 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          extra_minutes: number
           id: string
           is_active: boolean
           name: string
           price_cents: number
+          service_ids: string[]
           sort_order: number
           updated_at: string
         }
         Insert: {
           created_at?: string
           description?: string | null
+          extra_minutes?: number
           id?: string
           is_active?: boolean
           name: string
           price_cents: number
+          service_ids?: string[]
           sort_order?: number
           updated_at?: string
         }
         Update: {
           created_at?: string
           description?: string | null
+          extra_minutes?: number
           id?: string
           is_active?: boolean
           name?: string
           price_cents?: number
+          service_ids?: string[]
           sort_order?: number
           updated_at?: string
         }
@@ -195,6 +201,7 @@ export type Database = {
           created_at: string
           deposit_cents: number
           end_at: string
+          has_end_time: boolean
           hold_expires_at: string | null
           id: string
           location: string | null
@@ -221,6 +228,7 @@ export type Database = {
           created_at?: string
           deposit_cents: number
           end_at: string
+          has_end_time?: boolean
           hold_expires_at?: string | null
           id?: string
           location?: string | null
@@ -247,6 +255,7 @@ export type Database = {
           created_at?: string
           deposit_cents?: number
           end_at?: string
+          has_end_time?: boolean
           hold_expires_at?: string | null
           id?: string
           location?: string | null
@@ -595,7 +604,7 @@ export type Database = {
           created_at: string
           deposit_cents: number | null
           description: string | null
-          duration_minutes: number
+          duration_minutes: number | null
           id: string
           inclusions: Json
           is_active: boolean
@@ -612,7 +621,7 @@ export type Database = {
           created_at?: string
           deposit_cents?: number | null
           description?: string | null
-          duration_minutes: number
+          duration_minutes?: number | null
           id?: string
           inclusions?: Json
           is_active?: boolean
@@ -629,7 +638,7 @@ export type Database = {
           created_at?: string
           deposit_cents?: number | null
           description?: string | null
-          duration_minutes?: number
+          duration_minutes?: number | null
           id?: string
           inclusions?: Json
           is_active?: boolean

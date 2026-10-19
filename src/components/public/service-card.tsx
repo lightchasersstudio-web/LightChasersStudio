@@ -44,10 +44,12 @@ export function ServiceCard({ service }: { service: PublicService }) {
           <div>
             <p className="text-xs text-muted-foreground">from</p>
             <p className="font-heading text-2xl font-semibold">{formatPeso(service.price_cents)}</p>
-            <p className="flex items-center gap-1 text-sm text-muted-foreground">
-              <ClockIcon className="size-3.5" aria-hidden />
-              {formatDuration(service.duration_minutes)}
-            </p>
+            {service.duration_minutes !== null && (
+              <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                <ClockIcon className="size-3.5" aria-hidden />
+                {formatDuration(service.duration_minutes)}
+              </p>
+            )}
           </div>
           <Button asChild className="relative z-10 shrink-0">
             <Link href={bookHref(service.slug)} aria-label={`Book now: ${service.name}`}>

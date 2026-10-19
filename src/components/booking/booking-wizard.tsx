@@ -21,6 +21,7 @@ import { Turnstile } from "@/components/booking/turnstile";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { formatBookingWhen } from "@/lib/booking/booking-summary";
+import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
 import { bookingTotals } from "@/lib/booking/pricing";
 import { categoryLabel } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
@@ -122,7 +123,9 @@ export function BookingWizard({
       serviceId:
         initialServiceId ??
         (services.some((s) => s.id === draft.serviceId) ? (draft.serviceId ?? "") : ""),
-      addOnIds: (draft.addOnIds ?? []).filter((id) => addOns.some((a) => a.id === id)),
+      addOnIds: (draft.addOnIds ?? []).filter((id) =>
+        addOns.some((a) => a.id === id && addOnOffered(a, draft.serviceId ?? "")),
+      ),
     });
     // Browser storage can only be read after hydration, so this can't be initial state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -149,7 +152,16 @@ export function BookingWizard({
     name: ["serviceId", "startAt", "preferredContact", "addOnIds", "location"],
   });
   const service = services.find((s) => s.id === serviceId);
-  const chosenAddOns = addOns.filter((a) => addOnIds.includes(a.id));
+  // Each add-on lists the packages it goes with (e.g. extensions only for the Photobooth).
+  const offeredAddOns = service ? addOns.filter((a) => addOnOffered(a, service.id)) : [];
+  const chosenAddOns = offeredAddOns.filter((a) => addOnIds.includes(a.id));
+  // Only packages with a set length have an end time; add-ons can lengthen them.
+  const extraMinutes =
+    service?.duration_minutes != null
+      ? chosenAddOns.reduce((sum, a) => sum + a.extra_minutes, 0)
+      : 0;
+  const timeAddOnIds = chosenAddOns.filter((a) => a.extra_minutes > 0).map((a) => a.id);
+  const timeKey = timeAddOnIds.join(",");
   // Mirrors create_booking, which recomputes both on the server.
   const { subtotal, vat, total, deposit } = service
     ? bookingTotals({
@@ -161,17 +173,13 @@ export function BookingWizard({
       })
     : { subtotal: 0, vat: 0, total: 0, deposit: 0 };
   const endAt =
-    service && startAt
-      ? new Date(new Date(startAt).getTime() + service.duration_minutes * 60_000).toISOString()
-      : null;
+    service && startAt ? sessionEndAt(startAt, service.duration_minutes, extraMinutes) : null;
 
   const now = TZDate.tz(BUSINESS_TZ);
   const minMonth = format(now, "yyyy-MM");
   const maxMonth = format(addDays(now, maxAdvanceDays), "yyyy-MM");
-  const loadMonth = useCallback(
-    (month: string) => getMonthSlots({ serviceId, month }),
-    [serviceId],
-  );
+  // The picker is keyed by package + time add-ons, so it never mixes slots from another length.
+  const loadMonth = (month: string) => getMonthSlots({ serviceId, month, addOnIds: timeAddOnIds });
   const onToken = useCallback((token: string) => form.setValue("turnstileToken", token), [form]);
 
   // Each step forward gets its own browser-history entry, so the browser's Back
@@ -231,7 +239,7 @@ export function BookingWizard({
       const result = await submitBooking(form.getValues());
       if (result.ok) {
         clearDraft();
-        if (service && endAt) {
+        if (service) {
           rememberBooking({
             reference: result.data.reference,
             title: `${service.name} · ${businessName}`,
@@ -408,6 +416,13 @@ export function BookingWizard({
                                   onChange={() => {
                                     field.onChange(s.id);
                                     form.setValue("startAt", "");
+                                    // Drop add-ons the new package doesn't offer.
+                                    form.setValue(
+                                      "addOnIds",
+                                      addOnIds.filter((id) =>
+                                        addOns.some((a) => a.id === id && addOnOffered(a, s.id)),
+                                      ),
+                                    );
                                   }}
                                   className="sr-only"
                                 />
@@ -428,10 +443,12 @@ export function BookingWizard({
                                   <span className="font-bold text-foreground">
                                     {formatPeso(s.price_cents)}
                                   </span>
-                                  <span className="flex items-center gap-1">
-                                    <ClockIcon className="size-3.5" aria-hidden />
-                                    {formatDuration(s.duration_minutes)}
-                                  </span>
+                                  {s.duration_minutes !== null && (
+                                    <span className="flex items-center gap-1">
+                                      <ClockIcon className="size-3.5" aria-hidden />
+                                      {formatDuration(s.duration_minutes)}
+                                    </span>
+                                  )}
                                 </span>
                               </label>
                             );
@@ -448,7 +465,7 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 1 && addOns.length > 0 && (
+                {step === 1 && offeredAddOns.length > 0 && (
                   <Controller
                     control={form.control}
                     name="addOnIds"
@@ -463,7 +480,7 @@ export function BookingWizard({
                             Extras for your shoot. They&apos;re added to your total.
                           </p>
                           <div className="grid gap-3 sm:grid-cols-2">
-                            {addOns.map((a) => {
+                            {offeredAddOns.map((a) => {
                               const checked = field.value.includes(a.id);
                               return (
                                 <label
@@ -477,13 +494,15 @@ export function BookingWizard({
                                   <input
                                     type="checkbox"
                                     checked={checked}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
                                       field.onChange(
                                         e.target.checked
                                           ? [...field.value, a.id]
                                           : field.value.filter((id) => id !== a.id),
-                                      )
-                                    }
+                                      );
+                                      // More (or less) time changes which start times fit.
+                                      if (a.extra_minutes > 0) form.setValue("startAt", "");
+                                    }}
                                     className="mt-0.5 size-5 shrink-0 accent-primary"
                                   />
                                   <span className="min-w-0">
@@ -519,10 +538,12 @@ export function BookingWizard({
                     render={({ field, fieldState }) => (
                       <Field data-invalid={fieldState.invalid}>
                         <p className="text-muted-foreground">
-                          {service.name} · {formatDuration(service.duration_minutes)}
+                          {service.name}
+                          {service.duration_minutes !== null &&
+                            ` · ${formatDuration(service.duration_minutes + extraMinutes)}`}
                         </p>
                         <SlotPicker
-                          key={service.id}
+                          key={`${service.id}:${timeKey}`}
                           load={loadMonth}
                           minMonth={minMonth}
                           maxMonth={maxMonth}
@@ -575,7 +596,7 @@ export function BookingWizard({
                       )}
                       <ReviewRow
                         label="When"
-                        value={formatBookingWhen(startAt, endAt!)}
+                        value={formatBookingWhen(startAt, endAt)}
                         onEdit={() => goTo(2)}
                       />
                       <ReviewRow

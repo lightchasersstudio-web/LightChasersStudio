@@ -125,16 +125,19 @@ export async function listPublishedReviews(): Promise<PublicReview[]> {
   return data;
 }
 
-export type PublicAddOn = Pick<Tables<"add_ons">, "id" | "name" | "description" | "price_cents">;
+export type PublicAddOn = Pick<
+  Tables<"add_ons">,
+  "id" | "name" | "description" | "price_cents" | "extra_minutes" | "service_ids"
+>;
 
-/** Extras clients can add when booking, in the order the admin set. */
+/** Extras clients can add when booking, in the order the admin set (each lists its packages). */
 export async function listActiveAddOns(): Promise<PublicAddOn[]> {
   "use cache";
   cacheTag(TAGS.addOns);
   cacheLife("days");
   const { data, error } = await createPublicClient()
     .from("add_ons")
-    .select("id, name, description, price_cents")
+    .select("id, name, description, price_cents, extra_minutes, service_ids")
     .eq("is_active", true)
     .order("sort_order")
     .order("created_at");

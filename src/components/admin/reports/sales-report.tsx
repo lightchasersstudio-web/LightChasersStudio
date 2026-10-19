@@ -10,16 +10,11 @@ import {
   WalletIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import {
-  PAYMENT_METHODS,
-  sampleSalesMonths,
-  type PaymentMethod,
-  type SalesMonth,
-} from "@/components/admin/reports/sample-sales";
 import { Button } from "@/components/ui/button";
 import { SERVICE_CATEGORIES, type ServiceCategory } from "@/lib/catalog";
+import { PAYMENT_METHODS, type PaymentMethod, type SalesMonth } from "@/lib/reports/sales";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
 
@@ -30,9 +25,9 @@ const RANGES = [
 ] as const;
 
 const METHOD_COLORS: Record<PaymentMethod, string> = {
-  gcash: "bg-viz-1",
-  cash: "bg-viz-2",
-  card: "bg-viz-3",
+  online: "bg-viz-1",
+  gcash: "bg-viz-2",
+  cash: "bg-viz-3",
 };
 
 /** ₱1.2M / ₱120K / ₱950 */
@@ -51,9 +46,8 @@ function totals(months: SalesMonth[]) {
   return { sales, bookings, average: bookings ? Math.round(sales / bookings / 100) * 100 : 0 };
 }
 
-export function SalesReport() {
-  // Computed once on the client: sample data depends on today's date.
-  const all = useMemo(() => sampleSalesMonths(24), []);
+/** `all`: the last 24 months up to this one, oldest first (see getSalesMonths). */
+export function SalesReport({ months: all }: { months: SalesMonth[] }) {
   const [range, setRange] = useState<number>(6);
   const [showTable, setShowTable] = useState(false);
 
@@ -75,6 +69,7 @@ export function SalesReport() {
     ...m,
     cents: sum(current.map((x) => x.byMethod[m.value])),
   }));
+  const received = sum(byMethod.map((m) => m.cents));
 
   return (
     <div className="space-y-6">
@@ -136,7 +131,9 @@ export function SalesReport() {
           icon={CrownIcon}
           label="Top earner"
           value={top?.label ?? "—"}
-          note={top ? `${Math.round((top.salesCents / now.sales) * 100)}% of sales` : undefined}
+          note={
+            top ? `${Math.round((top.salesCents / now.sales) * 100)}% of sales` : "No sales yet"
+          }
           small
         />
       </ul>
@@ -144,7 +141,8 @@ export function SalesReport() {
       <section className="rounded-3xl border bg-card p-4 sm:p-6">
         <h2 className="text-xl font-semibold">Sales per month</h2>
         <p className="text-sm text-muted-foreground">
-          Package value of bookings made each month. Hover or tap a bar for details.
+          Booking totals (with add-ons and VAT) by shoot date, for bookings that are paid, confirmed
+          or done. Hover or tap a bar for details.
         </p>
         <MonthlyChart key={range} months={current} />
       </section>
@@ -153,18 +151,36 @@ export function SalesReport() {
         <section className="rounded-3xl border bg-card p-4 sm:p-6">
           <h2 className="text-xl font-semibold">Sales by package type</h2>
           <p className="text-sm text-muted-foreground">Which kinds of shoots bring in the most.</p>
-          <CategoryBars rows={byCategory} total={now.sales} />
+          {byCategory.length > 0 ? (
+            <CategoryBars rows={byCategory} total={now.sales} />
+          ) : (
+            <Empty>No bookings in this period yet.</Empty>
+          )}
         </section>
 
         <section className="rounded-3xl border bg-card p-4 sm:p-6">
           <h2 className="text-xl font-semibold">How clients paid</h2>
-          <p className="text-sm text-muted-foreground">Share of sales by payment method.</p>
-          <MethodSplit rows={byMethod} total={now.sales} />
+          <p className="text-sm text-muted-foreground">
+            Money received in this period ({formatPeso(received)}), by payment method.
+          </p>
+          {received > 0 ? (
+            <MethodSplit rows={byMethod} total={received} />
+          ) : (
+            <Empty>No payments received in this period yet.</Empty>
+          )}
         </section>
       </div>
 
       {showTable && <MonthTable months={current} />}
     </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-5 rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+      {children}
+    </p>
   );
 }
 
@@ -251,7 +267,8 @@ function MonthlyChart({ months }: { months: SalesMonth[] }) {
   }, []);
 
   const axis = ticks(Math.max(...months.map((m) => m.salesCents)));
-  const top = axis[axis.length - 1]!;
+  // At least ₱1 so an empty period draws flat bars instead of dividing by zero.
+  const top = Math.max(axis[axis.length - 1]!, 100);
   const maxIndex = months.reduce(
     (best, m, i) => (m.salesCents > months[best]!.salesCents ? i : best),
     0,
@@ -283,7 +300,7 @@ function MonthlyChart({ months }: { months: SalesMonth[] }) {
               <li key={m.month} className="relative flex h-full flex-1 justify-center">
                 <button
                   type="button"
-                  aria-label={`${m.longLabel}${i === last ? " (so far)" : ""}: ${formatPeso(m.salesCents)} from ${m.bookings} bookings`}
+                  aria-label={`${m.longLabel}${i === last ? " (including upcoming shoots)" : ""}: ${formatPeso(m.salesCents)} from ${m.bookings} bookings`}
                   onPointerEnter={() => setActive(i)}
                   onFocus={() => setActive(i)}
                   onBlur={() => setActive(null)}
@@ -335,7 +352,9 @@ function MonthlyChart({ months }: { months: SalesMonth[] }) {
           </li>
         ))}
       </ol>
-      <p className="mt-3 text-xs text-muted-foreground">The lighter bar is this month so far.</p>
+      <p className="mt-3 text-xs text-muted-foreground">
+        The lighter bar is this month, including shoots still to come.
+      </p>
     </div>
   );
 }
@@ -366,7 +385,7 @@ function Tooltip({
     >
       <p className="text-xs text-muted-foreground">
         {month.longLabel}
-        {partial && " (so far)"}
+        {partial && " (incl. upcoming)"}
       </p>
       <p className="font-heading text-xl font-semibold">{formatPeso(month.salesCents)}</p>
       <p className="text-xs text-muted-foreground">

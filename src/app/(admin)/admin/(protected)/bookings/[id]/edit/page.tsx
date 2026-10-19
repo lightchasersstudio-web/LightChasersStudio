@@ -99,6 +99,8 @@ async function EditBooking({ params }: Pick<PageProps<"/admin/bookings/[id]/edit
           name: a.name,
           priceCents: a.price_cents,
           active: a.is_active,
+          serviceIds: a.service_ids,
+          extraMinutes: a.extra_minutes,
         }))}
         vatPercent={b.vatPercent}
         paidCents={b.paidCents}

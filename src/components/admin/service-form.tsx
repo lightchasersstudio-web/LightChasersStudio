@@ -31,7 +31,9 @@ export function ServiceForm({ service }: { service?: Service }) {
           category: service.category,
           summary: service.summary ?? "",
           description: service.description ?? "",
-          durationMinutes: String(service.duration_minutes),
+          hasSetLength: service.duration_minutes !== null,
+          lengthHours:
+            service.duration_minutes === null ? "" : String(service.duration_minutes / 60),
           price: centsToPesoInput(service.price_cents),
           depositMode: service.deposit_cents === null ? "default" : "fixed",
           deposit: service.deposit_cents === null ? "" : centsToPesoInput(service.deposit_cents),
@@ -45,7 +47,8 @@ export function ServiceForm({ service }: { service?: Service }) {
           category: "portrait",
           summary: "",
           description: "",
-          durationMinutes: "60",
+          hasSetLength: false,
+          lengthHours: "",
           price: "",
           depositMode: "default",
           deposit: "",
@@ -56,7 +59,7 @@ export function ServiceForm({ service }: { service?: Service }) {
   });
   const { control } = form;
   useUnsavedChangesWarning(form.formState.isDirty);
-  const depositMode = useWatch({ control, name: "depositMode" });
+  const [depositMode, hasSetLength] = useWatch({ control, name: ["depositMode", "hasSetLength"] });
 
   async function onSubmit() {
     const values = form.getValues();
@@ -149,27 +152,37 @@ export function ServiceForm({ service }: { service?: Service }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Price & duration</CardTitle>
+            <CardTitle>Price & length</CardTitle>
             <CardDescription>Prices are in Philippine pesos.</CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup>
-              <div className="grid gap-5 sm:grid-cols-2">
+              <TextField
+                control={control}
+                name="price"
+                label="Price"
+                prefix="₱"
+                inputMode="decimal"
+                placeholder="15000"
+                className="sm:max-w-[calc(50%-0.625rem)]"
+              />
+              <SwitchField
+                control={control}
+                name="hasSetLength"
+                label="This package has a set length"
+                description="Only for packages like the Photobooth (4 hours). Others are booked by start time only, with no end time."
+              />
+              {hasSetLength && (
                 <TextField
                   control={control}
-                  name="price"
-                  label="Price"
-                  prefix="₱"
+                  name="lengthHours"
+                  label="Length (hours)"
                   inputMode="decimal"
-                  placeholder="15000"
+                  placeholder="4"
+                  description="Clients can add more time with an add-on that adds hours."
+                  className="sm:max-w-[calc(50%-0.625rem)]"
                 />
-                <TextField
-                  control={control}
-                  name="durationMinutes"
-                  label="Session length (minutes)"
-                  inputMode="numeric"
-                />
-              </div>
+              )}
               <div className="grid gap-5 sm:grid-cols-2">
                 <SelectField
                   control={control}

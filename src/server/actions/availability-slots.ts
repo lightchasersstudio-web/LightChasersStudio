@@ -13,6 +13,7 @@ import {
 const monthSlotsSchema = z.object({
   serviceId: z.uuid(),
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  addOnIds: z.array(z.uuid()).max(20).default([]),
 });
 
 /** Public: free start times for a month, for the booking wizard's calendar. */
@@ -24,6 +25,7 @@ export async function getMonthSlots(input: unknown): Promise<ActionResult<MonthS
       createPublicClient(),
       parsed.data.serviceId,
       parsed.data.month,
+      { addOnIds: parsed.data.addOnIds },
     );
     return days ? ok(toPayload(days)) : fail("This package isn't available to book.");
   } catch (error) {

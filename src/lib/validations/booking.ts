@@ -47,7 +47,7 @@ export type ClientDetailsInput = z.input<typeof clientDetailsSchema>;
 
 const shootFields = {
   location: optionalText(300),
-  participants: intString(1, 500),
+  participants: intString(1, 10_000),
   specialRequests: optionalText(2000),
 };
 

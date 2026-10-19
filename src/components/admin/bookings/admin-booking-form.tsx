@@ -8,7 +8,11 @@ import { Controller, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
 
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
-import { AddOnsEditor, type AddOnChoice } from "@/components/admin/bookings/add-ons-editor";
+import {
+  AddOnsEditor,
+  timeAddOnIds,
+  type AddOnChoice,
+} from "@/components/admin/bookings/add-ons-editor";
 import { BookingTotals } from "@/components/admin/bookings/booking-totals";
 import { ScheduleField } from "@/components/admin/bookings/schedule-field";
 import { handleResult } from "@/components/admin/form-utils";
@@ -122,7 +126,7 @@ export function AdminBookingForm({
       </Section>
 
       <Section title="Add-ons">
-        <AddOnsEditor control={form.control} catalog={addOnCatalog} />
+        <AddOnsEditor control={form.control} catalog={addOnCatalog} serviceId={serviceId} />
         <BookingTotals packagePrice={price} addOns={addOns} vatPercent={0} chargeVat={false} />
         <p className="text-xs text-muted-foreground">
           VAT can be added on the booking page after it&apos;s created.
@@ -132,6 +136,7 @@ export function AdminBookingForm({
       <Section title="Date & time">
         <ScheduleField
           form={form}
+          addOnIds={timeAddOnIds(addOns, addOnCatalog)}
           initialDate={initialDate}
           startInAnyTime={Boolean(initialTime)}
         />

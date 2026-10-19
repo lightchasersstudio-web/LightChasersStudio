@@ -34,6 +34,7 @@ const monthSlotsSchema = z.object({
   serviceId: z.uuid(),
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   excludeBookingId: z.uuid().optional(),
+  addOnIds: z.array(z.uuid()).max(20).default([]),
 });
 
 /** Free times for staff: any package, ignoring the notice period and booking window. */
@@ -41,10 +42,11 @@ export async function getAdminMonthSlots(input: unknown): Promise<ActionResult<M
   return adminAction(
     monthSlotsSchema,
     input,
-    async ({ serviceId, month, excludeBookingId }, ctx) => {
+    async ({ serviceId, month, excludeBookingId, addOnIds }, ctx) => {
       const days = await loadMonthAvailability(ctx.supabase, serviceId, month, {
         staff: true,
         excludeBookingId,
+        addOnIds,
       });
       return days ? ok(toPayload(days)) : fail("Package not found.");
     },

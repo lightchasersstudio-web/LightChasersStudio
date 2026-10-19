@@ -16,6 +16,7 @@ import { getAdminMonthSlots } from "@/server/actions/admin-bookings";
 /**
  * Date & time for staff: the free-times calendar, or "any time" date + time
  * inputs. When moving a booking, `excludeBookingId` keeps its own slot free.
+ * `addOnIds` (time-adding add-ons) lengthen a package with a set length.
  */
 export function ScheduleField<
   F extends FieldValues & { date: string; time: string; serviceId: string },
@@ -25,11 +26,13 @@ export function ScheduleField<
   initialDate,
   startInAnyTime,
   excludeBookingId,
+  addOnIds = [],
 }: {
   form: UseFormReturn<F, unknown, T>;
   initialDate?: string | null;
   startInAnyTime?: boolean;
   excludeBookingId?: string;
+  addOnIds?: string[];
 }) {
   const [anyTime, setAnyTime] = useState(Boolean(startInAnyTime));
   const [serviceId, date, time] = useWatch({
@@ -37,9 +40,16 @@ export function ScheduleField<
     name: ["serviceId", "date", "time"] as Path<F>[],
   }) as unknown as [string, string, string];
   const now = TZDate.tz(BUSINESS_TZ);
+  const addOnKey = addOnIds.join(",");
   const loadMonth = useCallback(
-    (month: string) => getAdminMonthSlots({ serviceId, month, excludeBookingId }),
-    [serviceId, excludeBookingId],
+    (month: string) =>
+      getAdminMonthSlots({
+        serviceId,
+        month,
+        excludeBookingId,
+        addOnIds: addOnKey ? addOnKey.split(",") : [],
+      }),
+    [serviceId, excludeBookingId, addOnKey],
   );
   const set = (name: "date" | "time", value: string) =>
     form.setValue(name as Path<F>, value as PathValue<F, Path<F>>, { shouldDirty: true });
@@ -65,7 +75,7 @@ export function ScheduleField<
       ) : (
         <Field data-invalid={Boolean(error)}>
           <SlotPicker
-            key={serviceId}
+            key={`${serviceId}:${addOnKey}`}
             load={loadMonth}
             minMonth={format(now, "yyyy-MM")}
             maxMonth={format(addMonths(now, 24), "yyyy-MM")}

@@ -7,7 +7,11 @@ import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type Control } from "react-hook-form";
 import type { z } from "zod";
 
-import { AddOnsEditor, type AddOnChoice } from "@/components/admin/bookings/add-ons-editor";
+import {
+  AddOnsEditor,
+  timeAddOnIds,
+  type AddOnChoice,
+} from "@/components/admin/bookings/add-ons-editor";
 import type { PackageChoice } from "@/components/admin/bookings/admin-booking-form";
 import { BookingTotals } from "@/components/admin/bookings/booking-totals";
 import { ScheduleField } from "@/components/admin/bookings/schedule-field";
@@ -91,7 +95,7 @@ export function AdminBookingEditForm({
               value: p.id,
               label: p.active ? p.name : `${p.name} (hidden)`,
             }))}
-            description="Changing the package resets its price and session length."
+            description="Changing the package resets its price."
           />
           <TextField
             control={form.control}
@@ -104,7 +108,7 @@ export function AdminBookingEditForm({
       </Section>
 
       <Section title="Add-ons">
-        <AddOnsEditor control={form.control} catalog={addOnCatalog} />
+        <AddOnsEditor control={form.control} catalog={addOnCatalog} serviceId={serviceId} />
         {vatPercent > 0 && (
           <Checkbox control={form.control} name="chargeVat">
             Charge {vatPercent}% VAT on this booking
@@ -122,6 +126,7 @@ export function AdminBookingEditForm({
       <Section title="Date & time">
         <ScheduleField
           form={form}
+          addOnIds={timeAddOnIds(addOns, addOnCatalog)}
           initialDate={initial.date}
           excludeBookingId={initial.bookingId}
         />

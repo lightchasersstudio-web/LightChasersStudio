@@ -11,7 +11,8 @@ export type BookingSummary = {
   /** Extras booked with the package, at the price they were booked for. */
   addOns: { name: string; priceCents: number }[];
   startAt: string;
-  endAt: string;
+  /** Only packages with a set length (the Photobooth) have an end time. */
+  endAt: string | null;
   location: string | null;
   priceCents: number;
   /** VAT included in priceCents (0 when none was charged). */
@@ -23,11 +24,13 @@ export type BookingSummary = {
   studioEmail: string | null;
 };
 
-/** "Tue, 3 Nov 2026, 1:00 PM – 2:00 PM" in Manila time. */
-export function formatBookingWhen(startAt: string, endAt: string): string {
-  const start = new TZDate(startAt, BUSINESS_TZ);
-  const end = new TZDate(endAt, BUSINESS_TZ);
-  return `${format(start, "EEE, d MMM yyyy, h:mm a")} – ${format(end, "h:mm a")}`;
+/**
+ * "Tue, 3 Nov 2026, 1:00 PM – 5:00 PM" in Manila time, or just the start
+ * ("Tue, 3 Nov 2026, 1:00 PM") when the booking has no end time.
+ */
+export function formatBookingWhen(startAt: string, endAt: string | null): string {
+  const start = format(new TZDate(startAt, BUSINESS_TZ), "EEE, d MMM yyyy, h:mm a");
+  return endAt ? `${start} – ${format(new TZDate(endAt, BUSINESS_TZ), "h:mm a")}` : start;
 }
 
 /** "Extra photographer (₱2,000), Videographer (₱5,000)", or null when there are none. */

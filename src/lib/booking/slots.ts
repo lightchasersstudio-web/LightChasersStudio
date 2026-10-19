@@ -7,6 +7,7 @@ import { BUSINESS_TZ } from "@/lib/utils/business-date";
 // create_booking()/admin_create_booking(); the database stays the final word.
 
 export type SlotRules = {
+  /** Time each booking holds before the buffer (see bookingLengthMinutes). */
   durationMinutes: number;
   bufferMinutes: number;
   slotIntervalMinutes: number;

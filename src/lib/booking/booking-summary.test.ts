@@ -31,6 +31,11 @@ describe("bookingSummaryText", () => {
     expect(text).not.toContain("null");
   });
 
+  it("shows only the start time when the booking has no end time", () => {
+    const text = bookingSummaryText({ ...booking, endAt: null });
+    expect(text).toContain("When: Tue, 3 Nov 2026, 1:00 PM\n");
+  });
+
   it("leaves out an empty location and says when it's fully paid", () => {
     const text = bookingSummaryText({ ...booking, location: null, paidCents: 350000 });
     expect(text).not.toMatch(/Location/);
