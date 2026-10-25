@@ -1,7 +1,6 @@
 import { ArrowRightIcon, CalendarCheckIcon, CameraIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 
-import { BeforeAfterSection } from "@/components/public/before-after-section";
 import { BookCta } from "@/components/public/book-cta";
 import { BrandLogo } from "@/components/public/brand-logo";
 import { CATEGORY_ICONS } from "@/components/public/category-icons";
@@ -43,6 +42,9 @@ const HOW_IT_WORKS = [
   },
 ];
 
+/** Photos a package needs linked to it (Admin → Portfolio) to get its own highlight reel. */
+const PACKAGE_REEL_MIN = 5;
+
 export default async function HomePage() {
   const [settings, services, featured, portfolio] = await Promise.all([
     getPublicSettings(),
@@ -50,25 +52,42 @@ export default async function HomePage() {
     listFeaturedPhotos(9),
     listPortfolio(),
   ]);
-  // One highlight reel per kind of shoot, newest-first up to 8 photos each.
+  // One highlight reel per kind of shoot, newest-first up to 8 photos each, followed
+  // by its own reel for any package with enough photos linked to it (e.g. Wedding Day).
+  const reel = (
+    id: string,
+    label: string,
+    href: string,
+    photos: typeof portfolio,
+    cta?: string,
+  ): Story => ({
+    id,
+    label,
+    href,
+    cta,
+    photos: photos.slice(0, 8).map((p) => ({
+      id: p.id,
+      src: publicImageUrl("portfolio", p.storage_path),
+      alt: p.alt_text,
+      caption: p.caption,
+      blur: p.blur_data_url,
+    })),
+  });
   const stories: Story[] = SERVICE_CATEGORIES.flatMap(({ value, label }) => {
-    const photos = portfolio.filter((p) => p.category === value).slice(0, 8);
-    return photos.length
-      ? [
-          {
-            id: value,
-            label,
-            href: `/services#${value}`,
-            photos: photos.map((p) => ({
-              id: p.id,
-              src: publicImageUrl("portfolio", p.storage_path),
-              alt: p.alt_text,
-              caption: p.caption,
-              blur: p.blur_data_url,
-            })),
-          },
-        ]
-      : [];
+    const photos = portfolio.filter((p) => p.category === value);
+    const packageReels = services
+      .filter((s) => s.category === value)
+      .map((s) => ({ s, linked: portfolio.filter((p) => p.service_id === s.id) }))
+      .filter(({ linked }) => linked.length >= PACKAGE_REEL_MIN)
+      .map(({ s, linked }) => {
+        // Open on a different photo than the category reel so the two circles don't match.
+        const first = photos[0]?.id === linked[0]?.id ? [...linked.slice(1), linked[0]!] : linked;
+        return reel(s.slug, s.name, `/services/${s.slug}`, first, `See the ${s.name} package`);
+      });
+    return [
+      ...(photos.length ? [reel(value, label, `/services#${value}`, photos)] : []),
+      ...packageReels,
+    ];
   });
   const heroPhotos = featured.slice(0, 3);
   // One card per category (Versa Space is the studio rental one). A category without
@@ -211,8 +230,6 @@ export default async function HomePage() {
           </div>
         </section>
       )}
-
-      <BeforeAfterSection samplePhoto={featured[0]} />
 
       {/* Services */}
       {services.length > 0 && (
