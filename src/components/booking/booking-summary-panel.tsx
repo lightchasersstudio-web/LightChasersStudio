@@ -147,7 +147,7 @@ function Rows({
         </div>
         {deposit > 0 && (
           <div className="flex items-baseline justify-between gap-3">
-            <dt>Deposit now</dt>
+            <dt>{deposit >= total ? "Pay now" : "Deposit now"}</dt>
             <dd className="font-heading text-lg font-semibold">{formatPeso(deposit)}</dd>
           </div>
         )}

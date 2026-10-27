@@ -48,6 +48,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   return data;
 }
 
+/** Active packages. The workshop is booked from its own button, so it's left out here. */
 export async function listActiveServices(): Promise<PublicService[]> {
   "use cache";
   cacheTag(TAGS.services);
@@ -56,6 +57,7 @@ export async function listActiveServices(): Promise<PublicService[]> {
     .from("services")
     .select("*")
     .eq("is_active", true)
+    .neq("category", "workshop")
     .order("sort_order")
     .order("created_at");
   if (error) throw error;
@@ -71,6 +73,24 @@ export async function getActiveServiceBySlug(slug: string): Promise<PublicServic
     .select("*")
     .eq("slug", slug)
     .eq("is_active", true)
+    .neq("category", "workshop")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** The workshop clients can book from the floating button (first active one), or null. */
+export async function getActiveWorkshop(): Promise<PublicService | null> {
+  "use cache";
+  cacheTag(TAGS.services);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("services")
+    .select("*")
+    .eq("is_active", true)
+    .eq("category", "workshop")
+    .order("sort_order")
+    .limit(1)
     .maybeSingle();
   if (error) throw error;
   return data;

@@ -73,4 +73,13 @@ describe("publicBookingSchema", () => {
       false,
     );
   });
+
+  it("needs the refund rule accepted when paying for a workshop", () => {
+    const workshop = { ...input, payInFull: false };
+    const refused = publicBookingSchema.safeParse({ ...workshop, refundRuleAccepted: false });
+    expect(refused.error?.issues.map((i) => i.path.join("."))).toEqual(["refundRuleAccepted"]);
+    expect(publicBookingSchema.safeParse({ ...workshop, refundRuleAccepted: true }).success).toBe(
+      true,
+    );
+  });
 });

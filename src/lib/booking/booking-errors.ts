@@ -10,6 +10,7 @@ export const BOOKING_ERRORS: Record<string, string> = {
     "One of the add-ons you picked is no longer offered. Please check them again.",
   invalid_start_time: "Please pick one of the listed times.",
   email_required: "Enter a valid email address.",
+  payment_option_required: "Choose to pay half or the full price.",
   invalid_price: "Enter a valid price.",
   invalid_payment: "Pick GCash or cash for the payment.",
   invalid_add_ons: "Check the add-ons: each needs a name (2–80 letters) and a price.",

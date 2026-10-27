@@ -42,7 +42,7 @@ function Bar() {
     };
   }, [pathname]);
 
-  const onBookingPage = pathname.startsWith("/book");
+  const onBookingPage = pathname.startsWith("/book") || pathname === "/workshop";
   const show = scrolled && !footerVisible && !onBookingPage;
 
   return (

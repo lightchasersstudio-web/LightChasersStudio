@@ -1151,4 +1151,64 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
   });
+  describe("workshops (pay half or in full)", () => {
+    const WORKSHOP = `select * from public.create_booking(
+      p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+      p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+      p_start_at => $3, p_pay_in_full => $4)`;
+
+    it("charges half or the full price, and needs the choice", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        // A fixed package deposit is ignored for workshops.
+        const { rows } = await c.query<{ id: string }>(`
+          insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents)
+          values ('Test Workshop', 'test-workshop', 'workshop', null, 100001, 5000) returning id`);
+        const workshop = rows[0]!.id;
+        await actAs(c, "service_role");
+
+        const half = (
+          await c.query(WORKSHOP, [
+            "ana@example.com",
+            workshop,
+            manila(152, 10).toISOString(),
+            false,
+          ])
+        ).rows[0]!;
+        expect(half.deposit_cents).toBe(50001); // round(100001 / 2)
+        expect(half.status).toBe("pending_payment");
+
+        const full = (
+          await c.query(WORKSHOP, [
+            "bea@example.com",
+            workshop,
+            manila(152, 11).toISOString(),
+            true,
+          ])
+        ).rows[0]!;
+        expect(full.deposit_cents).toBe(100001);
+
+        expect(
+          await expectFailure(c, CREATE, [
+            "Cy",
+            "cy@example.com",
+            "09171234567",
+            workshop,
+            manila(152, 12).toISOString(),
+          ]),
+        ).toMatch(/payment_option_required/);
+
+        // Packages ignore the option and keep their deposit rules.
+        const pkg = (
+          await c.query(WORKSHOP, [
+            "di@example.com",
+            s.portrait,
+            manila(153, 10).toISOString(),
+            true,
+          ])
+        ).rows[0]!;
+        expect(pkg.deposit_cents).toBe(105000);
+      });
+    });
+  });
 });

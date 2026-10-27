@@ -13,7 +13,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { SERVICE_CATEGORIES, type ServiceCategory } from "@/lib/catalog";
+import { PACKAGE_CATEGORIES, type ServiceCategory } from "@/lib/catalog";
 import { PAYMENT_METHODS, type PaymentMethod, type SalesMonth } from "@/lib/reports/sales";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
@@ -56,7 +56,7 @@ export function SalesReport({ months: all }: { months: SalesMonth[] }) {
   const now = totals(current);
   const before = totals(previous);
 
-  const byCategory = SERVICE_CATEGORIES.map((c) => ({
+  const byCategory = PACKAGE_CATEGORIES.map((c) => ({
     ...c,
     salesCents: sum(current.map((m) => m.byCategory[c.value]?.salesCents ?? 0)),
     bookings: sum(current.map((m) => m.byCategory[c.value]?.bookings ?? 0)),
