@@ -64,8 +64,15 @@ export const publicBookingSchema = z
     turnstileToken: z.string().max(4096),
     // Honeypot: hidden from people, filled in by bots.
     website: z.string().max(0),
+    // Workshops only: pay the full price (else half), after accepting the refund rule.
+    payInFull: z.boolean().optional(),
+    refundRuleAccepted: z.boolean().optional(),
   })
-  .refine(requireMessenger, messengerIssue);
+  .refine(requireMessenger, messengerIssue)
+  .refine((v) => v.payInFull === undefined || v.refundRuleAccepted === true, {
+    message: "Please confirm you understand the refund rule.",
+    path: ["refundRuleAccepted"],
+  });
 export type PublicBookingInput = z.input<typeof publicBookingSchema>;
 
 export const lookupSchema = z.object({

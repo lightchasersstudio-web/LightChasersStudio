@@ -60,6 +60,7 @@ export async function submitBooking(
         vatPercent: settings?.vat_percent ?? 0,
         fixedDepositCents: service?.deposit_cents ?? null,
         depositPercent: settings?.default_deposit_percent ?? 0,
+        payInFull: v.payInFull,
       });
       if (deposit > 0) return fail(NO_ONLINE_PAYMENT);
     }
@@ -82,6 +83,7 @@ export async function submitBooking(
         p_special_requests: v.specialRequests ?? undefined,
         p_messenger: v.messenger ?? undefined,
         p_add_on_ids: v.addOnIds,
+        p_pay_in_full: v.payInFull,
       })
       .single();
     if (error) {
@@ -124,13 +126,13 @@ async function startCheckout(
   try {
     const { data: booking } = await createAdminClient()
       .from("bookings")
-      .select("service:services(name)")
+      .select("price_cents, service:services(name)")
       .eq("id", bookingId)
       .single();
     const session = await createCheckoutSession({
       referenceCode: reference,
       amountCents,
-      description: `Deposit · ${booking?.service?.name ?? "Photo session"} (${reference})`,
+      description: `${amountCents >= (booking?.price_cents ?? Infinity) ? "Payment" : "Deposit"} · ${booking?.service?.name ?? "Photo session"} (${reference})`,
       successUrl: `${siteUrl()}/book/done?ref=${reference}`,
       cancelUrl: `${siteUrl()}/book/cancelled?ref=${reference}`,
       name: client.fullName,

@@ -716,6 +716,14 @@ export type Database = {
         Args: { p_blocked_until: string; p_exclude?: string; p_start: string }
         Returns: undefined
       }
+      booking_length_minutes: {
+        Args: {
+          p_duration_minutes: number
+          p_extra_minutes: number
+          p_slot_interval_minutes: number
+        }
+        Returns: number
+      }
       create_booking: {
         Args: {
           p_add_on_ids?: string[]
@@ -725,6 +733,7 @@ export type Database = {
           p_location?: string
           p_messenger?: string
           p_participants?: number
+          p_pay_in_full?: boolean
           p_phone: string
           p_preferred_contact: Database["public"]["Enums"]["contact_method"]
           p_service_id: string
@@ -776,6 +785,7 @@ export type Database = {
         Args: { p_rules: Json }
         Returns: undefined
       }
+      staff_add_on_minutes: { Args: { p_add_ons: Json }; Returns: number }
     }
     Enums: {
       admin_role: "owner" | "admin"
@@ -795,6 +805,7 @@ export type Database = {
         | "studio"
         | "event"
         | "commercial"
+        | "workshop"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -940,6 +951,7 @@ export const Constants = {
         "studio",
         "event",
         "commercial",
+        "workshop",
       ],
     },
   },

@@ -39,4 +39,16 @@ describe("bookingTotals", () => {
       }).vat,
     ).toBe(4_000);
   });
+
+  it("workshops pay half or the full total, ignoring the deposit rules", () => {
+    const base = {
+      packageCents: 100_001,
+      addOnsCents: 0,
+      vatPercent: 0,
+      fixedDepositCents: 50,
+      depositPercent: 30,
+    };
+    expect(bookingTotals({ ...base, payInFull: false }).deposit).toBe(50_001);
+    expect(bookingTotals({ ...base, payInFull: true }).deposit).toBe(100_001);
+  });
 });

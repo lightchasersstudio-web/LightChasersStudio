@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { SERVICE_CATEGORY_VALUES } from "@/lib/catalog";
+import { PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
 import { optionalText, pesoString } from "@/lib/validations/shared";
 
@@ -14,7 +14,7 @@ export const serviceSchema = z
       .min(2, "Add a URL name.")
       .max(120)
       .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lowercase letters, numbers and dashes only."),
-    category: z.enum(SERVICE_CATEGORY_VALUES, "Pick a category."),
+    category: z.enum(PACKAGE_CATEGORY_VALUES, "Pick a category."),
     summary: optionalText(300),
     description: optionalText(5000),
     // Only packages like the Photobooth have a set length; others are just a start time.

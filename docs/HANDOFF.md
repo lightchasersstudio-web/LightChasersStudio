@@ -114,6 +114,14 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Monthly CSV for accounting:** Sales report → Download CSV (`/admin/reports/export?month=YYYY-MM`). One row per booking in that month with package, add-ons, before-VAT, VAT, total, paid, balance and payment method. (The Sales report charts themselves still show sample data.)
 - **Database:** migration `20261018000100_booking_management.sql` adds `admin_update_booking` and `delete_booking` (both service role only) and lets `admin_create_booking` take add-ons.
 
+### 2026-10-27: workshop booking (branch `workshop`, base for the other developer)
+
+- **For clients:** a "Workshop" button floats on the left of every public page (Messenger stays on the right). It opens `/workshop`: the same steps as a booking, but step 2 is **Payment**: pay half or pay in full, and tick the refund rule. They then pick a free date and time on the same calendar and pay through PayMongo (or the pretend checkout in trial mode). The workshop never appears in the normal package lists.
+- **Refund rule (owner's):** paid half = no refund if they can't attend; paid in full = half of the price back. Refunds are sent by hand; the admin booking page says what's due.
+- **For staff:** workshop sign-ups are ordinary bookings: calendar, review/confirm, payments, edit, CSV and sales report all work. Edit the workshop (name, price, description, cover photo, on/off) in Admin → Services; it's the "Workshop" category. Turning it off hides the button.
+- **Placeholder:** "Photography Workshop", ₱1,000 + VAT, with placeholder text. Replace it before go-live.
+- **Left for the other developer:** workshop options, refund wording in emails, a workshop section in the reports.
+
 ## Managing data
 
 - **Two databases.** The dev project (`mkpjxrhjynbjuiovloiy`) is for testing and keeps all test bookings. The production project starts **empty** at go-live; never test there.

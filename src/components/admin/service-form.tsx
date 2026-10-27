@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { SERVICE_CATEGORIES } from "@/lib/catalog";
+import { PACKAGE_CATEGORIES } from "@/lib/catalog";
 import { centsToPesoInput } from "@/lib/utils/money";
 import { serviceSchema, slugify, type ServiceFormInput } from "@/lib/validations/services";
 import { createService, updateService } from "@/server/actions/services";
@@ -122,7 +122,7 @@ export function ServiceForm({ service }: { service?: Service }) {
                   control={control}
                   name="category"
                   label="Category"
-                  options={SERVICE_CATEGORIES}
+                  options={PACKAGE_CATEGORIES}
                 />
               </div>
               <TextField

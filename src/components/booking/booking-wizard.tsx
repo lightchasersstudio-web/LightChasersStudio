@@ -7,7 +7,7 @@ import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, Loader2Icon } from
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Controller, useForm, useWatch, type FieldPath } from "react-hook-form";
+import { Controller, useForm, useWatch, type FieldPath, type UseFormReturn } from "react-hook-form";
 import { toast } from "sonner";
 import type { z } from "zod";
 
@@ -23,6 +23,7 @@ import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { formatBookingWhen } from "@/lib/booking/booking-summary";
 import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
 import { bookingTotals } from "@/lib/booking/pricing";
+import { WORKSHOP_REFUND_RULE } from "@/lib/booking/workshop";
 import { categoryLabel } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
@@ -40,7 +41,7 @@ import type { PublicAddOn, PublicService } from "@/server/queries/public";
 type Values = PublicBookingInput;
 type Output = z.output<typeof publicBookingSchema>;
 
-const STEPS: { title: string; fields: FieldPath<Values>[] }[] = [
+const PACKAGE_STEPS: { title: string; fields: FieldPath<Values>[] }[] = [
   {
     title: "Your details",
     fields: ["fullName", "email", "phone", "preferredContact", "messenger", "consent"],
@@ -49,6 +50,14 @@ const STEPS: { title: string; fields: FieldPath<Values>[] }[] = [
   { title: "Date & time", fields: ["startAt"] },
   { title: "Shoot details", fields: ["location", "participants", "specialRequests"] },
   { title: "Review & pay", fields: [] },
+];
+/** Workshops have one fixed price: step 2 is choosing to pay half or in full. */
+const WORKSHOP_STEPS: typeof PACKAGE_STEPS = [
+  PACKAGE_STEPS[0]!,
+  { title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
+  PACKAGE_STEPS[2]!,
+  { title: "Other details", fields: PACKAGE_STEPS[3]!.fields },
+  PACKAGE_STEPS[4]!,
 ];
 
 export type WizardService = Pick<
@@ -72,6 +81,7 @@ export function BookingWizard({
   vatPercent,
   holdMinutes,
   maxAdvanceDays,
+  workshop = false,
 }: {
   services: WizardService[];
   addOns: PublicAddOn[];
@@ -81,7 +91,10 @@ export function BookingWizard({
   vatPercent: number;
   holdMinutes: number;
   maxAdvanceDays: number;
+  /** Workshop flow: one fixed-price workshop (services[0]), paid half or in full. */
+  workshop?: boolean;
 }) {
+  const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
   const [step, setStep] = useState(0);
   // +1 moving forward, -1 going back: steps slide in from that side.
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -105,6 +118,7 @@ export function BookingWizard({
     specialRequests: "",
     turnstileToken: "",
     website: "",
+    ...(workshop && { payInFull: false, refundRuleAccepted: false }),
   });
   const form = useForm<Values, unknown, Output>({
     resolver: zodResolver(publicBookingSchema),
@@ -147,9 +161,9 @@ export function BookingWizard({
     setRestored(false);
     goTo(0);
   }
-  const [serviceId, startAt, preferredContact, addOnIds, location] = useWatch({
+  const [serviceId, startAt, preferredContact, addOnIds, location, payInFull] = useWatch({
     control: form.control,
-    name: ["serviceId", "startAt", "preferredContact", "addOnIds", "location"],
+    name: ["serviceId", "startAt", "preferredContact", "addOnIds", "location", "payInFull"],
   });
   const service = services.find((s) => s.id === serviceId);
   // Each add-on lists the packages it goes with (e.g. extensions only for the Photobooth).
@@ -170,6 +184,7 @@ export function BookingWizard({
         vatPercent,
         fixedDepositCents: service.deposit_cents,
         depositPercent,
+        payInFull,
       })
     : { subtotal: 0, vat: 0, total: 0, deposit: 0 };
   const endAt =
@@ -273,7 +288,7 @@ export function BookingWizard({
       noValidate
       className="space-y-8 sm:space-y-12"
     >
-      <StepTracker step={step} onGoTo={goTo} disabled={submitting} />
+      <StepTracker steps={STEPS} step={step} onGoTo={goTo} disabled={submitting} />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-10">
         <div className="min-w-0 space-y-8">
           <div>
@@ -386,7 +401,16 @@ export function BookingWizard({
                   </FieldGroup>
                 )}
 
-                {step === 1 && (
+                {step === 1 && workshop && service && (
+                  <WorkshopPayment
+                    form={form}
+                    service={service}
+                    vatPercent={vatPercent}
+                    depositPercent={depositPercent}
+                  />
+                )}
+
+                {step === 1 && !workshop && (
                   <Controller
                     control={form.control}
                     name="serviceId"
@@ -586,7 +610,15 @@ export function BookingWizard({
                 {last && service && startAt && (
                   <div className="space-y-6">
                     <dl className="divide-y rounded-3xl border bg-card">
-                      <ReviewRow label="Package" value={service.name} onEdit={() => goTo(1)} />
+                      {workshop ? (
+                        <ReviewRow
+                          label="Workshop"
+                          value={`${service.name} · ${payInFull ? "paying in full" : "paying half now"}`}
+                          onEdit={() => goTo(1)}
+                        />
+                      ) : (
+                        <ReviewRow label="Package" value={service.name} onEdit={() => goTo(1)} />
+                      )}
                       {chosenAddOns.length > 0 && (
                         <ReviewRow
                           label="Add-ons"
@@ -614,7 +646,7 @@ export function BookingWizard({
                     </dl>
                     <div className="rounded-3xl bg-accent p-5 text-accent-foreground">
                       <div className="flex justify-between gap-4">
-                        <span>Package price</span>
+                        <span>{workshop ? "Workshop price" : "Package price"}</span>
                         <span className="font-bold">{formatPeso(service.price_cents)}</span>
                       </div>
                       {chosenAddOns.map((a) => (
@@ -644,7 +676,7 @@ export function BookingWizard({
                       {deposit > 0 && (
                         <>
                           <div className="mt-2 flex justify-between gap-4">
-                            <span>Deposit to pay now</span>
+                            <span>{deposit >= total ? "To pay now" : "Deposit to pay now"}</span>
                             <span className="font-heading text-2xl font-semibold">
                               {formatPeso(deposit)}
                             </span>
@@ -655,6 +687,7 @@ export function BookingWizard({
                               <span>{formatPeso(total - deposit)}</span>
                             </div>
                           )}
+                          {workshop && <p className="mt-3 text-sm">{WORKSHOP_REFUND_RULE}</p>}
                           <p className="mt-3 text-sm">
                             We hold this time for {holdMinutes} minutes while you pay securely with
                             PayMongo (GCash, card and more).
@@ -704,7 +737,11 @@ export function BookingWizard({
           // submit button mid-click, or the form submits and skips the Review step.
           <Button key="submit" type="submit" size="lg" disabled={submitting}>
             {submitting && <Loader2Icon className="animate-spin" aria-hidden />}
-            {deposit > 0 ? `Pay ${formatPeso(deposit)} deposit` : "Request booking"}
+            {deposit <= 0
+              ? "Request booking"
+              : deposit >= total
+                ? `Pay ${formatPeso(deposit)}`
+                : `Pay ${formatPeso(deposit)} deposit`}
           </Button>
         ) : (
           <Button key="continue" type="button" size="lg" onClick={next}>
@@ -725,10 +762,12 @@ const SLIDE = {
 
 /** Numbered steps with a filling line; finished steps can be tapped to go back. */
 function StepTracker({
+  steps: STEPS,
   step,
   onGoTo,
   disabled,
 }: {
+  steps: typeof PACKAGE_STEPS;
   step: number;
   onGoTo: (step: number) => void;
   disabled: boolean;
@@ -793,5 +832,105 @@ function ReviewRow({ label, value, onEdit }: { label: string; value: string; onE
         Edit<span className="sr-only"> {label.toLowerCase()}</span>
       </Button>
     </div>
+  );
+}
+
+/** Workshop step 2: the fixed price, pay half or in full, and the refund rule to accept. */
+function WorkshopPayment({
+  form,
+  service,
+  vatPercent,
+  depositPercent,
+}: {
+  form: UseFormReturn<Values, unknown, Output>;
+  service: WizardService;
+  vatPercent: number;
+  depositPercent: number;
+}) {
+  const totals = (payInFull: boolean) =>
+    bookingTotals({
+      packageCents: service.price_cents,
+      addOnsCents: 0,
+      vatPercent,
+      fixedDepositCents: null,
+      depositPercent,
+      payInFull,
+    });
+  const options = [
+    { value: false, label: "Pay half now", cents: totals(false).deposit },
+    { value: true, label: "Pay in full", cents: totals(true).deposit },
+  ];
+  return (
+    <FieldGroup>
+      <div className="rounded-2xl border bg-card p-4">
+        <p className="font-heading text-lg font-semibold">{service.name}</p>
+        {service.summary && <p className="text-sm text-muted-foreground">{service.summary}</p>}
+        <p className="mt-1 font-bold">
+          {formatPeso(totals(true).total)}
+          {vatPercent > 0 && (
+            <span className="font-normal text-muted-foreground"> incl. {vatPercent}% VAT</span>
+          )}
+        </p>
+      </div>
+      <Controller
+        control={form.control}
+        name="payInFull"
+        render={({ field }) => (
+          <div
+            role="radiogroup"
+            aria-label="How much to pay now"
+            className="grid gap-3 sm:grid-cols-2"
+          >
+            {options.map((o) => {
+              const checked = field.value === o.value;
+              return (
+                <label
+                  key={o.label}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-card p-4 transition-all duration-200 hover:border-primary",
+                    "has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+                    checked && "border-primary bg-accent/50 ring-1 ring-primary",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name={field.name}
+                    checked={checked}
+                    onChange={() => field.onChange(o.value)}
+                    className="sr-only"
+                  />
+                  <span className="font-semibold">{o.label}</span>
+                  <span className="font-heading text-lg font-semibold">{formatPeso(o.cents)}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      />
+      <Controller
+        control={form.control}
+        name="refundRuleAccepted"
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-card p-4">
+              <input
+                type="checkbox"
+                checked={Boolean(field.value)}
+                onChange={(e) => field.onChange(e.target.checked)}
+                onBlur={field.onBlur}
+                ref={field.ref}
+                aria-invalid={fieldState.invalid}
+                className="mt-0.5 size-5 shrink-0 accent-primary"
+              />
+              <span className="text-sm">
+                <strong className="block">Refund rule</strong>
+                {WORKSHOP_REFUND_RULE} I understand and agree.
+              </span>
+            </label>
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
+    </FieldGroup>
   );
 }

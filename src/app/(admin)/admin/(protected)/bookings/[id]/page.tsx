@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { formatAddOns, formatBookingWhen } from "@/lib/booking/booking-summary";
 import { describeHistoryEntry } from "@/lib/booking/history";
 import { replyTemplates } from "@/lib/booking/reply-templates";
+import { workshopRefundCents } from "@/lib/booking/workshop";
 import { getPublicEnv } from "@/lib/env";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatPeso } from "@/lib/utils/money";
@@ -173,6 +174,15 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                   )}
                 </p>
               </div>
+              {b.service?.category === "workshop" && (
+                <p className="rounded-2xl bg-accent px-4 py-3 text-sm text-accent-foreground">
+                  <strong>Workshop</strong> · chose to pay{" "}
+                  {b.deposit_cents >= b.price_cents ? "in full" : "half"}.{" "}
+                  {workshopRefundCents(b.price_cents, b.paidCents) > 0
+                    ? `If they can't attend, refund ${formatPeso(workshopRefundCents(b.price_cents, b.paidCents))} (half).`
+                    : "No refund if they can't attend (not paid in full)."}
+                </p>
+              )}
               {b.payments.length > 0 ? (
                 <ul className="divide-y text-sm">
                   {b.payments.map((p) => (
