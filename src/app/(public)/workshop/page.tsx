@@ -37,6 +37,10 @@ const CLOSED = {
     title: "Sign-ups have closed",
     text: "This workshop has already started. Message us to hear about the next one.",
   },
+  paused: {
+    title: "Sign-ups are paused",
+    text: "We're not taking sign-ups for this workshop right now. Message us to hear when they reopen.",
+  },
   full: {
     title: "Fully booked",
     text: "Every seat has been taken. Message us to join the waiting list or hear about the next one.",
@@ -105,16 +109,19 @@ async function Workshop() {
           </Detail>
         )}
         <Detail Icon={TagIcon} label={`Per person${settings.vat_percent > 0 ? " (+ VAT)" : ""}`}>
-          Regular {formatPeso(prices.regular)}
-          {earlyBird.open && prices.early_bird !== null && (
-            <>
-              {" "}
-              · Early bird {formatPeso(prices.early_bird)}
-              {workshop.workshop_early_bird_until &&
-                ` (until ${formatEarlyBirdUntil(workshop.workshop_early_bird_until)})`}
-            </>
-          )}
-          {prices.student !== null && <> · Student {formatPeso(prices.student)}</>}
+          {[
+            prices.regular !== null && `Regular ${formatPeso(prices.regular)}`,
+            earlyBird.open &&
+              prices.early_bird !== null &&
+              `Early bird ${formatPeso(prices.early_bird)}${
+                workshop.workshop_early_bird_until
+                  ? ` (until ${formatEarlyBirdUntil(workshop.workshop_early_bird_until)})`
+                  : ""
+              }`,
+            prices.student !== null && `Student ${formatPeso(prices.student)}`,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Not available right now"}
         </Detail>
         {opening.open && opening.seatsLeft !== null && (
           <Detail Icon={UsersIcon} label="Seats">

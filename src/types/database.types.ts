@@ -664,13 +664,16 @@ export type Database = {
           sort_order: number
           summary: string | null
           updated_at: string
+          workshop_early_bird_enabled: boolean
           workshop_early_bird_price_cents: number | null
           workshop_early_bird_seats: number | null
           workshop_early_bird_until: string | null
           workshop_ends_at: string | null
           workshop_location: string | null
+          workshop_regular_enabled: boolean
           workshop_seats: number | null
           workshop_starts_at: string | null
+          workshop_student_enabled: boolean
           workshop_student_price_cents: number | null
         }
         Insert: {
@@ -689,13 +692,16 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_early_bird_enabled?: boolean
           workshop_early_bird_price_cents?: number | null
           workshop_early_bird_seats?: number | null
           workshop_early_bird_until?: string | null
           workshop_ends_at?: string | null
           workshop_location?: string | null
+          workshop_regular_enabled?: boolean
           workshop_seats?: number | null
           workshop_starts_at?: string | null
+          workshop_student_enabled?: boolean
           workshop_student_price_cents?: number | null
         }
         Update: {
@@ -714,13 +720,16 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_early_bird_enabled?: boolean
           workshop_early_bird_price_cents?: number | null
           workshop_early_bird_seats?: number | null
           workshop_early_bird_until?: string | null
           workshop_ends_at?: string | null
           workshop_location?: string | null
+          workshop_regular_enabled?: boolean
           workshop_seats?: number | null
           workshop_starts_at?: string | null
+          workshop_student_enabled?: boolean
           workshop_student_price_cents?: number | null
         }
         Relationships: []

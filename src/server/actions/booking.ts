@@ -50,7 +50,7 @@ export async function submitBooking(
         supabase
           .from("services")
           .select(
-            "price_cents, deposit_cents, category, workshop_early_bird_price_cents, workshop_student_price_cents",
+            "price_cents, deposit_cents, category, workshop_regular_enabled, workshop_early_bird_enabled, workshop_early_bird_price_cents, workshop_student_enabled, workshop_student_price_cents",
           )
           .eq("id", v.serviceId)
           .maybeSingle(),

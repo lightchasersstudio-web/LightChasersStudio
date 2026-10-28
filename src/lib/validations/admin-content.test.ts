@@ -28,6 +28,9 @@ const service: ServiceFormInput = {
   earlyBirdUntil: "",
   earlyBirdSeats: "",
   studentPrice: "",
+  regularEnabled: true,
+  earlyBirdEnabled: false,
+  studentEnabled: false,
 };
 
 describe("serviceSchema", () => {
@@ -103,6 +106,9 @@ describe("serviceSchema: workshop schedule", () => {
       earlyBirdUntil: "",
       earlyBirdSeats: "",
       studentPrice: "",
+      regularEnabled: true,
+      earlyBirdEnabled: false,
+      studentEnabled: false,
     });
   });
 
@@ -162,6 +168,36 @@ describe("serviceSchema: workshop schedule", () => {
     });
     const bad = serviceSchema.safeParse({ ...workshop, studentPrice: "abc" });
     expect(bad.error?.issues[0]?.path).toEqual(["studentPrice"]);
+  });
+
+  it("switches each category on or off; one that's on needs a price", () => {
+    const row = serviceSchema.parse({
+      ...workshop,
+      regularEnabled: false,
+      earlyBirdEnabled: true,
+      earlyBirdPrice: "4000",
+      studentEnabled: false,
+      studentPrice: "4000",
+    });
+    expect(row).toMatchObject({
+      workshop_regular_enabled: false,
+      workshop_early_bird_enabled: true,
+      workshop_student_enabled: false,
+      // A price is kept while its category is off, ready to switch back on.
+      workshop_student_price_cents: 400_000,
+    });
+    expect(workshopFormValues(row)).toMatchObject({
+      regularEnabled: false,
+      earlyBirdEnabled: true,
+      studentEnabled: false,
+    });
+    for (const [change, path] of [
+      [{ earlyBirdEnabled: true }, "earlyBirdPrice"],
+      [{ studentEnabled: true }, "studentPrice"],
+    ] as const) {
+      const r = serviceSchema.safeParse({ ...workshop, ...change });
+      expect(r.error?.issues[0]?.path).toEqual([path]);
+    }
   });
 
   it("ignores the schedule on other packages", () => {

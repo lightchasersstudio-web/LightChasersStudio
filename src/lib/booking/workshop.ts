@@ -12,14 +12,18 @@ export function workshopRefundCents(totalCents: number, paidCents: number): numb
 /** Whether people can sign up now: the admin has set a date, it hasn't started, and seats are left. */
 export type WorkshopOpening =
   | { open: true; seatsLeft: number | null }
-  | { open: false; reason: "no_date" | "started" | "full" };
+  | { open: false; reason: "no_date" | "started" | "full" | "paused" };
 
 export function workshopOpening(
-  workshop: { workshop_starts_at: string | null; workshop_seats: number | null },
+  workshop: { workshop_starts_at: string | null; workshop_seats: number | null } & PriceFields,
   seatsTaken: number,
   now: Date = new Date(),
 ): WorkshopOpening {
   if (!workshop.workshop_starts_at) return { open: false, reason: "no_date" };
+  // Every price category switched off: sign-up is paused.
+  if (Object.values(workshopPrices(workshop)).every((c) => c === null)) {
+    return { open: false, reason: "paused" };
+  }
   if (Date.parse(workshop.workshop_starts_at) <= now.getTime()) {
     return { open: false, reason: "started" };
   }
@@ -51,19 +55,38 @@ export function formatWorkshopWhen(startsAt: string, endsAt: string) {
   };
 }
 
-/** Per-person prices by category; null = that category isn't offered. Mirrors create_booking. */
-export type WorkshopPrices = { regular: number; early_bird: number | null; student: number | null };
+/**
+ * Per-person prices by category; null = not offered (switched off, or no price
+ * set). Mirrors create_booking.
+ */
+export type WorkshopPrices = {
+  regular: number | null;
+  early_bird: number | null;
+  student: number | null;
+};
 
-export function workshopPrices(workshop: {
+type PriceFields = {
   price_cents: number;
+  workshop_regular_enabled: boolean;
+  workshop_early_bird_enabled: boolean;
   workshop_early_bird_price_cents: number | null;
+  workshop_student_enabled: boolean;
   workshop_student_price_cents: number | null;
-}): WorkshopPrices {
+};
+
+export function workshopPrices(workshop: PriceFields): WorkshopPrices {
   return {
-    regular: workshop.price_cents,
-    early_bird: workshop.workshop_early_bird_price_cents,
-    student: workshop.workshop_student_price_cents,
+    regular: workshop.workshop_regular_enabled ? workshop.price_cents : null,
+    early_bird: workshop.workshop_early_bird_enabled
+      ? workshop.workshop_early_bird_price_cents
+      : null,
+    student: workshop.workshop_student_enabled ? workshop.workshop_student_price_cents : null,
   };
+}
+
+/** The first category on offer, for a new attendee card (null when none are). */
+export function defaultCategory(prices: WorkshopPrices): keyof WorkshopPrices | null {
+  return (["regular", "early_bird", "student"] as const).find((c) => prices[c] !== null) ?? null;
 }
 
 /** The workshop price (before VAT) for these people. */
@@ -71,7 +94,7 @@ export function attendeesCents(
   attendees: { category: keyof WorkshopPrices }[],
   prices: WorkshopPrices,
 ): number {
-  return attendees.reduce((sum, a) => sum + (prices[a.category] ?? prices.regular), 0);
+  return attendees.reduce((sum, a) => sum + (prices[a.category] ?? 0), 0);
 }
 
 /**
@@ -81,6 +104,7 @@ export function attendeesCents(
  */
 export function earlyBirdOpening(
   workshop: {
+    workshop_early_bird_enabled: boolean;
     workshop_early_bird_price_cents: number | null;
     workshop_early_bird_until: string | null;
     workshop_early_bird_seats: number | null;
@@ -95,6 +119,7 @@ export function earlyBirdOpening(
   // "YYYY-MM-DD" in Manila, comparable with the stored date.
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(now);
   const open =
+    workshop.workshop_early_bird_enabled &&
     workshop.workshop_early_bird_price_cents !== null &&
     (workshop.workshop_early_bird_until === null || today <= workshop.workshop_early_bird_until) &&
     (left === null || left > 0);

@@ -26,6 +26,7 @@ import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
 import { bookingTotals } from "@/lib/booking/pricing";
 import {
   attendeesCents,
+  defaultCategory,
   formatEarlyBirdUntil,
   WORKSHOP_REFUND_RULE,
   type WorkshopPrices,
@@ -332,7 +333,7 @@ export function BookingWizard({
           (_, i) =>
             current[i] ?? {
               name: i === 0 ? form.getValues("fullName").trim() : "",
-              category: "regular" as const,
+              category: defaultCategory(workshop.prices) ?? "regular",
               idPath: "",
             },
         ),
@@ -804,7 +805,7 @@ export function BookingWizard({
                               {p.name || `Person ${i + 1}`} · {categoryName(p.category)}
                             </span>
                             <span className="font-bold">
-                              {formatPeso(workshop.prices[p.category] ?? workshop.prices.regular)}
+                              {formatPeso(workshop.prices[p.category] ?? 0)}
                             </span>
                           </div>
                         ))

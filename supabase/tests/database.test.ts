@@ -1398,6 +1398,28 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("refuses a category the admin switched off", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await c.query(
+          "update public.services set workshop_regular_enabled = false, workshop_early_bird_enabled = false where id = $1",
+          [workshop],
+        );
+        await actAs(c, "service_role");
+        for (const category of ["regular", "early_bird"]) {
+          expect(
+            await expectFailure(c, SIGN_UP, [
+              "ana@example.com",
+              workshop,
+              1,
+              names([{ name: "Ana Cruz", category }]),
+            ]),
+          ).toMatch(/category_unavailable/);
+        }
+      });
+    });
+
     it("closes early bird after its last day or its places, and unoffered categories", async () => {
       await inRollback(async (c) => {
         await setupFixtures(c);

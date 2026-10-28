@@ -29,9 +29,10 @@ export function WorkshopPromo({
 }) {
   const [back, front] = photos;
   // The lowest per-person price (early bird / student), shown as "from".
-  const fromCents = Math.min(
-    ...Object.values(workshopPrices(workshop)).filter((c): c is number => c !== null),
-  );
+  // The lowest per-person price on offer ("from" when categories differ); none
+  // when every category is switched off.
+  const offered = Object.values(workshopPrices(workshop)).filter((c): c is number => c !== null);
+  const fromCents = offered.length ? Math.min(...offered) : null;
   // The admin sets the date; until then the banner teases it.
   const when =
     workshop.workshop_starts_at && workshop.workshop_ends_at
@@ -92,15 +93,17 @@ export function WorkshopPromo({
                 <ArrowRightIcon aria-hidden />
               </Link>
             </Button>
-            <p>
-              {fromCents < workshop.price_cents && (
-                <span className="mr-1.5 text-sm text-primary-foreground/80">from</span>
-              )}
-              <span className="font-heading text-2xl font-semibold">{formatPeso(fromCents)}</span>
-              <span className="ml-1.5 text-sm text-primary-foreground/80">
-                per person{vatPercent > 0 && " + VAT"}
-              </span>
-            </p>
+            {fromCents !== null && (
+              <p>
+                {offered.some((c) => c > fromCents) && (
+                  <span className="mr-1.5 text-sm text-primary-foreground/80">from</span>
+                )}
+                <span className="font-heading text-2xl font-semibold">{formatPeso(fromCents)}</span>
+                <span className="ml-1.5 text-sm text-primary-foreground/80">
+                  per person{vatPercent > 0 && " + VAT"}
+                </span>
+              </p>
+            )}
           </div>
         </div>
 

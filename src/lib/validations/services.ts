@@ -53,6 +53,10 @@ export const serviceSchema = z
     earlyBirdUntil: z.string().trim(),
     earlyBirdSeats: z.string().trim(),
     studentPrice: z.string().trim(),
+    // Each category can be switched off on its own (all off = sign-up paused).
+    regularEnabled: z.boolean(),
+    earlyBirdEnabled: z.boolean(),
+    studentEnabled: z.boolean(),
   })
   .transform((v, ctx) => {
     let durationMinutes: number | null = null;
@@ -120,25 +124,37 @@ export const serviceSchema = z
   });
 
 type WorkshopPricing = {
+  workshop_regular_enabled: boolean;
+  workshop_early_bird_enabled: boolean;
+  workshop_student_enabled: boolean;
   workshop_early_bird_price_cents: number | null;
   workshop_early_bird_until: string | null;
   workshop_early_bird_seats: number | null;
   workshop_student_price_cents: number | null;
 };
 const NO_PRICING: WorkshopPricing = {
+  workshop_regular_enabled: true,
+  workshop_early_bird_enabled: true,
+  workshop_student_enabled: true,
   workshop_early_bird_price_cents: null,
   workshop_early_bird_until: null,
   workshop_early_bird_seats: null,
   workshop_student_price_cents: null,
 };
 
-/** Early-bird and student prices per person; an empty price means that category isn't offered. */
+/**
+ * The price categories: each on or off, and early-bird / student prices per
+ * person (required while that category is on; kept while it's off).
+ */
 function workshopPricing(
   v: {
     earlyBirdPrice: string;
     earlyBirdUntil: string;
     earlyBirdSeats: string;
     studentPrice: string;
+    regularEnabled: boolean;
+    earlyBirdEnabled: boolean;
+    studentEnabled: boolean;
   },
   ctx: z.RefinementCtx,
 ): WorkshopPricing | null {
@@ -155,6 +171,12 @@ function workshopPricing(
   const early = price("earlyBirdPrice", v.earlyBirdPrice);
   const student = price("studentPrice", v.studentPrice);
   if (early === false || student === false) return null;
+  if (v.earlyBirdEnabled && early === null) {
+    return issue("earlyBirdPrice", "Enter the early-bird price, or switch early bird off.");
+  }
+  if (v.studentEnabled && student === null) {
+    return issue("studentPrice", "Enter the student price, or switch student off.");
+  }
   if (v.earlyBirdUntil && !/^\d{4}-\d{2}-\d{2}$/.test(v.earlyBirdUntil)) {
     return issue("earlyBirdUntil", "Pick the last day of early bird.");
   }
@@ -166,6 +188,9 @@ function workshopPricing(
     seats = Number(v.earlyBirdSeats);
   }
   return {
+    workshop_regular_enabled: v.regularEnabled,
+    workshop_early_bird_enabled: v.earlyBirdEnabled,
+    workshop_student_enabled: v.studentEnabled,
     workshop_early_bird_price_cents: early,
     workshop_early_bird_until: early === null ? null : v.earlyBirdUntil || null,
     workshop_early_bird_seats: early === null ? null : seats,
@@ -249,6 +274,9 @@ export function workshopFormValues(service: {
   workshop_early_bird_until: string | null;
   workshop_early_bird_seats: number | null;
   workshop_student_price_cents: number | null;
+  workshop_regular_enabled: boolean;
+  workshop_early_bird_enabled: boolean;
+  workshop_student_enabled: boolean;
 }) {
   const local = (iso: string | null, part: "date" | "time") => {
     if (!iso) return "";
@@ -275,6 +303,12 @@ export function workshopFormValues(service: {
       service.workshop_student_price_cents === null
         ? ""
         : centsToPesoInput(service.workshop_student_price_cents),
+    regularEnabled: service.workshop_regular_enabled,
+    // Shown as on only when there's a price to offer (older rows had none).
+    earlyBirdEnabled:
+      service.workshop_early_bird_enabled && service.workshop_early_bird_price_cents !== null,
+    studentEnabled:
+      service.workshop_student_enabled && service.workshop_student_price_cents !== null,
   };
 }
 

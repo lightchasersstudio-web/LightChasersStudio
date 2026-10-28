@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   attendeesCents,
+  defaultCategory,
   earlyBirdOpening,
   formatEarlyBirdUntil,
   formatWorkshopWhen,
   workshopOpening,
+  workshopPrices,
   workshopRefundCents,
 } from "./workshop";
 
@@ -25,33 +27,84 @@ describe("workshopRefundCents", () => {
   });
 });
 
+/** A workshop with every price category on. */
+const ON = {
+  price_cents: 500_000,
+  workshop_regular_enabled: true,
+  workshop_early_bird_enabled: true,
+  workshop_early_bird_price_cents: 400_000,
+  workshop_student_enabled: true,
+  workshop_student_price_cents: 400_000,
+};
+
+describe("workshop category switches", () => {
+  it("offers only the categories that are on (and priced)", () => {
+    expect(workshopPrices({ ...ON, workshop_regular_enabled: false })).toEqual({
+      regular: null,
+      early_bird: 400_000,
+      student: 400_000,
+    });
+    expect(workshopPrices({ ...ON, workshop_student_price_cents: null }).student).toBeNull();
+    expect(defaultCategory(workshopPrices({ ...ON, workshop_regular_enabled: false }))).toBe(
+      "early_bird",
+    );
+  });
+
+  it("pauses sign-up when every category is off", () => {
+    const off = {
+      ...ON,
+      workshop_regular_enabled: false,
+      workshop_early_bird_enabled: false,
+      workshop_student_enabled: false,
+      workshop_starts_at: "2026-11-14T05:00:00Z",
+      workshop_seats: null,
+    };
+    expect(workshopOpening(off, 0, new Date("2026-11-01T00:00:00Z"))).toEqual({
+      open: false,
+      reason: "paused",
+    });
+  });
+});
+
 describe("workshopOpening", () => {
   const now = new Date("2026-11-01T00:00:00Z");
   const at = "2026-11-14T05:00:00Z";
 
   it("is closed with no date, or once it has started", () => {
-    expect(workshopOpening({ workshop_starts_at: null, workshop_seats: null }, 0, now)).toEqual({
+    expect(
+      workshopOpening({ ...ON, workshop_starts_at: null, workshop_seats: null }, 0, now),
+    ).toEqual({
       open: false,
       reason: "no_date",
     });
     expect(
-      workshopOpening({ workshop_starts_at: "2026-10-31T00:00:00Z", workshop_seats: null }, 0, now),
+      workshopOpening(
+        { ...ON, workshop_starts_at: "2026-10-31T00:00:00Z", workshop_seats: null },
+        0,
+        now,
+      ),
     ).toEqual({ open: false, reason: "started" });
   });
 
   it("counts the seats left, if there's a limit", () => {
-    expect(workshopOpening({ workshop_starts_at: at, workshop_seats: null }, 40, now)).toEqual({
+    expect(
+      workshopOpening({ ...ON, workshop_starts_at: at, workshop_seats: null }, 40, now),
+    ).toEqual({
       open: true,
       seatsLeft: null,
     });
-    expect(workshopOpening({ workshop_starts_at: at, workshop_seats: 15 }, 12, now)).toEqual({
-      open: true,
-      seatsLeft: 3,
-    });
-    expect(workshopOpening({ workshop_starts_at: at, workshop_seats: 15 }, 15, now)).toEqual({
-      open: false,
-      reason: "full",
-    });
+    expect(workshopOpening({ ...ON, workshop_starts_at: at, workshop_seats: 15 }, 12, now)).toEqual(
+      {
+        open: true,
+        seatsLeft: 3,
+      },
+    );
+    expect(workshopOpening({ ...ON, workshop_starts_at: at, workshop_seats: 15 }, 15, now)).toEqual(
+      {
+        open: false,
+        reason: "full",
+      },
+    );
   });
 });
 
@@ -81,6 +134,7 @@ describe("workshop categories", () => {
 
   it("opens early bird until its last day (Manila) and while places are left", () => {
     const w = {
+      workshop_early_bird_enabled: true,
       workshop_early_bird_price_cents: 400_000,
       workshop_early_bird_until: "2027-01-31",
       workshop_early_bird_seats: 25,
@@ -97,6 +151,7 @@ describe("workshop categories", () => {
       left: 0,
     });
     expect(earlyBirdOpening({ ...w, workshop_early_bird_price_cents: null }, 0).open).toBe(false);
+    expect(earlyBirdOpening({ ...w, workshop_early_bird_enabled: false }, 0).open).toBe(false);
   });
 
   it("formats the last day", () => {
