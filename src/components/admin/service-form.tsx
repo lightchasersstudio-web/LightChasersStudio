@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
 
@@ -104,7 +105,13 @@ export function ServiceForm({ service }: { service?: Service }) {
 
   return (
     <form
-      onSubmit={form.handleSubmit(onSubmit)}
+      // Never fail silently: say why it didn't save, even for a field that isn't on screen.
+      onSubmit={form.handleSubmit(onSubmit, (errors) =>
+        toast.error(
+          Object.values(errors).find((e) => e?.message)?.message ??
+            "Please check the highlighted fields.",
+        ),
+      )}
       noValidate
       className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:grid-rows-[auto_1fr]"
     >
