@@ -1,6 +1,6 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-28. Phases 0–5 and the extras since (PRs #8–#18) are on `main`; emails go out from the studio Gmail; online payments and bot protection wait on the owner's PayMongo and Turnstile keys._
+_Last updated: 2026-10-28. Phases 0–5 and the extras since (PRs #8–#18) are on `main`; the workshop rework (admin-set date, per-person categories, student IDs) is on branch `workshop-promo-portfolio`, waiting to be merged; emails go out from the studio Gmail; online payments and bot protection wait on the owner's PayMongo and Turnstile keys._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -13,28 +13,30 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 - **Phases 0–5 are built, verified and merged into `main`** (Phase 5 = PR #7), plus booking extras, booking management, package lengths, Gmail sending, package highlights, a security upgrade and the workshop (PRs #8–#18, latest #18 on 2026-10-27).
 - **Emails work** from the studio Gmail (`GMAIL_USER` + `GMAIL_APP_PASSWORD`). **Online payment and bot protection** switch on once the owner adds the PayMongo and Turnstile keys. Everything else works without them. See [Next steps](#next-steps).
 - **Hosting:** Vercel deploys from `main`, using the **dev** Supabase project for now. A separate production database is still Phase 8.
-- **The dev database** has every migration in `supabase/migrations/` applied (latest `20261027000200_workshop_booking.sql`, checked 2026-10-28).
+- **Waiting to merge:** branch `workshop-promo-portfolio` (home workshop banner, framed portfolio, and the workshop rework, see [2026-10-28](#2026-10-28-workshop-rework-branch-workshop-promo-portfolio)). Its database changes are **already on the dev database**, which the live site also uses, so the live site's workshop sign-up only works properly once the branch is merged.
+- **The dev database** has every migration applied, including the branch's (latest `20261028000500_workshop_category_switches.sql`, 2026-10-28). `main` itself only has migrations up to `20261027000200`.
 
 ## Roadmap status
 
-| Phase | What                                                                        | Status                       | PR     |
-| ----- | --------------------------------------------------------------------------- | ---------------------------- | ------ |
-| 0     | Foundation: project setup, design system, env, linting                      | ✅ Done                      | #1     |
-| 1     | Database: schema, RLS, booking functions, storage, seed, types              | ✅ Done, pushed to dev DB    | #2     |
-| 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified | #3     |
-| 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                      | #4     |
-| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                      | #5     |
-| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Merged, needs owner keys  | #7     |
-| —     | Extras: add-ons, VAT, reviews, FAQ, sales report, dashboard, trial mode     | ✅ Done                      | #8–#12 |
-| —     | Booking management: edit, history, owner delete, monthly CSV                | ✅ Done                      | #13    |
-| —     | Package lengths + add-on rules, real sales report                           | ✅ Done                      | #14    |
-| —     | Emails from the studio Gmail                                                | ✅ Done, working on dev      | #15    |
-| —     | Package highlights (photo row, own reel), before/after slider removed       | ✅ Done                      | #16    |
-| —     | Security: Next.js 16.4.3, dependency patches (`npm audit`: 0)               | ✅ Done                      | #17    |
-| —     | Workshop booking (base for the other developer)                             | ✅ Done                      | #18    |
-| 6     | Admin: bookings table, clients, privacy anonymise (dashboard, edit done)    | ⏳ Next                      |        |
-| 7     | Hardening: security headers, accessibility, performance, SEO, sitemap       | Not started                  |        |
-| 8     | Deploy: Vercel + production Supabase                                        | ⏳ Vercel (dev DB) running   |        |
+| Phase | What                                                                        | Status                       | PR                                |
+| ----- | --------------------------------------------------------------------------- | ---------------------------- | --------------------------------- |
+| 0     | Foundation: project setup, design system, env, linting                      | ✅ Done                      | #1                                |
+| 1     | Database: schema, RLS, booking functions, storage, seed, types              | ✅ Done, pushed to dev DB    | #2                                |
+| 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified | #3                                |
+| 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                      | #4                                |
+| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                      | #5                                |
+| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Merged, needs owner keys  | #7                                |
+| —     | Extras: add-ons, VAT, reviews, FAQ, sales report, dashboard, trial mode     | ✅ Done                      | #8–#12                            |
+| —     | Booking management: edit, history, owner delete, monthly CSV                | ✅ Done                      | #13                               |
+| —     | Package lengths + add-on rules, real sales report                           | ✅ Done                      | #14                               |
+| —     | Emails from the studio Gmail                                                | ✅ Done, working on dev      | #15                               |
+| —     | Package highlights (photo row, own reel), before/after slider removed       | ✅ Done                      | #16                               |
+| —     | Security: Next.js 16.4.3, dependency patches (`npm audit`: 0)               | ✅ Done                      | #17                               |
+| —     | Workshop booking (base for the other developer)                             | ✅ Done                      | #18                               |
+| —     | Workshop rework, home workshop banner, framed portfolio                     | ⏳ Built, waiting to merge   | branch `workshop-promo-portfolio` |
+| 6     | Admin: bookings table, clients, privacy anonymise (dashboard, edit done)    | ⏳ Next                      |                                   |
+| 7     | Hardening: security headers, accessibility, performance, SEO, sitemap       | Not started                  |                                   |
+| 8     | Deploy: Vercel + production Supabase                                        | ⏳ Vercel (dev DB) running   |                                   |
 
 ## What's built
 
@@ -147,11 +149,31 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 
 ### 2026-10-27: workshop booking (PR #18, base for the other developer)
 
+_Partly replaced on 2026-10-28 (next section): clients no longer pick a date, and the price is per person by category. The pay-half/full choice and the refund rule stay._
+
 - **For clients:** a "Workshop" button floats on the left of every public page (Messenger stays on the right). It opens `/workshop`: the same steps as a booking, but step 2 is **Payment**: pay half or pay in full, and tick the refund rule. They then pick a free date and time on the same calendar and pay through PayMongo (or the pretend checkout in trial mode). The workshop never appears in the normal package lists.
 - **Refund rule (owner's):** paid half = no refund if they can't attend; paid in full = half of the price back. Refunds are sent by hand; the admin booking page says what's due.
 - **For staff:** workshop sign-ups are ordinary bookings: calendar, review/confirm, payments, edit, CSV and sales report all work. Edit the workshop (name, price, description, cover photo, on/off) in Admin → Services; it's the "Workshop" category. Turning it off hides the button.
 - **Placeholder:** "Photography Workshop", ₱1,000 + VAT, with placeholder text. Replace it before go-live.
 - **Left for the other developer:** workshop options, refund wording in emails, a workshop section in the reports.
+
+### 2026-10-28: workshop rework (branch `workshop-promo-portfolio`)
+
+All owner decisions from 2026-10-28. Ten commits; migrations `20261028000100` to `000500`, all applied to dev.
+
+- **Home page:** a "Now open · learn with us" **workshop banner** right under the hero (above the highlight reels): name, summary, date, time, location, "from ₱… per person", and a "Sign up for the workshop" button to `/workshop`. Hidden when no workshop is active; says "Coming soon" until a date is set. Component: `src/components/public/workshop-promo.tsx`.
+- **Portfolio page:** the uneven masonry columns are now an **even gallery wall**: every photo in a white mat frame, wide photos one cell, upright ones two rows, `grid-flow-dense` fills the gaps. Hover shows a lift, viewfinder corners and the package / category label; the full uncropped photo still opens in the viewer (`portfolio-gallery.tsx`).
+- **The admin sets the workshop's date, time, location and seats** (Admin → Services → the workshop → **Workshop schedule**). Clients don't pick a time: every sign-up gets the workshop's time and place (the database ignores what the browser sends). Empty date = "date coming soon", sign-up closed. Changing the date or place **moves everyone already signed up** (a trigger) but **doesn't email them**.
+- **While the workshop runs, the studio is busy:** that time is unavailable for shoots on the public calendar and refused by `create_booking`. Staff can still book a shoot then. Workshop sign-ups don't count towards shoot capacity.
+- **Up to 3 people per sign-up**, priced **per person**. The wizard is: Your details → **Who's coming** (1 / 2 / 3; more than the seats left is greyed out) → **Certificates** → Payment (half or full of the total) → Review & pay.
+- **Certificates step:** a card per person with their **full name for the certificate** and a **price category**:
+  - **Regular** = the workshop's main price (₱5,000 now).
+  - **Early bird** (₱4,000): closes on its own after its last day (31 January 2027) or when its places run out (25), counting the others on the same sign-up.
+  - **Student** (₱4,000): the person must **upload a photo of a valid student ID**. It's resized in the browser (strips EXIF/GPS) and uploaded to the private `student-ids` bucket through a one-time link from the server (`src/server/actions/student-id.ts`); `create_booking` checks the file exists.
+- **Each category can be switched off on its own** (Admin → Services → **Price categories**: a switch and price per category). Off = not offered anywhere and refused by the database; prices are kept while off; all three off = "Sign-ups are paused". People already signed up keep their category.
+- **Admin booking page** for a workshop: every person with category and price; for students the ID photo (a 30-minute signed link) with **Accept / Reject**, recorded in the booking's History. **A rejected ID is handled by hand** (owner decision): contact the client and change the price in Edit booking.
+- **Data:** `booking_attendees` table (admins only), `services.workshop_*` columns, `workshop_seats_taken()` / `workshop_early_birds_taken()` (no personal data, callable by anon). New `create_booking` codes: `workshop_not_scheduled`, `workshop_closed`, `workshop_full`, `invalid_participants`, `invalid_attendees`, `category_unavailable`, `student_id_required`, `early_bird_closed`, `early_bird_full`. Code map: CLAUDE.md → Workshop.
+- **Fixes along the way:** a workshop with no date was blocking every shoot (a null range bound is unbounded); the home page failed to build once a date was set (TZDate reads the clock during prerender, so dates use `Intl`); the service form failed silently when a switch was invalid (it now says why).
 
 ## Managing data
 
@@ -162,22 +184,25 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Backups:** turn on Supabase daily backups (and point-in-time recovery if the budget allows) on the production project before launch.
 - **Accounting:** download the month's CSV from the Sales report.
 - **Privacy requests (RA 10173):** handled later by an anonymise routine (Phase 6) that keeps the money records.
+- **Student ID photos** (`student-ids` bucket, private) are kept until deleted. Decide how long to keep them (e.g. delete after the workshop) and include them in the anonymise routine. One test image ("TEST STUDENT ID", not linked to any booking) was uploaded while checking the flow on 2026-10-28.
 
 ## How it's verified
 
 | Check                 | Command                                                                           | Last result                                                |
 | --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 129 unit tests (2026-10-28)                    |
-| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ 32 passing against the dev project                      |
+| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 148 unit tests (branch, 2026-10-28)            |
+| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ 46 passing against the dev project (branch, 2026-10-28) |
 | Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                                     | ✅ passing on desktop and phone (Pixel 7), touch included  |
 | Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)                     | ✅ passing, includes public-page refresh after edits       |
 | Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`                               | ✅ wizard up to payment; staff booking, share, pay, cancel |
 | Booking edit/delete   | `e2e/admin-booking-edit.spec.ts` (admin + `E2E_OWNER_EMAIL`/`E2E_OWNER_PASSWORD`) | ✅ edit time/package/add-ons/VAT; owner delete             |
-| Workshop (browser)    | `e2e/workshop.spec.ts`                                                            | Added in #18; not rerun on 2026-10-28                      |
+| Workshop (browser)    | `e2e/workshop.spec.ts` (trial mode + admin login + a future workshop date)        | Updated on the branch; not run (needs the admin login)     |
 
 The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **temporary** admin account, delete it afterwards, and never use the owner account. The tests clean up what they create: services named `E2E Package…`, photos with alt text `E2E photo…` and blackouts with reason `E2E test…`. Booking tests leave cancelled bookings named `E2E Client…`; run `npm run data:clean-tests` after a run.
 
-On this machine a full parallel e2e run is sometimes flaky under load (an admin sign-in or the hero swipe test timing out); those tests pass when rerun on their own.
+On this machine a full parallel e2e run is sometimes flaky under load (an admin sign-in or the hero swipe test timing out); those tests pass when rerun on their own. **Exception (2026-10-28):** the hero swipe test (`public-site.spec.ts:16`) fails even on its own, on unchanged `main` too; investigate.
+
+The workshop sign-up was checked by hand on 2026-10-28 (3 people: Regular, Early bird, Student with an ID upload, up to Review & pay, no booking made). The admin side (Price categories card, saving, the ID Accept / Reject) wasn't seen yet: it needs the owner's login.
 
 ## Environments and accounts
 
@@ -206,7 +231,7 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 - **Reordering** services or photos saves as several separate updates, not one transaction. A failure halfway leaves a partial order, which is harmless and can be redone.
 - **Unknown service URLs** (e.g. `/services/does-not-exist`) show the 404 page but return HTTP 200 with a `noindex` tag. That's how Next.js 16 handles pages generated on demand. Unmatched paths return a real 404.
 - **The dev site uses sample photos** (`npm run data:sample-photos`). Remove them with `-- --remove` and upload the studio's own photos (star a few as "featured") before go-live.
-- **Seed content is placeholder.** Real prices, packages, hours, the workshop (₱1,000 placeholder) and the "about" text must come from the owner.
+- **Seed content is placeholder.** Real prices, packages, hours and the "about" text must come from the owner. The workshop's summary still says "Placeholder: describe the workshop…" (it shows on the home banner).
 - **Dependencies:** `npm audit` was clean on 2026-10-25 (PR #17). Re-check in Phase 7.
 - **The hero swipe** is tested in Chrome (desktop and Android emulation) but not yet on a real iPhone in Safari.
 - **PayMongo webhook fields** follow PayMongo's docs but haven't seen a real test-mode event yet. Confirm `parsePaidEvent` in `src/lib/payments/paymongo.ts` against one when the keys exist.
@@ -216,14 +241,16 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 - **Short (1-hour) blocks** on the admin day timeline cut off their last line on narrow screens.
 - **Calendar month arrows** change only the URL, so the old month stays on screen until the new one loads (no skeleton).
 - **The GitHub CLI (`gh`) isn't installed** on the main dev machine, so PRs are opened from the GitHub website.
+- **Workshop loose ends:** moving the workshop doesn't email the people signed up; the admin calendar shows each sign-up as its own block at the workshop time; the home banner and floating button stay up after the workshop ends until it's switched off; unused student-ID uploads (someone uploads, then doesn't book) stay in the bucket; editing a workshop booking in the admin doesn't change its people or categories.
 
 ## Next steps
 
 **Go live (owner):**
 
-1. Check the Vercel env vars above (including the Gmail pair), then in Supabase → Authentication → URL Configuration set the **Site URL** to the Vercel address and add both `https://<vercel-address>/**` and `http://localhost:3000/**` to **Redirect URLs**.
-2. Replace the placeholder packages and prices in the admin (including the workshop), add the Versa Space rental package(s), and add a studio phone number in Settings if clients should call.
-3. Before launch: remove the sample photos (`npm run data:sample-photos -- --remove`) and set up the production Supabase project (Phase 8, see [Managing data](#managing-data)).
+1. **Merge `workshop-promo-portfolio`** (its database changes are already live on dev), then in Admin → Services check the workshop: **date** (it's 29 October 2026, but early bird runs to 31 January 2027), summary, location, seats and the price categories.
+2. Check the Vercel env vars above (including the Gmail pair), then in Supabase → Authentication → URL Configuration set the **Site URL** to the Vercel address and add both `https://<vercel-address>/**` and `http://localhost:3000/**` to **Redirect URLs**.
+3. Replace the placeholder packages and prices in the admin, add the Versa Space rental package(s), and add a studio phone number in Settings if clients should call.
+4. Before launch: remove the sample photos (`npm run data:sample-photos -- --remove`) and set up the production Supabase project (Phase 8, see [Managing data](#managing-data)).
 
 **Finish Phase 5 (needs the owner's accounts), in this order:**
 
@@ -237,4 +264,4 @@ Add each key in Vercel (then redeploy) and in `.env.local`. `docs/SETUP.md` has 
 
 **Phase 6:** searchable bookings table, clients list with history, and the privacy anonymisation routine. (Dashboard, editing/rescheduling, history and owner delete are done.)
 
-**Workshop (other developer):** workshop options, refund wording in emails, a workshop section in the reports.
+**Workshop (other developer):** refund wording and the people / categories in emails, a workshop section in the reports, an email when the workshop moves, and a retention rule for student ID photos. (Date, location, seats, per-person categories and student IDs are done on `workshop-promo-portfolio`.)
