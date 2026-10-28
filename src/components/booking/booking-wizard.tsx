@@ -62,15 +62,22 @@ const PACKAGE_STEPS: Step[] = [
   { id: "review", title: "Review & pay", fields: [] },
 ];
 /**
- * Workshops have one fixed price and a time the admin sets: step 2 is choosing
- * to pay half or in full, and there's no date step.
+ * Workshops are priced per person at a time and place the admin sets: no date
+ * step; who's coming comes first, so the Payment step's half/full amounts
+ * already cover everyone.
  */
 const WORKSHOP_STEPS: Step[] = [
   PACKAGE_STEPS[0]!,
+  { id: "extras", title: "Who's coming", fields: ["participants", "specialRequests"] },
   { id: "package", title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
-  { id: "extras", title: "Other details", fields: ["participants", "specialRequests"] },
   PACKAGE_STEPS[4]!,
 ];
+
+/** People on a workshop sign-up as typed (the price is per person); at least 1. */
+function peopleCount(participants: string | undefined): number {
+  const n = Number((participants ?? "").replace(/,/g, ""));
+  return Number.isInteger(n) && n >= 1 ? n : 1;
+}
 
 export type WizardService = Pick<
   PublicService,
@@ -107,7 +114,13 @@ export function BookingWizard({
    * Workshop flow: one fixed-price workshop (services[0]) at the time the admin
    * set, paid half or in full.
    */
-  workshop?: { startAt: string; endAt: string; location: string | null } | null;
+  workshop?: {
+    startAt: string;
+    endAt: string;
+    location: string | null;
+    /** Seats still free, or null for no limit. */
+    seatsLeft: number | null;
+  } | null;
 }) {
   const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
   /** Index of a step by id (-1 when this flow doesn't have it). */
@@ -180,10 +193,21 @@ export function BookingWizard({
     setRestored(false);
     goTo(0);
   }
-  const [serviceId, startAt, preferredContact, addOnIds, location, payInFull] = useWatch({
-    control: form.control,
-    name: ["serviceId", "startAt", "preferredContact", "addOnIds", "location", "payInFull"],
-  });
+  const [serviceId, startAt, preferredContact, addOnIds, location, payInFull, participants] =
+    useWatch({
+      control: form.control,
+      name: [
+        "serviceId",
+        "startAt",
+        "preferredContact",
+        "addOnIds",
+        "location",
+        "payInFull",
+        "participants",
+      ],
+    });
+  // Workshops are priced per person; packages per booking.
+  const people = workshop ? peopleCount(participants) : 1;
   const service = services.find((s) => s.id === serviceId);
   // Each add-on lists the packages it goes with (e.g. extensions only for the Photobooth).
   const offeredAddOns = service ? addOns.filter((a) => addOnOffered(a, service.id)) : [];
@@ -198,7 +222,7 @@ export function BookingWizard({
   // Mirrors create_booking, which recomputes both on the server.
   const { subtotal, vat, total, deposit } = service
     ? bookingTotals({
-        packageCents: service.price_cents,
+        packageCents: service.price_cents * people,
         addOnsCents: chosenAddOns.reduce((sum, a) => sum + a.price_cents, 0),
         vatPercent,
         fixedDepositCents: service.deposit_cents,
@@ -261,7 +285,16 @@ export function BookingWizard({
   }, [step]);
 
   async function next() {
-    if (await form.trigger(STEPS[step]!.fields)) goTo(step + 1);
+    if (!(await form.trigger(STEPS[step]!.fields))) return;
+    // Say so now rather than at payment if there aren't enough seats left.
+    const seatsLeft = workshop?.seatsLeft ?? null;
+    if (stepId === "extras" && seatsLeft !== null && people > seatsLeft) {
+      form.setError("participants", {
+        message: `Only ${seatsLeft} ${seatsLeft === 1 ? "seat is" : "seats are"} left.`,
+      });
+      return;
+    }
+    goTo(step + 1);
   }
 
   /** The step that shows the first of these fields (to reveal an error). */
@@ -428,6 +461,7 @@ export function BookingWizard({
                   <WorkshopPayment
                     form={form}
                     service={service}
+                    people={people}
                     vatPercent={vatPercent}
                     depositPercent={depositPercent}
                   />
@@ -620,9 +654,27 @@ export function BookingWizard({
                       control={form.control}
                       name="participants"
                       label={workshop ? "How many people are joining" : "Number of people"}
+                      description={
+                        workshop && service
+                          ? `${formatPeso(service.price_cents)} per person${
+                              workshop.seatsLeft !== null
+                                ? ` · ${workshop.seatsLeft} ${workshop.seatsLeft === 1 ? "seat" : "seats"} left`
+                                : ""
+                            }`
+                          : undefined
+                      }
                       inputMode="numeric"
                       className="max-w-40"
                     />
+                    {workshop && service && (
+                      <p className="font-semibold">
+                        Workshop price for {people} {people === 1 ? "person" : "people"}:{" "}
+                        {formatPeso(service.price_cents * people)}
+                        {vatPercent > 0 && (
+                          <span className="font-normal text-muted-foreground"> + VAT</span>
+                        )}
+                      </p>
+                    )}
                     <TextAreaField
                       control={form.control}
                       name="specialRequests"
@@ -639,7 +691,7 @@ export function BookingWizard({
                       {workshop ? (
                         <ReviewRow
                           label="Workshop"
-                          value={`${service.name} · ${payInFull ? "paying in full" : "paying half now"}`}
+                          value={`${service.name} · ${people} ${people === 1 ? "person" : "people"} · ${payInFull ? "paying in full" : "paying half now"}`}
                           onEdit={() => goTo(at("package"))}
                         />
                       ) : (
@@ -679,8 +731,14 @@ export function BookingWizard({
                     </dl>
                     <div className="rounded-3xl bg-accent p-5 text-accent-foreground">
                       <div className="flex justify-between gap-4">
-                        <span>{workshop ? "Workshop price" : "Package price"}</span>
-                        <span className="font-bold">{formatPeso(service.price_cents)}</span>
+                        <span>
+                          {workshop
+                            ? `Workshop price (${formatPeso(service.price_cents)} × ${people})`
+                            : "Package price"}
+                        </span>
+                        <span className="font-bold">
+                          {formatPeso(service.price_cents * people)}
+                        </span>
                       </div>
                       {chosenAddOns.map((a) => (
                         <div key={a.id} className="mt-1 flex justify-between gap-4">
@@ -748,7 +806,9 @@ export function BookingWizard({
           deposit={deposit}
           step={step}
           onGoTo={submitting ? undefined : goTo}
+          packageStep={at("package")}
           whenStep={workshop ? null : at("when")}
+          people={people}
         />
       </div>
 
@@ -884,17 +944,19 @@ function ReviewRow({
 function WorkshopPayment({
   form,
   service,
+  people,
   vatPercent,
   depositPercent,
 }: {
   form: UseFormReturn<Values, unknown, Output>;
   service: WizardService;
+  people: number;
   vatPercent: number;
   depositPercent: number;
 }) {
   const totals = (payInFull: boolean) =>
     bookingTotals({
-      packageCents: service.price_cents,
+      packageCents: service.price_cents * people,
       addOnsCents: 0,
       vatPercent,
       fixedDepositCents: null,
@@ -910,7 +972,10 @@ function WorkshopPayment({
       <div className="rounded-2xl border bg-card p-4">
         <p className="font-heading text-lg font-semibold">{service.name}</p>
         {service.summary && <p className="text-sm text-muted-foreground">{service.summary}</p>}
-        <p className="mt-1 font-bold">
+        <p className="mt-1 text-sm text-muted-foreground">
+          {formatPeso(service.price_cents)} × {people} {people === 1 ? "person" : "people"}
+        </p>
+        <p className="font-bold">
           {formatPeso(totals(true).total)}
           {vatPercent > 0 && (
             <span className="font-normal text-muted-foreground"> incl. {vatPercent}% VAT</span>

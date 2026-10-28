@@ -92,9 +92,9 @@ export function WorkshopPromo({
               <span className="font-heading text-2xl font-semibold">
                 {formatPeso(workshop.price_cents)}
               </span>
-              {vatPercent > 0 && (
-                <span className="ml-1.5 text-sm text-primary-foreground/80">+ VAT</span>
-              )}
+              <span className="ml-1.5 text-sm text-primary-foreground/80">
+                per person{vatPercent > 0 && " + VAT"}
+              </span>
             </p>
           </div>
         </div>

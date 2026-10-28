@@ -48,14 +48,16 @@ export async function submitBooking(
       const [{ data: service }, { data: settings }, { data: addOns }] = await Promise.all([
         supabase
           .from("services")
-          .select("price_cents, deposit_cents")
+          .select("price_cents, deposit_cents, category")
           .eq("id", v.serviceId)
           .maybeSingle(),
         supabase.from("business_settings").select("default_deposit_percent, vat_percent").single(),
         supabase.from("add_ons").select("price_cents").in("id", v.addOnIds),
       ]);
       const { deposit } = bookingTotals({
-        packageCents: service?.price_cents ?? 0,
+        // Workshops are priced per person.
+        packageCents:
+          (service?.price_cents ?? 0) * (service?.category === "workshop" ? v.participants : 1),
         addOnsCents: (addOns ?? []).reduce((sum, a) => sum + a.price_cents, 0),
         vatPercent: settings?.vat_percent ?? 0,
         fixedDepositCents: service?.deposit_cents ?? null,
@@ -90,7 +92,13 @@ export async function submitBooking(
       const code = bookingErrorCode(error.message);
       if (!code) throw error;
       const field =
-        code === "slot_unavailable" ? "startAt" : code === "add_on_unavailable" ? "addOnIds" : null;
+        code === "slot_unavailable"
+          ? "startAt"
+          : code === "add_on_unavailable"
+            ? "addOnIds"
+            : code === "workshop_full" || code === "invalid_participants"
+              ? "participants"
+              : null;
       return fail(BOOKING_ERRORS[code]!, field ? { [field]: [BOOKING_ERRORS[code]!] } : undefined);
     }
 

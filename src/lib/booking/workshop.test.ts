@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { workshopOpening, workshopRefundCents } from "./workshop";
+import { formatWorkshopWhen, workshopOpening, workshopRefundCents } from "./workshop";
 
 describe("workshopRefundCents", () => {
   it("refunds half the price when paid in full (or more)", () => {
@@ -45,5 +45,17 @@ describe("workshopOpening", () => {
       open: false,
       reason: "full",
     });
+  });
+});
+
+describe("formatWorkshopWhen", () => {
+  it("shows the Manila date and times", () => {
+    expect(formatWorkshopWhen("2026-10-29T00:00:00Z", "2026-10-29T04:00:00Z")).toEqual({
+      date: "Thursday, 29 October 2026",
+      time: "8:00 AM – 12:00 PM",
+    });
+    expect(formatWorkshopWhen("2026-11-14T05:00:00Z", "2026-11-14T09:30:00Z").time).toBe(
+      "1:00 PM – 5:30 PM",
+    );
   });
 });

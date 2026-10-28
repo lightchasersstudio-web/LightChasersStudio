@@ -1277,6 +1277,21 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("prices the workshop per person; half or full is of that total", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // VAT 0
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const three = (await c.query(SIGN_UP, ["ana@example.com", workshop, 3])).rows[0]!;
+        expect(three.deposit_cents).toBe(1_500_000); // 3 x 5,000.00, paid in full
+        const { rows } = await c.query<{ price_cents: number }>(
+          "select price_cents from public.bookings where id = $1",
+          [three.booking_id],
+        );
+        expect(rows[0]!.price_cents).toBe(1_500_000);
+      });
+    });
+
     it("refuses sign-ups with no date, after it starts, or past the seats", async () => {
       await inRollback(async (c) => {
         await setupFixtures(c);

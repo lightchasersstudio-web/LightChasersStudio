@@ -34,6 +34,14 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
 
+  // Who's coming: no calendar, no location; the price is per person.
+  await expect(page.getByRole("heading", { name: "Who's coming" })).toBeVisible();
+  await expect(page.getByRole("group", { name: /^Dates in / })).toHaveCount(0);
+  await expect(page.getByLabel("Location (optional)")).toHaveCount(0);
+  await page.getByLabel("How many people are joining").fill("2");
+  await expect(page.getByText(/Workshop price for 2 people/)).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+
   // Payment: the refund rule must be accepted.
   await expect(page.getByRole("heading", { name: "Payment" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
@@ -42,13 +50,7 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await page.getByRole("checkbox", { name: /Refund rule/ }).check();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // Straight to Other details: no calendar.
-  await expect(page.getByRole("heading", { name: "Other details" })).toBeVisible();
-  await expect(page.getByRole("group", { name: /^Dates in / })).toHaveCount(0);
-  // The place is set by the studio too.
-  await expect(page.getByLabel("Location (optional)")).toHaveCount(0);
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByText(/paying in full/)).toBeVisible();
+  await expect(page.getByText(/2 people · paying in full/)).toBeVisible();
   // The workshop's time shows, with no way to change it.
   await expect(page.getByRole("button", { name: "Edit when" })).toHaveCount(0);
   const pay = page.getByRole("button", { name: /^Pay ₱[\d,.]+$/ });

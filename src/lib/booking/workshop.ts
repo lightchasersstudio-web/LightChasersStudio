@@ -1,6 +1,3 @@
-import { TZDate } from "@date-fns/tz";
-import { format } from "date-fns";
-
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 
 /** Owner's refund rule for workshops (2026-10-27); refunds are sent by hand. */
@@ -31,11 +28,25 @@ export function workshopOpening(
   return seatsLeft > 0 ? { open: true, seatsLeft } : { open: false, reason: "full" };
 }
 
-/** "Saturday, 14 November 2026" and "1:00 PM – 5:30 PM", in Manila time. */
+/**
+ * "Saturday, 14 November 2026" and "1:00 PM – 5:30 PM", in Manila time. Uses
+ * Intl rather than TZDate, which reads the clock and so can't run while the
+ * home page is prerendered.
+ */
 export function formatWorkshopWhen(startsAt: string, endsAt: string) {
-  const start = new TZDate(startsAt, BUSINESS_TZ);
+  const part = (iso: string, options: Intl.DateTimeFormatOptions) =>
+    Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", { timeZone: BUSINESS_TZ, ...options })
+        .formatToParts(new Date(iso))
+        .map((p) => [p.type, p.value]),
+    );
+  const d = part(startsAt, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const time = (iso: string) => {
+    const t = part(iso, { hour: "numeric", minute: "2-digit", hour12: true });
+    return `${t.hour}:${t.minute} ${t.dayPeriod}`;
+  };
   return {
-    date: format(start, "EEEE, d MMMM yyyy"),
-    time: `${format(start, "h:mm a")} – ${format(new TZDate(endsAt, BUSINESS_TZ), "h:mm a")}`,
+    date: `${d.weekday}, ${d.day} ${d.month} ${d.year}`,
+    time: `${time(startsAt)} – ${time(endsAt)}`,
   };
 }

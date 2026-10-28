@@ -22,8 +22,12 @@ type Props = {
   /** Current wizard step: rows for finished steps get a "Change" link. */
   step: number;
   onGoTo?: (step: number) => void;
+  /** The step that picks the package (workshops: the payment step). */
+  packageStep: number;
   /** The step that picks the date and time; null when it's fixed (workshops). */
   whenStep: number | null;
+  /** People the price is for (workshops are per person; packages are 1). */
+  people: number;
   className?: string;
 };
 
@@ -85,7 +89,9 @@ function Rows({
   deposit,
   step,
   onGoTo,
+  packageStep,
   whenStep,
+  people,
 }: Props) {
   if (!service) return null;
   const change = (to: number, label: string) =>
@@ -110,9 +116,10 @@ function Rows({
               {service.duration_minutes !== null &&
                 `${formatDuration(service.duration_minutes)} · `}
               {formatPeso(service.price_cents)}
+              {people > 1 && ` × ${people}`}
             </span>
           </span>
-          {change(1, "package")}
+          {change(packageStep, "package")}
         </li>
         {addOns.length > 0 && (
           <li className="flex gap-2.5">
