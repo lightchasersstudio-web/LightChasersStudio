@@ -106,9 +106,9 @@ export default async function HomePage() {
     };
   });
   const highlights = featured.slice(3, 9).length >= 3 ? featured.slice(3, 9) : featured.slice(0, 6);
-  // Upright photos suit the workshop banner's polaroids best.
+  // The workshop banner's slideshow: up to 6 photos, upright ones first (they suit a polaroid).
   const upright = portfolio.filter((p) => (p.height ?? 0) > (p.width ?? 0));
-  const workshopPhotos = (upright.length >= 2 ? upright : portfolio).slice(0, 2);
+  const workshopPhotos = [...upright, ...portfolio.filter((p) => !upright.includes(p))].slice(0, 6);
 
   return (
     <>

@@ -1,8 +1,8 @@
 import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, MapPinIcon, WalletIcon } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 
 import { PhotoPolaroid, PlaceholderPolaroid } from "@/components/public/photo-polaroid";
+import { PolaroidSlideshow } from "@/components/public/polaroid-slideshow";
 import { Reveal } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,18 @@ export function WorkshopPromo({
   vatPercent: number;
   className?: string;
 }) {
-  const [back, front] = photos;
+  // The slideshow: the workshop's own cover photo first (if any), then gallery
+  // photos; the polaroid behind shows one more.
+  const slides = [
+    ...(workshop.cover_image_path
+      ? [{ src: publicImageUrl("portfolio", workshop.cover_image_path), blur: null }]
+      : []),
+    ...photos.map((p) => ({
+      src: publicImageUrl("portfolio", p.storage_path),
+      blur: p.blur_data_url,
+    })),
+  ];
+  const back = photos.at(-1);
   // The lowest per-person price (early bird / student), shown as "from".
   // The lowest per-person price on offer ("from" when categories differ); none
   // when every category is switched off.
@@ -113,44 +124,27 @@ export function WorkshopPromo({
           aria-hidden
           className="relative mx-auto block w-full max-w-xs py-4 md:max-w-sm"
         >
-          {workshop.cover_image_path ? (
-            <figure className="polaroid rotate-2 pb-12 transition-transform duration-300 hover:rotate-0">
-              <div className="relative aspect-[4/5] overflow-hidden rounded-[2px] bg-muted">
-                <Image
-                  src={publicImageUrl("portfolio", workshop.cover_image_path)}
-                  alt=""
-                  fill
-                  sizes="(min-width: 768px) 24rem, 80vw"
-                  className="object-cover"
-                />
-              </div>
-              <figcaption className="absolute inset-x-2 bottom-2.5 text-center font-script text-2xl">
-                class is in session!
-              </figcaption>
-            </figure>
-          ) : (
-            <div className="relative">
-              <div className="absolute inset-0 translate-x-3 -translate-y-2 rotate-6 sm:translate-x-6 sm:-translate-y-3">
-                {back ? (
-                  <PhotoPolaroid photo={back} sizes="20rem" className="pb-12" />
-                ) : (
-                  <PlaceholderPolaroid index={1} className="pb-12" />
-                )}
-              </div>
-              <div className="relative -rotate-3 transition-transform duration-300 hover:rotate-0">
-                {front ? (
-                  <PhotoPolaroid
-                    photo={front}
-                    caption="class is in session!"
-                    sizes="20rem"
-                    className="pb-12"
-                  />
-                ) : (
-                  <PlaceholderPolaroid index={0} className="pb-12" />
-                )}
-              </div>
+          <div className="relative">
+            {/* A second polaroid peeking out behind, for a little stack. */}
+            <div className="absolute inset-0 translate-x-3 -translate-y-2 rotate-6 sm:translate-x-6 sm:-translate-y-3">
+              {back ? (
+                <PhotoPolaroid photo={back} sizes="20rem" className="pb-12" />
+              ) : (
+                <PlaceholderPolaroid index={1} className="pb-12" />
+              )}
             </div>
-          )}
+            <div className="relative -rotate-3 transition-transform duration-500 hover:rotate-0">
+              {slides.length > 0 ? (
+                <PolaroidSlideshow
+                  photos={slides}
+                  caption="class is in session!"
+                  sizes="(min-width: 768px) 24rem, 80vw"
+                />
+              ) : (
+                <PlaceholderPolaroid index={0} className="pb-12" />
+              )}
+            </div>
+          </div>
         </Link>
       </Reveal>
     </section>
