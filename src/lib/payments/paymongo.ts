@@ -9,8 +9,12 @@ import { paymentsMockEnabled } from "@/lib/payments/mock";
 // A booking is only ever marked paid by the signature-verified webhook.
 
 const API = "https://api.paymongo.com/v1";
-/** Shown on PayMongo's hosted checkout page. */
-const PAYMENT_METHODS = ["gcash", "card", "paymaya", "grab_pay", "qrph"];
+/**
+ * Shown on PayMongo's hosted checkout page. Must match the methods enabled on
+ * the studio's PayMongo account (2026-10-28: GCash, Maya, card), or the
+ * checkout session is refused.
+ */
+const PAYMENT_METHODS = ["gcash", "paymaya", "card"];
 const SIGNATURE_MAX_AGE_SECONDS = 300;
 
 export function paymongoConfigured(): boolean {
