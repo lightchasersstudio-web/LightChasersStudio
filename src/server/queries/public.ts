@@ -96,6 +96,15 @@ export async function getActiveWorkshop(): Promise<PublicService | null> {
   return data;
 }
 
+/** People signed up (or holding a seat while paying) for a workshop. Not cached: it changes with every sign-up. */
+export async function getWorkshopSeatsTaken(serviceId: string): Promise<number> {
+  const { data, error } = await createPublicClient().rpc("workshop_seats_taken", {
+    p_service_id: serviceId,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function listPortfolio(): Promise<PublicPhoto[]> {
   "use cache";
   cacheTag(TAGS.portfolio);

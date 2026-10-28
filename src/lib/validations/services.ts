@@ -1,7 +1,9 @@
+import { TZDate } from "@date-fns/tz";
 import { z } from "zod";
 
 import { PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
+import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { optionalText, pesoString } from "@/lib/validations/shared";
 
 export const serviceSchema = z
@@ -39,6 +41,11 @@ export const serviceSchema = z
       ),
     coverImagePath: z.string().regex(STORAGE_PATH.serviceCover).nullable(),
     isActive: z.boolean(),
+    // Workshops only: when it runs (Manila time) and how many people can join.
+    workshopDate: z.string().trim(),
+    workshopStart: z.string().trim(),
+    workshopEnd: z.string().trim(),
+    workshopSeats: z.string().trim(),
   })
   .transform((v, ctx) => {
     let durationMinutes: number | null = null;
@@ -84,6 +91,9 @@ export const serviceSchema = z
       }
       depositCents = parsed.data;
     }
+
+    const workshop = v.category === "workshop" ? workshopSchedule(v, ctx) : NO_SCHEDULE;
+    if (!workshop) return z.NEVER;
     return {
       name: v.name,
       slug: v.slug,
@@ -96,8 +106,88 @@ export const serviceSchema = z
       inclusions: v.inclusions,
       cover_image_path: v.coverImagePath,
       is_active: v.isActive,
+      ...workshop,
     };
   });
+
+type WorkshopSchedule = {
+  workshop_starts_at: string | null;
+  workshop_ends_at: string | null;
+  workshop_seats: number | null;
+};
+const NO_SCHEDULE: WorkshopSchedule = {
+  workshop_starts_at: null,
+  workshop_ends_at: null,
+  workshop_seats: null,
+};
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Manila date + times → stored timestamps; all empty = date not announced yet. */
+function workshopSchedule(
+  v: { workshopDate: string; workshopStart: string; workshopEnd: string; workshopSeats: string },
+  ctx: z.RefinementCtx,
+): WorkshopSchedule | null {
+  const issue = (path: string, message: string) => {
+    ctx.addIssue({ code: "custom", path: [path], message });
+    return null;
+  };
+  let seats: number | null = null;
+  if (v.workshopSeats) {
+    if (
+      !/^\d+$/.test(v.workshopSeats) ||
+      Number(v.workshopSeats) < 1 ||
+      Number(v.workshopSeats) > 10_000
+    ) {
+      return issue(
+        "workshopSeats",
+        "Enter a whole number of seats, or leave it empty for no limit.",
+      );
+    }
+    seats = Number(v.workshopSeats);
+  }
+  if (!v.workshopDate && !v.workshopStart && !v.workshopEnd) {
+    return { ...NO_SCHEDULE, workshop_seats: seats };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.workshopDate))
+    return issue("workshopDate", "Pick the workshop date.");
+  if (!TIME.test(v.workshopStart)) return issue("workshopStart", "Pick the start time.");
+  if (!TIME.test(v.workshopEnd)) return issue("workshopEnd", "Pick the end time.");
+  if (v.workshopEnd <= v.workshopStart) {
+    return issue("workshopEnd", "The end time must be after the start time.");
+  }
+  const at = (time: string) => {
+    const [y, m, d] = v.workshopDate.split("-").map(Number) as [number, number, number];
+    const [h, min] = time.split(":").map(Number) as [number, number];
+    return new Date(new TZDate(y, m - 1, d, h, min, BUSINESS_TZ).getTime()).toISOString();
+  };
+  return {
+    workshop_starts_at: at(v.workshopStart),
+    workshop_ends_at: at(v.workshopEnd),
+    workshop_seats: seats,
+  };
+}
+
+/** Stored workshop times → the form's Manila date and times ("" when not set). */
+export function workshopFormValues(service: {
+  workshop_starts_at: string | null;
+  workshop_ends_at: string | null;
+  workshop_seats: number | null;
+}) {
+  const local = (iso: string | null, part: "date" | "time") => {
+    if (!iso) return "";
+    const d = new TZDate(iso, BUSINESS_TZ);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return part === "date"
+      ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  return {
+    workshopDate: local(service.workshop_starts_at, "date"),
+    workshopStart: local(service.workshop_starts_at, "time"),
+    workshopEnd: local(service.workshop_ends_at, "time"),
+    workshopSeats: service.workshop_seats === null ? "" : String(service.workshop_seats),
+  };
+}
 
 export type ServiceFormInput = z.input<typeof serviceSchema>;
 

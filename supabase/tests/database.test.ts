@@ -1162,8 +1162,10 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         const s = await setupFixtures(c);
         // A fixed package deposit is ignored for workshops.
         const { rows } = await c.query<{ id: string }>(`
-          insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents)
-          values ('Test Workshop', 'test-workshop', 'workshop', null, 100001, 5000) returning id`);
+          insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents,
+            workshop_starts_at, workshop_ends_at)
+          values ('Test Workshop', 'test-workshop', 'workshop', null, 100001, 5000,
+            '${manila(152, 9).toISOString()}', '${manila(152, 12).toISOString()}') returning id`);
         const workshop = rows[0]!.id;
         await actAs(c, "service_role");
 
@@ -1208,6 +1210,147 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           ])
         ).rows[0]!;
         expect(pkg.deposit_cents).toBe(105000);
+      });
+    });
+  });
+
+  describe("workshop schedule (admin sets the time)", () => {
+    const SIGN_UP = `select * from public.create_booking(
+      p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+      p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+      p_start_at => now(), p_participants => $3, p_pay_in_full => true)`;
+
+    /** The same instant as Postgres returns it (UTC ISO). */
+    const utc = (d: Date) => new Date(d.getTime()).toISOString();
+
+    async function addWorkshop(
+      c: PoolClient,
+      opts: { start?: Date | null; end?: Date | null; seats?: number | null } = {},
+    ) {
+      const start = opts.start === undefined ? manila(160, 13) : opts.start;
+      const end = opts.end === undefined ? manila(160, 17) : opts.end;
+      const { rows } = await c.query<{ id: string }>(
+        `insert into public.services (name, slug, category, price_cents,
+           workshop_starts_at, workshop_ends_at, workshop_seats)
+         values ('Test Workshop', 'test-workshop', 'workshop', 500000, $1, $2, $3) returning id`,
+        [start?.toISOString() ?? null, end?.toISOString() ?? null, opts.seats ?? null],
+      );
+      return rows[0]!.id;
+    }
+
+    it("every sign-up takes the workshop's time, whatever time is sent", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // one shoot at a time: sign-ups must not count as shoots
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        for (const email of ["ana@example.com", "bea@example.com", "cy@example.com"]) {
+          await c.query(SIGN_UP, [email, workshop, 1]);
+        }
+        const { rows } = await c.query<{ start_at: Date; end_at: Date; has_end_time: boolean }>(
+          "select start_at, end_at, has_end_time from public.bookings where service_id = $1",
+          [workshop],
+        );
+        expect(rows).toHaveLength(3);
+        for (const r of rows) {
+          expect(r.start_at.toISOString()).toBe(utc(manila(160, 13)));
+          expect(r.end_at.toISOString()).toBe(utc(manila(160, 17)));
+          expect(r.has_end_time).toBe(true);
+        }
+      });
+    });
+
+    it("refuses sign-ups with no date, after it starts, or past the seats", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const noDate = await addWorkshop(c, { start: null, end: null });
+        await actAs(c, "service_role");
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", noDate, 1])).toMatch(
+          /workshop_not_scheduled/,
+        );
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const started = await addWorkshop(c, {
+          start: new Date(Date.now() - 3_600_000),
+          end: new Date(Date.now() + 3_600_000),
+        });
+        await actAs(c, "service_role");
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", started, 1])).toMatch(
+          /workshop_closed/,
+        );
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c, { seats: 3 });
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 2]);
+        // Two people asked, one seat left.
+        expect(await expectFailure(c, SIGN_UP, ["bea@example.com", workshop, 2])).toMatch(
+          /workshop_full/,
+        );
+        await c.query(SIGN_UP, ["bea@example.com", workshop, 1]);
+        const { rows } = await c.query<{ taken: number }>(
+          "select public.workshop_seats_taken($1) as taken",
+          [workshop],
+        );
+        expect(rows[0]!.taken).toBe(3);
+        expect(await expectFailure(c, SIGN_UP, ["cy@example.com", workshop, 1])).toMatch(
+          /workshop_full/,
+        );
+      });
+    });
+
+    it("blocks shoots during the workshop, on the calendar and in create_booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 1]);
+
+        expect(
+          await expectFailure(c, CREATE, [
+            "Bea",
+            "bea@example.com",
+            "09171234567",
+            s.portrait,
+            manila(160, 14).toISOString(),
+          ]),
+        ).toMatch(/slot_unavailable/);
+        // Before the workshop (ends with the 30-min buffer at 12:00) is fine.
+        await book(c, s.portrait, manila(160, 10, 30), "cy@example.com");
+        // Staff can still book during it (the sign-up doesn't count as a shoot).
+        await adminBook(c, s.portrait, manila(160, 15));
+
+        await actAs(c, "anon");
+        const { rows } = await c.query<{ start_at: Date; blocked_until: Date }>(
+          "select * from public.get_busy_ranges($1, $2)",
+          [manila(160, 0).toISOString(), manila(161, 0).toISOString()],
+        );
+        const ranges = rows.map((r) => [r.start_at.toISOString(), r.blocked_until.toISOString()]);
+        // The workshop once (capacity 1), not once per sign-up; plus the two shoots.
+        expect(ranges.filter(([a]) => a === utc(manila(160, 13)))).toEqual([
+          [utc(manila(160, 13)), utc(manila(160, 17))],
+        ]);
+        expect(ranges).toHaveLength(3);
+      });
+    });
+
+    it("moving the workshop moves its open sign-ups", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const { booking_id } = (await c.query(SIGN_UP, ["ana@example.com", workshop, 1])).rows[0]!;
+        await c.query(
+          "update public.services set workshop_starts_at = $2, workshop_ends_at = $3 where id = $1",
+          [workshop, manila(170, 9).toISOString(), manila(170, 12).toISOString()],
+        );
+        const { rows } = await c.query<{ start_at: Date; blocked_until: Date }>(
+          "select start_at, blocked_until from public.bookings where id = $1",
+          [booking_id],
+        );
+        expect(rows[0]!.start_at.toISOString()).toBe(utc(manila(170, 9)));
+        expect(rows[0]!.blocked_until.toISOString()).toBe(utc(manila(170, 12)));
       });
     });
   });

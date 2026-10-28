@@ -614,6 +614,9 @@ export type Database = {
           sort_order: number
           summary: string | null
           updated_at: string
+          workshop_ends_at: string | null
+          workshop_seats: number | null
+          workshop_starts_at: string | null
         }
         Insert: {
           category: Database["public"]["Enums"]["service_category"]
@@ -631,6 +634,9 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_ends_at?: string | null
+          workshop_seats?: number | null
+          workshop_starts_at?: string | null
         }
         Update: {
           category?: Database["public"]["Enums"]["service_category"]
@@ -648,6 +654,9 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_ends_at?: string | null
+          workshop_seats?: number | null
+          workshop_starts_at?: string | null
         }
         Relationships: []
       }
@@ -748,6 +757,13 @@ export type Database = {
           status: Database["public"]["Enums"]["booking_status"]
         }[]
       }
+      booking_holds_place: {
+        Args: {
+          p_hold_expires_at: string
+          p_status: Database["public"]["Enums"]["booking_status"]
+        }
+        Returns: boolean
+      }
       delete_booking: {
         Args: { p_booking_id: string }
         Returns: {
@@ -786,6 +802,7 @@ export type Database = {
         Returns: undefined
       }
       staff_add_on_minutes: { Args: { p_add_ons: Json }; Returns: number }
+      workshop_seats_taken: { Args: { p_service_id: string }; Returns: number }
     }
     Enums: {
       admin_role: "owner" | "admin"

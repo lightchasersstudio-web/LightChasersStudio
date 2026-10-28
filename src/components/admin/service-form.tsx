@@ -16,7 +16,12 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { PACKAGE_CATEGORIES } from "@/lib/catalog";
 import { centsToPesoInput } from "@/lib/utils/money";
-import { serviceSchema, slugify, type ServiceFormInput } from "@/lib/validations/services";
+import {
+  serviceSchema,
+  slugify,
+  workshopFormValues,
+  type ServiceFormInput,
+} from "@/lib/validations/services";
 import { createService, updateService } from "@/server/actions/services";
 import type { Service } from "@/server/queries/services";
 
@@ -40,6 +45,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           inclusions: (service.inclusions as string[]).join("\n"),
           coverImagePath: service.cover_image_path,
           isActive: service.is_active,
+          ...workshopFormValues(service),
         }
       : {
           name: "",
@@ -55,11 +61,18 @@ export function ServiceForm({ service }: { service?: Service }) {
           inclusions: "",
           coverImagePath: null,
           isActive: true,
+          workshopDate: "",
+          workshopStart: "",
+          workshopEnd: "",
+          workshopSeats: "",
         },
   });
   const { control } = form;
   useUnsavedChangesWarning(form.formState.isDirty);
-  const [depositMode, hasSetLength] = useWatch({ control, name: ["depositMode", "hasSetLength"] });
+  const [depositMode, hasSetLength, category] = useWatch({
+    control,
+    name: ["depositMode", "hasSetLength", "category"],
+  });
 
   async function onSubmit() {
     const values = form.getValues();
@@ -207,6 +220,37 @@ export function ServiceForm({ service }: { service?: Service }) {
             </FieldGroup>
           </CardContent>
         </Card>
+
+        {category === "workshop" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Workshop schedule</CardTitle>
+              <CardDescription>
+                Clients don&apos;t pick a time: everyone who signs up joins this date and time.
+                Leave the date empty until it&apos;s decided (sign-up stays closed). Changing it
+                moves everyone already signed up, so let them know.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FieldGroup>
+                <div className="grid gap-5 sm:grid-cols-3">
+                  <TextField control={control} name="workshopDate" label="Date" type="date" />
+                  <TextField control={control} name="workshopStart" label="Starts" type="time" />
+                  <TextField control={control} name="workshopEnd" label="Ends" type="time" />
+                </div>
+                <TextField
+                  control={control}
+                  name="workshopSeats"
+                  label="Seats"
+                  inputMode="numeric"
+                  placeholder="e.g. 15"
+                  description="How many people can join. Leave empty for no limit."
+                  className="sm:max-w-[calc(33%-0.5rem)]"
+                />
+              </FieldGroup>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="space-y-6">

@@ -41,22 +41,34 @@ import type { PublicAddOn, PublicService } from "@/server/queries/public";
 type Values = PublicBookingInput;
 type Output = z.output<typeof publicBookingSchema>;
 
-const PACKAGE_STEPS: { title: string; fields: FieldPath<Values>[] }[] = [
+type Step = {
+  id: "details" | "package" | "when" | "extras" | "review";
+  title: string;
+  fields: FieldPath<Values>[];
+};
+const PACKAGE_STEPS: Step[] = [
   {
+    id: "details",
     title: "Your details",
     fields: ["fullName", "email", "phone", "preferredContact", "messenger", "consent"],
   },
-  { title: "Package", fields: ["serviceId", "addOnIds"] },
-  { title: "Date & time", fields: ["startAt"] },
-  { title: "Shoot details", fields: ["location", "participants", "specialRequests"] },
-  { title: "Review & pay", fields: [] },
+  { id: "package", title: "Package", fields: ["serviceId", "addOnIds"] },
+  { id: "when", title: "Date & time", fields: ["startAt"] },
+  {
+    id: "extras",
+    title: "Shoot details",
+    fields: ["location", "participants", "specialRequests"],
+  },
+  { id: "review", title: "Review & pay", fields: [] },
 ];
-/** Workshops have one fixed price: step 2 is choosing to pay half or in full. */
-const WORKSHOP_STEPS: typeof PACKAGE_STEPS = [
+/**
+ * Workshops have one fixed price and a time the admin sets: step 2 is choosing
+ * to pay half or in full, and there's no date step.
+ */
+const WORKSHOP_STEPS: Step[] = [
   PACKAGE_STEPS[0]!,
-  { title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
-  PACKAGE_STEPS[2]!,
-  { title: "Other details", fields: PACKAGE_STEPS[3]!.fields },
+  { id: "package", title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
+  { ...PACKAGE_STEPS[3]!, title: "Other details" },
   PACKAGE_STEPS[4]!,
 ];
 
@@ -81,7 +93,7 @@ export function BookingWizard({
   vatPercent,
   holdMinutes,
   maxAdvanceDays,
-  workshop = false,
+  workshop = null,
 }: {
   services: WizardService[];
   addOns: PublicAddOn[];
@@ -91,10 +103,15 @@ export function BookingWizard({
   vatPercent: number;
   holdMinutes: number;
   maxAdvanceDays: number;
-  /** Workshop flow: one fixed-price workshop (services[0]), paid half or in full. */
-  workshop?: boolean;
+  /**
+   * Workshop flow: one fixed-price workshop (services[0]) at the time the admin
+   * set, paid half or in full.
+   */
+  workshop?: { startAt: string; endAt: string } | null;
 }) {
   const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
+  /** Index of a step by id (-1 when this flow doesn't have it). */
+  const at = (id: Step["id"]) => STEPS.findIndex((s) => s.id === id);
   const [step, setStep] = useState(0);
   // +1 moving forward, -1 going back: steps slide in from that side.
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -112,7 +129,7 @@ export function BookingWizard({
     consent: false as unknown as true,
     serviceId: initialServiceId ?? "",
     addOnIds: [],
-    startAt: "",
+    startAt: workshop?.startAt ?? "",
     location: "",
     participants: "1",
     specialRequests: "",
@@ -140,6 +157,8 @@ export function BookingWizard({
       addOnIds: (draft.addOnIds ?? []).filter((id) =>
         addOns.some((a) => a.id === id && addOnOffered(a, draft.serviceId ?? "")),
       ),
+      // A workshop's time is set by the studio, never by an old draft.
+      ...(workshop && { startAt: workshop.startAt }),
     });
     // Browser storage can only be read after hydration, so this can't be initial state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -187,8 +206,11 @@ export function BookingWizard({
         payInFull,
       })
     : { subtotal: 0, vat: 0, total: 0, deposit: 0 };
-  const endAt =
-    service && startAt ? sessionEndAt(startAt, service.duration_minutes, extraMinutes) : null;
+  const endAt = workshop
+    ? workshop.endAt
+    : service && startAt
+      ? sessionEndAt(startAt, service.duration_minutes, extraMinutes)
+      : null;
 
   const now = TZDate.tz(BUSINESS_TZ);
   const minMonth = format(now, "yyyy-MM");
@@ -271,7 +293,7 @@ export function BookingWizard({
         // Someone else just took that time: back to the calendar with fresh slots.
         form.setValue("startAt", "");
         setReloadKey((k) => k + 1);
-        goTo(2);
+        if (at("when") !== -1) goTo(at("when"));
         toast.error(result.error);
         return;
       }
@@ -281,6 +303,7 @@ export function BookingWizard({
   }
 
   const last = step === STEPS.length - 1;
+  const stepId = STEPS[step]!.id;
 
   return (
     <form
@@ -401,7 +424,7 @@ export function BookingWizard({
                   </FieldGroup>
                 )}
 
-                {step === 1 && workshop && service && (
+                {stepId === "package" && workshop && service && (
                   <WorkshopPayment
                     form={form}
                     service={service}
@@ -410,7 +433,7 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 1 && !workshop && (
+                {stepId === "package" && !workshop && (
                   <Controller
                     control={form.control}
                     name="serviceId"
@@ -489,7 +512,7 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 1 && offeredAddOns.length > 0 && (
+                {stepId === "package" && offeredAddOns.length > 0 && (
                   <Controller
                     control={form.control}
                     name="addOnIds"
@@ -555,7 +578,7 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 2 && service && (
+                {stepId === "when" && service && (
                   <Controller
                     control={form.control}
                     name="startAt"
@@ -581,7 +604,7 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 3 && (
+                {stepId === "extras" && (
                   <FieldGroup>
                     <TextField
                       control={form.control}
@@ -614,22 +637,26 @@ export function BookingWizard({
                         <ReviewRow
                           label="Workshop"
                           value={`${service.name} · ${payInFull ? "paying in full" : "paying half now"}`}
-                          onEdit={() => goTo(1)}
+                          onEdit={() => goTo(at("package"))}
                         />
                       ) : (
-                        <ReviewRow label="Package" value={service.name} onEdit={() => goTo(1)} />
+                        <ReviewRow
+                          label="Package"
+                          value={service.name}
+                          onEdit={() => goTo(at("package"))}
+                        />
                       )}
                       {chosenAddOns.length > 0 && (
                         <ReviewRow
                           label="Add-ons"
                           value={chosenAddOns.map((a) => a.name).join(", ")}
-                          onEdit={() => goTo(1)}
+                          onEdit={() => goTo(at("package"))}
                         />
                       )}
                       <ReviewRow
                         label="When"
                         value={formatBookingWhen(startAt, endAt)}
-                        onEdit={() => goTo(2)}
+                        onEdit={workshop ? undefined : () => goTo(at("when"))}
                       />
                       <ReviewRow
                         label="Contact"
@@ -640,7 +667,7 @@ export function BookingWizard({
                         <ReviewRow
                           label="Location"
                           value={form.getValues("location")!}
-                          onEdit={() => goTo(3)}
+                          onEdit={() => goTo(at("extras"))}
                         />
                       )}
                     </dl>
@@ -689,8 +716,8 @@ export function BookingWizard({
                           )}
                           {workshop && <p className="mt-3 text-sm">{WORKSHOP_REFUND_RULE}</p>}
                           <p className="mt-3 text-sm">
-                            We hold this time for {holdMinutes} minutes while you pay securely with
-                            PayMongo (GCash, card and more).
+                            We hold {workshop ? "your seat" : "this time"} for {holdMinutes} minutes
+                            while you pay securely with PayMongo (GCash, card and more).
                           </p>
                         </>
                       )}
@@ -715,6 +742,7 @@ export function BookingWizard({
           deposit={deposit}
           step={step}
           onGoTo={submitting ? undefined : goTo}
+          whenStep={workshop ? null : at("when")}
         />
       </div>
 
@@ -767,7 +795,7 @@ function StepTracker({
   onGoTo,
   disabled,
 }: {
-  steps: typeof PACKAGE_STEPS;
+  steps: Step[];
   step: number;
   onGoTo: (step: number) => void;
   disabled: boolean;
@@ -821,16 +849,27 @@ function StepTracker({
   );
 }
 
-function ReviewRow({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
+function ReviewRow({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  /** Omitted for details the client can't change (a workshop's time). */
+  onEdit?: () => void;
+}) {
   return (
     <div className="flex items-start justify-between gap-4 p-4">
       <div className="min-w-0">
         <dt className="text-sm text-muted-foreground">{label}</dt>
         <dd className="font-semibold break-words">{value}</dd>
       </div>
-      <Button type="button" variant="link" className="shrink-0 px-0" onClick={onEdit}>
-        Edit<span className="sr-only"> {label.toLowerCase()}</span>
-      </Button>
+      {onEdit && (
+        <Button type="button" variant="link" className="shrink-0 px-0" onClick={onEdit}>
+          Edit<span className="sr-only"> {label.toLowerCase()}</span>
+        </Button>
+      )}
     </div>
   );
 }

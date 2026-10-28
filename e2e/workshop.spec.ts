@@ -1,27 +1,13 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * Workshop sign-up: the left-hand button → details → pay in full → pretend
- * checkout → the admin sees it as a workshop with the half refund due.
- * Trial mode (PAYMENTS_MOCK=true on the server and here) + E2E_ADMIN_EMAIL/PASSWORD.
+ * checkout → the admin sees it as a workshop with the half refund due. There's
+ * no date step: everyone joins the time the admin set on the workshop.
+ * Trial mode (PAYMENTS_MOCK=true on the server and here) + E2E_ADMIN_EMAIL/PASSWORD,
+ * and the workshop needs a future date in Admin → Services.
  */
 test.skip(process.env.PAYMENTS_MOCK !== "true", "trial mode only (PAYMENTS_MOCK=true)");
-
-async function pickFreeTime(page: Page) {
-  const days = page.getByRole("group", { name: /^Dates in / });
-  await expect(days).toHaveAttribute("aria-busy", "false");
-  for (let i = 0; i < 3; i++) {
-    const free = days.locator("button[data-date]:not([disabled])");
-    if ((await free.count()) > 0) {
-      await free.nth(Math.min(8, (await free.count()) - 1)).click();
-      await page.getByRole("group", { name: "Start times" }).getByRole("button").first().click();
-      return;
-    }
-    await page.getByRole("button", { name: "Next month" }).click();
-    await expect(days).toHaveAttribute("aria-busy", "false");
-  }
-  throw new Error("no free times");
-}
 
 test("the workshop is reached from its own button, never listed as a package", async ({ page }) => {
   await page.goto("/services");
@@ -37,6 +23,11 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   const name = `E2E Client Workshop ${Date.now()}`;
 
   await page.goto("/workshop");
+  test.skip(
+    (await page.getByLabel("Full name").count()) === 0,
+    "the workshop has no future date (or no seats) on this database",
+  );
+  await expect(page.getByText(/^Date$/)).toBeVisible();
   await page.getByLabel("Full name").fill(name);
   await page.getByLabel("Email").fill("e2e-workshop@example.com");
   await page.getByLabel("Mobile number").fill("0917 123 4567");
@@ -51,10 +42,13 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await page.getByRole("checkbox", { name: /Refund rule/ }).check();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await pickFreeTime(page);
-  await page.getByRole("button", { name: "Continue" }).click();
+  // Straight to Other details: no calendar.
+  await expect(page.getByRole("heading", { name: "Other details" })).toBeVisible();
+  await expect(page.getByRole("group", { name: /^Dates in / })).toHaveCount(0);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText(/paying in full/)).toBeVisible();
+  // The workshop's time shows, with no way to change it.
+  await expect(page.getByRole("button", { name: "Edit when" })).toHaveCount(0);
   const pay = page.getByRole("button", { name: /^Pay ₱[\d,.]+$/ });
   await pay.click();
 

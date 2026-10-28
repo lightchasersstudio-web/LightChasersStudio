@@ -22,6 +22,8 @@ type Props = {
   /** Current wizard step: rows for finished steps get a "Change" link. */
   step: number;
   onGoTo?: (step: number) => void;
+  /** The step that picks the date and time; null when it's fixed (workshops). */
+  whenStep: number | null;
   className?: string;
 };
 
@@ -83,6 +85,7 @@ function Rows({
   deposit,
   step,
   onGoTo,
+  whenStep,
 }: Props) {
   if (!service) return null;
   const change = (to: number, label: string) =>
@@ -131,7 +134,7 @@ function Rows({
           <span className={cn("min-w-0 flex-1", !startAt && "text-muted-foreground")}>
             {startAt ? formatBookingWhen(startAt, endAt) : "Date and time not picked yet"}
           </span>
-          {startAt && change(2, "date and time")}
+          {startAt && whenStep !== null && change(whenStep, "date and time")}
         </li>
       </ul>
       <dl className="space-y-1 rounded-2xl bg-accent p-3 text-accent-foreground">

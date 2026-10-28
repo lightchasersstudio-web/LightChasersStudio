@@ -1,4 +1,4 @@
-import { ArrowRightIcon, CalendarCheckIcon, WalletIcon } from "lucide-react";
+import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, WalletIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -6,15 +6,11 @@ import { PhotoPolaroid, PlaceholderPolaroid } from "@/components/public/photo-po
 import { Reveal } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
+import { formatWorkshopWhen } from "@/lib/booking/workshop";
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
 import type { PublicPhoto, PublicService } from "@/server/queries/public";
-
-const POINTS = [
-  { text: "Pick a free date and time on our calendar", Icon: CalendarCheckIcon },
-  { text: "Pay half or the full price to save your seat", Icon: WalletIcon },
-];
 
 /**
  * Home-page banner for the open workshop: copy and price on the left, a small
@@ -32,6 +28,16 @@ export function WorkshopPromo({
   className?: string;
 }) {
   const [back, front] = photos;
+  // The admin sets the date; until then the banner teases it.
+  const when =
+    workshop.workshop_starts_at && workshop.workshop_ends_at
+      ? formatWorkshopWhen(workshop.workshop_starts_at, workshop.workshop_ends_at)
+      : null;
+  const points = [
+    { text: when?.date ?? "Date to be announced soon", Icon: CalendarDaysIcon },
+    ...(when ? [{ text: when.time, Icon: ClockIcon }] : []),
+    { text: "Pay half or the full price to save your seat", Icon: WalletIcon },
+  ];
   return (
     <section
       aria-labelledby="workshop-promo"
@@ -49,7 +55,7 @@ export function WorkshopPromo({
         <div className="relative">
           <p className="flex flex-wrap items-center gap-3">
             <span className="rounded-full bg-background px-3 py-1 text-xs font-bold tracking-wide text-terracotta-ink uppercase">
-              Now open
+              {when ? "Now open" : "Coming soon"}
             </span>
             <span className="font-script text-2xl text-primary-foreground/85">learn with us</span>
           </p>
@@ -61,7 +67,7 @@ export function WorkshopPromo({
               "Love the photos you see here? Come learn the craft with the Light Chasers team."}
           </p>
           <ul className="mt-6 space-y-3">
-            {POINTS.map(({ text, Icon }) => (
+            {points.map(({ text, Icon }) => (
               <li key={text} className="flex items-center gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary-foreground/15">
                   <Icon className="size-4.5" aria-hidden />
@@ -77,7 +83,7 @@ export function WorkshopPromo({
               className="bg-background text-foreground shadow-md hover:bg-background/90"
             >
               <Link href="/workshop">
-                Sign up for the workshop
+                {when ? "Sign up for the workshop" : "See the workshop"}
                 <ArrowRightIcon aria-hidden />
               </Link>
             </Button>

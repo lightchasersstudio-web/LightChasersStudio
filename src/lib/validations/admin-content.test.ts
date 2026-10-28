@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { blackoutSchema, datesInRange, weeklyHoursSchema } from "./availability";
 import { updatePortfolioImageSchema } from "./portfolio";
 import { bookingRulesSchema } from "./settings";
-import { serviceSchema, slugify, type ServiceFormInput } from "./services";
+import { serviceSchema, slugify, workshopFormValues, type ServiceFormInput } from "./services";
 
 const service: ServiceFormInput = {
   name: "Prenup Session",
@@ -19,6 +19,10 @@ const service: ServiceFormInput = {
   inclusions: "  2 locations \n\n 50 edited photos ",
   coverImagePath: null,
   isActive: true,
+  workshopDate: "",
+  workshopStart: "",
+  workshopEnd: "",
+  workshopSeats: "",
 };
 
 describe("serviceSchema", () => {
@@ -59,6 +63,71 @@ describe("serviceSchema", () => {
       expect(r.success).toBe(false);
       expect(r.error?.issues[0]?.path).toEqual(["lengthHours"]);
     }
+  });
+});
+
+describe("serviceSchema: workshop schedule", () => {
+  const workshop = {
+    ...service,
+    category: "workshop" as const,
+    workshopDate: "2026-11-14",
+    workshopStart: "13:00",
+    workshopEnd: "17:30",
+    workshopSeats: "15",
+  };
+
+  it("stores Manila times as timestamps, with the seats", () => {
+    expect(serviceSchema.parse(workshop)).toMatchObject({
+      workshop_starts_at: "2026-11-14T05:00:00.000Z",
+      workshop_ends_at: "2026-11-14T09:30:00.000Z",
+      workshop_seats: 15,
+    });
+  });
+
+  it("round-trips back to the form", () => {
+    const row = serviceSchema.parse(workshop);
+    expect(workshopFormValues(row)).toEqual({
+      workshopDate: "2026-11-14",
+      workshopStart: "13:00",
+      workshopEnd: "17:30",
+      workshopSeats: "15",
+    });
+  });
+
+  it("allows no date yet and no seat limit", () => {
+    const row = serviceSchema.parse({
+      ...workshop,
+      workshopDate: "",
+      workshopStart: "",
+      workshopEnd: "",
+      workshopSeats: "",
+    });
+    expect(row).toMatchObject({
+      workshop_starts_at: null,
+      workshop_ends_at: null,
+      workshop_seats: null,
+    });
+  });
+
+  it("rejects a half-filled time, an end before the start, or bad seats", () => {
+    const cases: [Partial<ServiceFormInput>, string][] = [
+      [{ workshopStart: "" }, "workshopStart"],
+      [{ workshopDate: "" }, "workshopDate"],
+      [{ workshopEnd: "12:00" }, "workshopEnd"],
+      [{ workshopSeats: "0" }, "workshopSeats"],
+      [{ workshopSeats: "ten" }, "workshopSeats"],
+    ];
+    for (const [change, path] of cases) {
+      const r = serviceSchema.safeParse({ ...workshop, ...change });
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]?.path).toEqual([path]);
+    }
+  });
+
+  it("ignores the schedule on other packages", () => {
+    const row = serviceSchema.parse({ ...workshop, category: "portrait" });
+    expect(row.workshop_starts_at).toBeNull();
+    expect(row.workshop_seats).toBeNull();
   });
 });
 
