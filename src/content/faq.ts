@@ -72,7 +72,7 @@ export function faqGroups(s: Settings): FaqGroup[] {
         {
           question: "How can I pay?",
           answer:
-            "Deposits are paid securely through PayMongo, with GCash, card and other options. We never see or store your card details.",
+            "Deposits are paid securely through PayMongo, with GCash, Maya or card. We never see or store your card details.",
         },
         {
           question: "What if I don't finish paying?",

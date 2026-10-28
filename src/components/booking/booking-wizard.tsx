@@ -142,6 +142,7 @@ export function BookingWizard({
   // +1 moving forward, -1 going back: steps slide in from that side.
   const [direction, setDirection] = useState<1 | -1>(1);
   const [reloadKey, setReloadKey] = useState(0);
+  const [turnstileKey, setTurnstileKey] = useState(0);
   const [submitting, startSubmit] = useTransition();
   const router = useRouter();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -373,6 +374,9 @@ export function BookingWizard({
         window.location.assign(result.data.redirectUrl);
         return;
       }
+      // Turnstile tokens are single-use: remount the widget so a retry gets a fresh one.
+      form.setValue("turnstileToken", "");
+      setTurnstileKey((k) => k + 1);
       if (result.fieldErrors?.addOnIds) router.refresh(); // fetch the add-ons still offered
       if (result.fieldErrors?.startAt) {
         // Someone else just took that time: back to the calendar with fresh slots.
@@ -864,13 +868,13 @@ export function BookingWizard({
                           <p className="mt-3 text-sm">
                             We hold{" "}
                             {workshop ? (people > 1 ? "your seats" : "your seat") : "this time"} for{" "}
-                            {holdMinutes} minutes while you pay securely with PayMongo (GCash, card
-                            and more).
+                            {holdMinutes} minutes while you pay securely with PayMongo (GCash, Maya
+                            or card).
                           </p>
                         </>
                       )}
                     </div>
-                    <Turnstile onToken={onToken} />
+                    <Turnstile key={turnstileKey} onToken={onToken} />
                   </div>
                 )}
               </motion.div>
