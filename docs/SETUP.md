@@ -120,7 +120,7 @@ Stop the server with **Ctrl + C**. If styles ever look stale or broken, stop it 
 2. Go to **http://localhost:3000/admin/login** and sign in.
 3. Open **Account** in the admin menu and **change your password** right away.
 
-What you can manage from the admin: Services, Availability (hours and blocked dates), Portfolio (photos), Settings (studio profile, logo, booking rules) and Account.
+What you can manage from the admin: Dashboard, Calendar (bookings, staff bookings, editing), Sales report (with monthly CSV), Services (packages, add-ons, the workshop), Availability (hours and blocked dates), Portfolio (photos), Reviews, Settings (studio profile, logo, booking rules, VAT) and Account.
 
 > The dev database is **shared**. Changes you make in the admin (prices, photos, hours) are seen by everyone using it. Test with obviously fake names, such as "TEST package", and delete them afterwards.
 
