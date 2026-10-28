@@ -1,6 +1,6 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-17. Phases 0–5 are on `main`; online payments and emails wait on the owner's PayMongo and Turnstile keys; emails go out from the studio Gmail._
+_Last updated: 2026-10-28. Phases 0–5 and the extras since (PRs #8–#18) are on `main`; emails go out from the studio Gmail; online payments and bot protection wait on the owner's PayMongo and Turnstile keys._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -10,23 +10,31 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 
 ## Where we left off
 
-- **Phases 0–5 are built, verified and merged into `main`** (Phase 5 = PR #7). The latest commit on `main` (`1d8f1ed`, contact page + logo) was pushed directly to `main` at the owner's request.
-- **Online payment, emails and bot protection** switch on once the owner adds the PayMongo, Resend and Turnstile keys. Everything else works without them. See [Next steps](#next-steps).
-- **Hosting:** the owner is setting up Vercel from `main`, using the **dev** Supabase project for now. A separate production database is still Phase 8.
+- **Phases 0–5 are built, verified and merged into `main`** (Phase 5 = PR #7), plus booking extras, booking management, package lengths, Gmail sending, package highlights, a security upgrade and the workshop (PRs #8–#18, latest #18 on 2026-10-27).
+- **Emails work** from the studio Gmail (`GMAIL_USER` + `GMAIL_APP_PASSWORD`). **Online payment and bot protection** switch on once the owner adds the PayMongo and Turnstile keys. Everything else works without them. See [Next steps](#next-steps).
+- **Hosting:** Vercel deploys from `main`, using the **dev** Supabase project for now. A separate production database is still Phase 8.
+- **The dev database** has every migration in `supabase/migrations/` applied (latest `20261027000200_workshop_booking.sql`, checked 2026-10-28).
 
 ## Roadmap status
 
-| Phase | What                                                                        | Status                       | PR  |
-| ----- | --------------------------------------------------------------------------- | ---------------------------- | --- |
-| 0     | Foundation: project setup, design system, env, linting                      | ✅ Done                      | #1  |
-| 1     | Database: schema, RLS, booking functions, storage, seed, types              | ✅ Done, pushed to dev DB    | #2  |
-| 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified | #3  |
-| 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                      | #4  |
-| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                      | #5  |
-| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Merged, needs owner keys  | #7  |
-| 6     | Admin: dashboard stats, bookings table, clients, reschedule, privacy        | ⏳ Next                      |     |
-| 7     | Hardening: security headers, accessibility, performance, SEO, sitemap       | Not started                  |     |
-| 8     | Deploy: Vercel + production Supabase                                        | ⏳ Vercel (dev DB) underway  |     |
+| Phase | What                                                                        | Status                       | PR     |
+| ----- | --------------------------------------------------------------------------- | ---------------------------- | ------ |
+| 0     | Foundation: project setup, design system, env, linting                      | ✅ Done                      | #1     |
+| 1     | Database: schema, RLS, booking functions, storage, seed, types              | ✅ Done, pushed to dev DB    | #2     |
+| 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified | #3     |
+| 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                      | #4     |
+| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                      | #5     |
+| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Merged, needs owner keys  | #7     |
+| —     | Extras: add-ons, VAT, reviews, FAQ, sales report, dashboard, trial mode     | ✅ Done                      | #8–#12 |
+| —     | Booking management: edit, history, owner delete, monthly CSV                | ✅ Done                      | #13    |
+| —     | Package lengths + add-on rules, real sales report                           | ✅ Done                      | #14    |
+| —     | Emails from the studio Gmail                                                | ✅ Done, working on dev      | #15    |
+| —     | Package highlights (photo row, own reel), before/after slider removed       | ✅ Done                      | #16    |
+| —     | Security: Next.js 16.4.3, dependency patches (`npm audit`: 0)               | ✅ Done                      | #17    |
+| —     | Workshop booking (base for the other developer)                             | ✅ Done                      | #18    |
+| 6     | Admin: bookings table, clients, privacy anonymise (dashboard, edit done)    | ⏳ Next                      |        |
+| 7     | Hardening: security headers, accessibility, performance, SEO, sitemap       | Not started                  |        |
+| 8     | Deploy: Vercel + production Supabase                                        | ⏳ Vercel (dev DB) running   |        |
 
 ## What's built
 
@@ -43,7 +51,7 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 ### Phase 1: Database (Supabase)
 
 - Six migrations in `supabase/migrations/` cover the tables, Row Level Security on every table, booking functions, storage buckets (`portfolio`, `brand`), a cron job that expires unpaid holds, and an atomic save for weekly hours.
-- **Double bookings are impossible at the database level.** An exclusion constraint on the booked time range (including the buffer time) enforces this.
+- **Double bookings are impossible at the database level.** Every booking path calls `assert_capacity`, which locks and counts the bookings that overlap the time range (including the buffer time). (The original exclusion constraint was replaced by this in Phase 5.)
 - `create_booking` is a database function that only the server can call. It checks notice period, booking window, blackout dates, business hours and slot clashes.
 - `supabase/seed.sql` holds **placeholder** services, prices and hours. Replace them in the admin.
 - Generated types are in `src/types/database.types.ts`. DB tests are in `supabase/tests/` and run with `npm run test:db`.
@@ -80,7 +88,7 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Booking wizard at `/book`:** your details → package → **month calendar + time list** → shoot details → review → PayMongo deposit. Dots show days with free times; fully booked and closed days are greyed out. Only truly free times are offered.
 - **After paying:** `/book/done` (thanks + reference), `/book/cancelled` (try again while the slot is held), and `/booking` where a client views their booking card with reference + email.
 - **Versa Space** is a new category, "studio rental". The home card links to it; the owner adds the actual rental package(s) and prices in Admin → Services.
-- **Several shoots at once.** Settings → Booking rules → "Shoots that can run at the same time" (default 2). The database enforces it, even when two people book the last spot at the same moment.
+- **Several shoots at once.** Settings → Booking rules → "Shoots that can run at the same time" (now 1, see 2026-10-17 below). The database enforces it, even when two people book the last spot at the same moment.
 - **Admin calendar (`/admin/calendar`):** month grid with colour-coded bookings, hatched closed/blocked days, and a day timeline with a dashed "free" lane. Click a free block to book a client into it.
 - **Staff bookings (`/admin/bookings/new`):** confirmed straight away; email optional; custom price; deposit recorded as GCash, cash or "pay at the shoot"; times outside opening hours or on blocked days need a "Book anyway" click.
 - **Booking page (`/admin/bookings/[id]`):** Call / Text / Email / Messenger buttons (preferred one highlighted, no Viber), a branded booking card to screenshot plus "Copy as text" for Messenger, confirm / decline / complete / cancel, record GCash or cash payments, private notes, resend email, and a warning banner if a PayMongo deposit arrived after the slot filled up.
@@ -111,10 +119,33 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 - **Staff bookings can include add-ons** now (New booking form).
 - **History panel** on each booking: who changed what, and when (from the audit log).
 - **Permanent delete, owner only:** Booking page → Danger zone. The owner types the booking reference to confirm. Bookings with a real paid payment can't be deleted, only cancelled, so sales records stay true. Trial-mode payments don't count. The client is removed too if they have no other bookings.
-- **Monthly CSV for accounting:** Sales report → Download CSV (`/admin/reports/export?month=YYYY-MM`). One row per booking in that month with package, add-ons, before-VAT, VAT, total, paid, balance and payment method. (The Sales report charts themselves still show sample data.)
+- **Monthly CSV for accounting:** Sales report → Download CSV (`/admin/reports/export?month=YYYY-MM`). One row per booking in that month with package, add-ons, before-VAT, VAT, total, paid, balance and payment method.
 - **Database:** migration `20261018000100_booking_management.sql` adds `admin_update_booking` and `delete_booking` (both service role only) and lets `admin_create_booking` take add-ons.
 
-### 2026-10-27: workshop booking (branch `workshop`, base for the other developer)
+### 2026-10-19: package lengths, add-on rules, real sales report (PR #14)
+
+- **Only packages with a set length have an end time** (owner decision). Today that's the Photobooth (4 hours). Other packages are booked by start time only: they hold one slot (slot interval + buffer) and show no end time. Set or clear a package's length in Admin → Services.
+- **Add-ons can add time** (e.g. photobooth extensions) and **can be limited to certain packages** (none picked = all packages). The database enforces both.
+- Bookings can have up to 10,000 people.
+- **The Sales report shows real data:** paid/confirmed/completed bookings by shoot month at their total incl. VAT, and "how clients paid" by payment date.
+- **Sample photos** for the dev site: `npm run data:sample-photos` adds them; `npm run data:sample-photos -- --remove` takes them out before go-live.
+
+### 2026-10-19: emails from the studio Gmail (PR #15)
+
+- The studio has no domain, so Resend can't reach clients. Emails now go out from lightchasers.studio@gmail.com through a Google app password (`GMAIL_USER`, `GMAIL_APP_PASSWORD`). Resend is only used if Gmail isn't set, for a future owned domain.
+- Trial mode also sends real emails when Gmail is set, so pretend payments reach real inboxes.
+
+### 2026-10-19: package highlights (PR #16)
+
+- **Package pages** show "Moments we've captured": photos linked to that package first, topped up with the same kind of shoot (up to 6).
+- **Home "tap to watch our highlights":** a package with 5+ linked photos gets its own reel next to its category (now Wedding Day Coverage).
+- **Removed** the before/after slider section from the home page (owner found it unnecessary).
+
+### 2026-10-25: security upgrade (PR #17)
+
+- Next.js 16.4.0 → **16.4.3** (fixes critical advisories: remote code execution via `use cache` and the image optimizer, DoS via Server Actions), `eslint-config-next` 16.4.3, zod 4.6.7, and `npm audit fix` for undici, body-parser, fast-uri and ip-address. `npm audit`: 0 vulnerabilities.
+
+### 2026-10-27: workshop booking (PR #18, base for the other developer)
 
 - **For clients:** a "Workshop" button floats on the left of every public page (Messenger stays on the right). It opens `/workshop`: the same steps as a booking, but step 2 is **Payment**: pay half or pay in full, and tick the refund rule. They then pick a free date and time on the same calendar and pay through PayMongo (or the pretend checkout in trial mode). The workshop never appears in the normal package lists.
 - **Refund rule (owner's):** paid half = no refund if they can't attend; paid in full = half of the price back. Refunds are sent by hand; the admin booking page says what's due.
@@ -136,12 +167,13 @@ Design: `docs/superpowers/specs/2026-10-15-booking-calendar-design.md`. Plan: `d
 
 | Check                 | Command                                                                           | Last result                                                |
 | --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 109 unit tests                                 |
+| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 129 unit tests (2026-10-28)                    |
 | Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ 32 passing against the dev project                      |
 | Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                                     | ✅ passing on desktop and phone (Pixel 7), touch included  |
 | Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)                     | ✅ passing, includes public-page refresh after edits       |
 | Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`                               | ✅ wizard up to payment; staff booking, share, pay, cancel |
 | Booking edit/delete   | `e2e/admin-booking-edit.spec.ts` (admin + `E2E_OWNER_EMAIL`/`E2E_OWNER_PASSWORD`) | ✅ edit time/package/add-ons/VAT; owner delete             |
+| Workshop (browser)    | `e2e/workshop.spec.ts`                                                            | Added in #18; not rerun on 2026-10-28                      |
 
 The admin e2e tests need `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD`. Use a **temporary** admin account, delete it afterwards, and never use the owner account. The tests clean up what they create: services named `E2E Package…`, photos with alt text `E2E photo…` and blackouts with reason `E2E test…`. Booking tests leave cancelled bookings named `E2E Client…`; run `npm run data:clean-tests` after a run.
 
@@ -152,8 +184,9 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 - **Supabase dev project:** ref `mkpjxrhjynbjuiovloiy`, hosted (no local Docker). All migrations and the seed are applied.
 - **Owner admin account:** exists on the dev project. Credentials are held by the studio owner and are never written in the repo.
 - **GitHub:** `lightchasersstudio-web/LightChasersStudio`. Work normally goes on one branch and one PR per phase, merged into `main`. Every push to `main` redeploys the live site once Vercel is connected.
-- **Vercel:** being set up by the owner from `main`, with the dev Supabase project. Required env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `BUSINESS_TIMEZONE`, `NEXT_PUBLIC_SITE_URL` (the live address; used for emails, PayMongo return pages and link previews). The live site and local development share **one database**.
-- **Not set up yet:** production Supabase, PayMongo, Resend (email) and Cloudflare Turnstile. Without their keys: emails are skipped, Turnstile is skipped in development only (production refuses bookings), and online booking says payment isn't available yet.
+- **Vercel:** deploys from `main`, with the dev Supabase project. Required env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `BUSINESS_TIMEZONE`, `NEXT_PUBLIC_SITE_URL` (the live address; used for emails, PayMongo return pages and link previews), plus `GMAIL_USER` and `GMAIL_APP_PASSWORD` for emails. The live site and local development share **one database**.
+- **Reaching the dev database from this machine:** the direct host is IPv6-only, so `db:push`, type generation and `test:db` go through the IPv4 session pooler (`aws-0-ap-northeast-1.pooler.supabase.com`, user `postgres.mkpjxrhjynbjuiovloiy`).
+- **Not set up yet:** production Supabase, PayMongo and Cloudflare Turnstile. Without their keys: Turnstile is skipped in development only (production refuses bookings), and online booking says payment isn't available yet. Without the Gmail keys, emails are skipped (logged).
 
 ## Key decisions (don't undo these without a reason)
 
@@ -172,9 +205,9 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 - **Orphaned uploads:** if an admin uploads a cover photo and leaves without saving, the file stays in Storage. A comment in the code marks it. Clean up later with a scheduled job.
 - **Reordering** services or photos saves as several separate updates, not one transaction. A failure halfway leaves a partial order, which is harmless and can be redone.
 - **Unknown service URLs** (e.g. `/services/does-not-exist`) show the 404 page but return HTTP 200 with a `noindex` tag. That's how Next.js 16 handles pages generated on demand. Unmatched paths return a real 404.
-- **The dev database has no portfolio photos yet**, so the site shows illustrated placeholder polaroids. Upload photos and star a few as "featured" in Admin → Portfolio to fill the home page.
-- **Seed content is placeholder.** Real prices, packages, hours and the "about" text must come from the owner.
-- **`npm audit` warnings** from dependencies haven't been reviewed. Do this in Phase 7.
+- **The dev site uses sample photos** (`npm run data:sample-photos`). Remove them with `-- --remove` and upload the studio's own photos (star a few as "featured") before go-live.
+- **Seed content is placeholder.** Real prices, packages, hours, the workshop (₱1,000 placeholder) and the "about" text must come from the owner.
+- **Dependencies:** `npm audit` was clean on 2026-10-25 (PR #17). Re-check in Phase 7.
 - **The hero swipe** is tested in Chrome (desktop and Android emulation) but not yet on a real iPhone in Safari.
 - **PayMongo webhook fields** follow PayMongo's docs but haven't seen a real test-mode event yet. Confirm `parsePaidEvent` in `src/lib/payments/paymongo.ts` against one when the keys exist.
 - **Rate-limit rows** (`rate_limits`) are never purged. Add a cleanup if the table grows.
@@ -188,8 +221,9 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 
 **Go live (owner):**
 
-1. Finish the Vercel setup from `main` (env vars above), then in Supabase → Authentication → URL Configuration set the **Site URL** to the Vercel address and add both `https://<vercel-address>/**` and `http://localhost:3000/**` to **Redirect URLs**.
-2. Replace the placeholder packages and prices in the admin, add the Versa Space rental package(s), and add a studio phone number in Settings if clients should call.
+1. Check the Vercel env vars above (including the Gmail pair), then in Supabase → Authentication → URL Configuration set the **Site URL** to the Vercel address and add both `https://<vercel-address>/**` and `http://localhost:3000/**` to **Redirect URLs**.
+2. Replace the placeholder packages and prices in the admin (including the workshop), add the Versa Space rental package(s), and add a studio phone number in Settings if clients should call.
+3. Before launch: remove the sample photos (`npm run data:sample-photos -- --remove`) and set up the production Supabase project (Phase 8, see [Managing data](#managing-data)).
 
 **Finish Phase 5 (needs the owner's accounts), in this order:**
 
@@ -197,8 +231,10 @@ On this machine a full parallel e2e run is sometimes flaky under load (an admin 
 2. **Email (done on dev, 2026-10-19):** the studio has no domain, so emails go out from lightchasers.studio@gmail.com through a Google app password (`GMAIL_USER`, `GMAIL_APP_PASSWORD`; see `.env.example`). Add both in Vercel and redeploy. Changing the Gmail password cancels the app password: make a new one and update both places. Resend (`RESEND_API_KEY`, `EMAIL_FROM`) is only for a future owned domain.
 3. **PayMongo (test mode first):** `PAYMONGO_SECRET_KEY` (`sk_test_…`); webhook at `https://<site>/api/webhooks/paymongo` for `checkout_session.payment.paid`, secret in `PAYMONGO_WEBHOOK_SECRET`. Make one test booking on the live site and check that it becomes "Deposit paid · needs your OK", the payment shows on the booking page, and the emails arrive. Confirm `parsePaidEvent` against the real payload (Vercel logs). If checkout fails, match `PAYMENT_METHODS` in `src/lib/payments/paymongo.ts` to the methods enabled on the account.
 4. **Live payments:** activate the PayMongo account, then swap in the live key and a new live-mode webhook secret.
-5. **Owner wording:** deposit rules and the cancellation/refund policy, to add to the review step and emails.
+5. **Owner wording:** deposit rules and the cancellation/refund policy, to add to the review step and emails. (The workshop's refund rule is already in its wizard step.)
 
 Add each key in Vercel (then redeploy) and in `.env.local`. `docs/SETUP.md` has the local details.
 
-**Phase 6:** searchable bookings table, clients list with history, and the privacy anonymisation routine. (Editing/rescheduling, history and owner delete are done.)
+**Phase 6:** searchable bookings table, clients list with history, and the privacy anonymisation routine. (Dashboard, editing/rescheduling, history and owner delete are done.)
+
+**Workshop (other developer):** workshop options, refund wording in emails, a workshop section in the reports.
