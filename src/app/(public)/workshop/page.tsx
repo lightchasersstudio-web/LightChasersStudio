@@ -1,4 +1,4 @@
-import { CalendarDaysIcon, ClockIcon, UsersIcon } from "lucide-react";
+import { CalendarDaysIcon, ClockIcon, MapPinIcon, UsersIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -85,6 +85,11 @@ async function Workshop() {
             {when.time}
           </Detail>
         )}
+        {workshop.workshop_location && (
+          <Detail Icon={MapPinIcon} label="Where">
+            {workshop.workshop_location}
+          </Detail>
+        )}
         {opening.open && opening.seatsLeft !== null && (
           <Detail Icon={UsersIcon} label="Seats">
             {opening.seatsLeft} {opening.seatsLeft === 1 ? "seat" : "seats"} left
@@ -95,7 +100,11 @@ async function Workshop() {
       <div className="mt-6 rounded-[2rem] border bg-background p-5 shadow-sm sm:p-8">
         {opening.open && workshop.workshop_starts_at && workshop.workshop_ends_at ? (
           <BookingWizard
-            workshop={{ startAt: workshop.workshop_starts_at, endAt: workshop.workshop_ends_at }}
+            workshop={{
+              startAt: workshop.workshop_starts_at,
+              endAt: workshop.workshop_ends_at,
+              location: workshop.workshop_location,
+            }}
             services={[
               {
                 id: workshop.id,

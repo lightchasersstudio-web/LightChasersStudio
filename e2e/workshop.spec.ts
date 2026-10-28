@@ -45,6 +45,8 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   // Straight to Other details: no calendar.
   await expect(page.getByRole("heading", { name: "Other details" })).toBeVisible();
   await expect(page.getByRole("group", { name: /^Dates in / })).toHaveCount(0);
+  // The place is set by the studio too.
+  await expect(page.getByLabel("Location (optional)")).toHaveCount(0);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText(/paying in full/)).toBeVisible();
   // The workshop's time shows, with no way to change it.

@@ -1,4 +1,4 @@
-import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, WalletIcon } from "lucide-react";
+import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, MapPinIcon, WalletIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -36,6 +36,7 @@ export function WorkshopPromo({
   const points = [
     { text: when?.date ?? "Date to be announced soon", Icon: CalendarDaysIcon },
     ...(when ? [{ text: when.time, Icon: ClockIcon }] : []),
+    ...(workshop.workshop_location ? [{ text: workshop.workshop_location, Icon: MapPinIcon }] : []),
     { text: "Pay half or the full price to save your seat", Icon: WalletIcon },
   ];
   return (

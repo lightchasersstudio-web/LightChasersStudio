@@ -615,6 +615,7 @@ export type Database = {
           summary: string | null
           updated_at: string
           workshop_ends_at: string | null
+          workshop_location: string | null
           workshop_seats: number | null
           workshop_starts_at: string | null
         }
@@ -635,6 +636,7 @@ export type Database = {
           summary?: string | null
           updated_at?: string
           workshop_ends_at?: string | null
+          workshop_location?: string | null
           workshop_seats?: number | null
           workshop_starts_at?: string | null
         }
@@ -655,6 +657,7 @@ export type Database = {
           summary?: string | null
           updated_at?: string
           workshop_ends_at?: string | null
+          workshop_location?: string | null
           workshop_seats?: number | null
           workshop_starts_at?: string | null
         }

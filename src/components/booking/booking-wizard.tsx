@@ -68,7 +68,7 @@ const PACKAGE_STEPS: Step[] = [
 const WORKSHOP_STEPS: Step[] = [
   PACKAGE_STEPS[0]!,
   { id: "package", title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
-  { ...PACKAGE_STEPS[3]!, title: "Other details" },
+  { id: "extras", title: "Other details", fields: ["participants", "specialRequests"] },
   PACKAGE_STEPS[4]!,
 ];
 
@@ -107,7 +107,7 @@ export function BookingWizard({
    * Workshop flow: one fixed-price workshop (services[0]) at the time the admin
    * set, paid half or in full.
    */
-  workshop?: { startAt: string; endAt: string } | null;
+  workshop?: { startAt: string; endAt: string; location: string | null } | null;
 }) {
   const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
   /** Index of a step by id (-1 when this flow doesn't have it). */
@@ -282,7 +282,7 @@ export function BookingWizard({
             title: `${service.name} · ${businessName}`,
             startAt,
             endAt,
-            location: location || null,
+            location: (workshop ? workshop.location : location) || null,
           });
         }
         window.location.assign(result.data.redirectUrl);
@@ -606,17 +606,20 @@ export function BookingWizard({
 
                 {stepId === "extras" && (
                   <FieldGroup>
-                    <TextField
-                      control={form.control}
-                      name="location"
-                      label="Location (optional)"
-                      placeholder="Our studio, a venue, or an address"
-                      maxLength={300}
-                    />
+                    {/* A workshop's place is set by the studio. */}
+                    {!workshop && (
+                      <TextField
+                        control={form.control}
+                        name="location"
+                        label="Location (optional)"
+                        placeholder="Our studio, a venue, or an address"
+                        maxLength={300}
+                      />
+                    )}
                     <TextField
                       control={form.control}
                       name="participants"
-                      label="Number of people"
+                      label={workshop ? "How many people are joining" : "Number of people"}
                       inputMode="numeric"
                       className="max-w-40"
                     />
@@ -663,7 +666,10 @@ export function BookingWizard({
                         value={`${form.getValues("fullName")} · ${form.getValues("email")} · ${form.getValues("phone")}`}
                         onEdit={() => goTo(0)}
                       />
-                      {form.getValues("location") && (
+                      {workshop?.location && (
+                        <ReviewRow label="Location" value={workshop.location} />
+                      )}
+                      {!workshop && form.getValues("location") && (
                         <ReviewRow
                           label="Location"
                           value={form.getValues("location")!}

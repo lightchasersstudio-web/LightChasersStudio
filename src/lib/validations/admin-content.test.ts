@@ -23,6 +23,7 @@ const service: ServiceFormInput = {
   workshopStart: "",
   workshopEnd: "",
   workshopSeats: "",
+  workshopLocation: "",
 };
 
 describe("serviceSchema", () => {
@@ -74,6 +75,7 @@ describe("serviceSchema: workshop schedule", () => {
     workshopStart: "13:00",
     workshopEnd: "17:30",
     workshopSeats: "15",
+    workshopLocation: "  Light Chasers Studio, Tetuan  ",
   };
 
   it("stores Manila times as timestamps, with the seats", () => {
@@ -81,6 +83,7 @@ describe("serviceSchema: workshop schedule", () => {
       workshop_starts_at: "2026-11-14T05:00:00.000Z",
       workshop_ends_at: "2026-11-14T09:30:00.000Z",
       workshop_seats: 15,
+      workshop_location: "Light Chasers Studio, Tetuan",
     });
   });
 
@@ -91,6 +94,7 @@ describe("serviceSchema: workshop schedule", () => {
       workshopStart: "13:00",
       workshopEnd: "17:30",
       workshopSeats: "15",
+      workshopLocation: "Light Chasers Studio, Tetuan",
     });
   });
 
@@ -128,6 +132,7 @@ describe("serviceSchema: workshop schedule", () => {
     const row = serviceSchema.parse({ ...workshop, category: "portrait" });
     expect(row.workshop_starts_at).toBeNull();
     expect(row.workshop_seats).toBeNull();
+    expect(row.workshop_location).toBeNull();
   });
 });
 

@@ -46,6 +46,7 @@ export const serviceSchema = z
     workshopStart: z.string().trim(),
     workshopEnd: z.string().trim(),
     workshopSeats: z.string().trim(),
+    workshopLocation: optionalText(300),
   })
   .transform((v, ctx) => {
     let durationMinutes: number | null = null;
@@ -114,17 +115,25 @@ type WorkshopSchedule = {
   workshop_starts_at: string | null;
   workshop_ends_at: string | null;
   workshop_seats: number | null;
+  workshop_location: string | null;
 };
 const NO_SCHEDULE: WorkshopSchedule = {
   workshop_starts_at: null,
   workshop_ends_at: null,
   workshop_seats: null,
+  workshop_location: null,
 };
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Manila date + times → stored timestamps; all empty = date not announced yet. */
 function workshopSchedule(
-  v: { workshopDate: string; workshopStart: string; workshopEnd: string; workshopSeats: string },
+  v: {
+    workshopDate: string;
+    workshopStart: string;
+    workshopEnd: string;
+    workshopSeats: string;
+    workshopLocation: string | null;
+  },
   ctx: z.RefinementCtx,
 ): WorkshopSchedule | null {
   const issue = (path: string, message: string) => {
@@ -146,7 +155,7 @@ function workshopSchedule(
     seats = Number(v.workshopSeats);
   }
   if (!v.workshopDate && !v.workshopStart && !v.workshopEnd) {
-    return { ...NO_SCHEDULE, workshop_seats: seats };
+    return { ...NO_SCHEDULE, workshop_seats: seats, workshop_location: v.workshopLocation };
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v.workshopDate))
     return issue("workshopDate", "Pick the workshop date.");
@@ -164,6 +173,7 @@ function workshopSchedule(
     workshop_starts_at: at(v.workshopStart),
     workshop_ends_at: at(v.workshopEnd),
     workshop_seats: seats,
+    workshop_location: v.workshopLocation,
   };
 }
 
@@ -172,6 +182,7 @@ export function workshopFormValues(service: {
   workshop_starts_at: string | null;
   workshop_ends_at: string | null;
   workshop_seats: number | null;
+  workshop_location: string | null;
 }) {
   const local = (iso: string | null, part: "date" | "time") => {
     if (!iso) return "";
@@ -186,6 +197,7 @@ export function workshopFormValues(service: {
     workshopStart: local(service.workshop_starts_at, "time"),
     workshopEnd: local(service.workshop_ends_at, "time"),
     workshopSeats: service.workshop_seats === null ? "" : String(service.workshop_seats),
+    workshopLocation: service.workshop_location ?? "",
   };
 }
 

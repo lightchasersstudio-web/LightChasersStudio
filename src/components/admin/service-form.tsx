@@ -65,6 +65,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           workshopStart: "",
           workshopEnd: "",
           workshopSeats: "",
+          workshopLocation: "",
         },
   });
   const { control } = form;
@@ -226,9 +227,9 @@ export function ServiceForm({ service }: { service?: Service }) {
             <CardHeader>
               <CardTitle>Workshop schedule</CardTitle>
               <CardDescription>
-                Clients don&apos;t pick a time: everyone who signs up joins this date and time.
-                Leave the date empty until it&apos;s decided (sign-up stays closed). Changing it
-                moves everyone already signed up, so let them know.
+                Clients don&apos;t pick a time or place: everyone who signs up joins this date, time
+                and location. Leave the date empty until it&apos;s decided (sign-up stays closed).
+                Changing it moves everyone already signed up, so let them know.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -238,6 +239,13 @@ export function ServiceForm({ service }: { service?: Service }) {
                   <TextField control={control} name="workshopStart" label="Starts" type="time" />
                   <TextField control={control} name="workshopEnd" label="Ends" type="time" />
                 </div>
+                <TextField
+                  control={control}
+                  name="workshopLocation"
+                  label="Location"
+                  placeholder="e.g. Light Chasers Studio, 3rd floor, MPO Building, Tetuan"
+                  maxLength={300}
+                />
                 <TextField
                   control={control}
                   name="workshopSeats"

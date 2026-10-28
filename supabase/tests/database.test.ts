@@ -1214,26 +1214,37 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     });
   });
 
-  describe("workshop schedule (admin sets the time)", () => {
+  describe("workshop schedule (admin sets the time and place)", () => {
     const SIGN_UP = `select * from public.create_booking(
       p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
       p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
-      p_start_at => now(), p_participants => $3, p_pay_in_full => true)`;
+      p_start_at => now(), p_participants => $3, p_pay_in_full => true,
+      p_location => 'My house')`;
 
     /** The same instant as Postgres returns it (UTC ISO). */
     const utc = (d: Date) => new Date(d.getTime()).toISOString();
 
     async function addWorkshop(
       c: PoolClient,
-      opts: { start?: Date | null; end?: Date | null; seats?: number | null } = {},
+      opts: {
+        start?: Date | null;
+        end?: Date | null;
+        seats?: number | null;
+        location?: string | null;
+      } = {},
     ) {
       const start = opts.start === undefined ? manila(160, 13) : opts.start;
       const end = opts.end === undefined ? manila(160, 17) : opts.end;
       const { rows } = await c.query<{ id: string }>(
         `insert into public.services (name, slug, category, price_cents,
-           workshop_starts_at, workshop_ends_at, workshop_seats)
-         values ('Test Workshop', 'test-workshop', 'workshop', 500000, $1, $2, $3) returning id`,
-        [start?.toISOString() ?? null, end?.toISOString() ?? null, opts.seats ?? null],
+           workshop_starts_at, workshop_ends_at, workshop_seats, workshop_location)
+         values ('Test Workshop', 'test-workshop', 'workshop', 500000, $1, $2, $3, $4) returning id`,
+        [
+          start?.toISOString() ?? null,
+          end?.toISOString() ?? null,
+          opts.seats ?? null,
+          opts.location === undefined ? "The studio" : opts.location,
+        ],
       );
       return rows[0]!.id;
     }
@@ -1246,12 +1257,19 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         for (const email of ["ana@example.com", "bea@example.com", "cy@example.com"]) {
           await c.query(SIGN_UP, [email, workshop, 1]);
         }
-        const { rows } = await c.query<{ start_at: Date; end_at: Date; has_end_time: boolean }>(
-          "select start_at, end_at, has_end_time from public.bookings where service_id = $1",
+        const { rows } = await c.query<{
+          start_at: Date;
+          end_at: Date;
+          has_end_time: boolean;
+          location: string | null;
+        }>(
+          "select start_at, end_at, has_end_time, location from public.bookings where service_id = $1",
           [workshop],
         );
         expect(rows).toHaveLength(3);
         for (const r of rows) {
+          // The client's location is ignored: the workshop's own place wins.
+          expect(r.location).toBe("The studio");
           expect(r.start_at.toISOString()).toBe(utc(manila(160, 13)));
           expect(r.end_at.toISOString()).toBe(utc(manila(160, 17)));
           expect(r.has_end_time).toBe(true);
@@ -1335,7 +1353,7 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
-    it("moving the workshop moves its open sign-ups", async () => {
+    it("moving the workshop (time or place) moves its open sign-ups", async () => {
       await inRollback(async (c) => {
         await setupFixtures(c);
         const workshop = await addWorkshop(c);
@@ -1345,10 +1363,17 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           "update public.services set workshop_starts_at = $2, workshop_ends_at = $3 where id = $1",
           [workshop, manila(170, 9).toISOString(), manila(170, 12).toISOString()],
         );
-        const { rows } = await c.query<{ start_at: Date; blocked_until: Date }>(
-          "select start_at, blocked_until from public.bookings where id = $1",
-          [booking_id],
-        );
+        await c.query("update public.services set workshop_location = 'New venue' where id = $1", [
+          workshop,
+        ]);
+        const { rows } = await c.query<{
+          start_at: Date;
+          blocked_until: Date;
+          location: string | null;
+        }>("select start_at, blocked_until, location from public.bookings where id = $1", [
+          booking_id,
+        ]);
+        expect(rows[0]!.location).toBe("New venue");
         expect(rows[0]!.start_at.toISOString()).toBe(utc(manila(170, 9)));
         expect(rows[0]!.blocked_until.toISOString()).toBe(utc(manila(170, 12)));
       });
