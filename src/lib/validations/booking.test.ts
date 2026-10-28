@@ -78,6 +78,8 @@ describe("publicBookingSchema", () => {
     const ID = "0f8fad5b-d9cb-469f-a165-70867728950e.webp";
     const person = (name: string, category = "regular", idPath = "") => ({
       name,
+      phone: "0917 123 4567",
+      address: "Tetuan, Zamboanga City",
       category,
       idPath,
     });
@@ -108,7 +110,21 @@ describe("publicBookingSchema", () => {
           attendees: [person("Ana Cruz"), person(" "), person("B")],
         }),
       ).toEqual(["attendees.1.name", "attendees.2.name"]);
-      expect(paths({ ...workshop, participants: "2" })).toEqual(["attendees.1.name"]);
+      // Two coming, one card: the second person has no name or contact details.
+      expect(paths({ ...workshop, participants: "2" })).toEqual([
+        "attendees.1.name",
+        "attendees.1.phone",
+        "attendees.1.address",
+      ]);
+    });
+
+    it("needs a mobile number and address for everyone coming", () => {
+      expect(
+        paths({
+          ...workshop,
+          attendees: [{ ...person("Ana Cruz"), phone: "12-34", address: " " }],
+        }),
+      ).toEqual(["attendees.0.phone", "attendees.0.address"]);
     });
 
     it("needs an uploaded ID for each student", () => {

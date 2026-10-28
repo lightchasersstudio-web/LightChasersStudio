@@ -97,6 +97,8 @@ export async function submitBooking(
           v.payInFull !== undefined
             ? (v.attendees ?? []).slice(0, v.participants).map((a) => ({
                 name: a.name,
+                phone: a.phone,
+                address: a.address,
                 category: a.category,
                 id_path: a.idPath || null,
               }))
@@ -114,6 +116,7 @@ export async function submitBooking(
             : code === "workshop_full" || code === "invalid_participants"
               ? "participants"
               : code === "invalid_attendees" ||
+                  code === "attendee_contact_required" ||
                   code === "category_unavailable" ||
                   code === "student_id_required" ||
                   code === "early_bird_closed" ||

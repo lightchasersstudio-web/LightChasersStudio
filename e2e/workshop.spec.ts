@@ -43,13 +43,22 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await expect(page.getByText(/Workshop price for 2 people/)).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // A card per person: certificate name and price category. The first name is the booker's.
+  // A card per person: certificate name, contact details and price category.
+  // The first starts with the booker's name and number.
   await expect(page.getByRole("heading", { name: "Certificates" })).toBeVisible();
   const names = page.getByLabel("Full name (for the certificate)");
+  const phones = page.getByLabel("Mobile number");
+  const addresses = page.getByLabel("Address");
   await expect(names.first()).toHaveValue(name);
+  await expect(phones.first()).toHaveValue("0917 123 4567");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Enter their full name for the certificate.")).toBeVisible();
+  await expect(page.getByText("Enter their mobile number.")).toBeVisible();
+  await expect(page.getByText("Enter their address.").first()).toBeVisible();
   await names.nth(1).fill("E2E Guest");
+  await phones.nth(1).fill("0918 765 4321");
+  await addresses.nth(0).fill("Tetuan, Zamboanga City");
+  await addresses.nth(1).fill("Pasonanca, Zamboanga City");
   // A student must upload an ID; switch back to Regular instead.
   const person2 = page.getByRole("radiogroup", { name: "Person 2: price category" });
   await person2.getByText("Student", { exact: true }).click();

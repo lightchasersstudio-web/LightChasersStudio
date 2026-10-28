@@ -1156,7 +1156,7 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
       p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
       p_start_at => $3, p_pay_in_full => $4,
-      p_attendees => '[{"name": "Ana Cruz", "category": "regular"}]'::jsonb)`;
+      p_attendees => '[{"name": "Ana Cruz", "category": "regular", "phone": "0917 123 4567", "address": "Tetuan, Zamboanga City"}]'::jsonb)`;
 
     it("charges half or the full price, and needs the choice", async () => {
       await inRollback(async (c) => {
@@ -1222,13 +1222,24 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       p_location => 'My house', p_attendees => $4::jsonb)`;
 
     /** Certificate names for n people (none needed for one). */
-    type Person = { name: string; category?: string; id_path?: string | null };
+    type Person = {
+      name: string;
+      category?: string;
+      id_path?: string | null;
+      phone?: string;
+      address?: string;
+    };
     /** The attendees as create_booking takes them (JSON); n regular people by default. */
+    const contact = { phone: "0917 123 4567", address: "Tetuan, Zamboanga City" };
     const names = (n: number | Person[]) =>
       JSON.stringify(
         typeof n === "number"
-          ? Array.from({ length: n }, (_, i) => ({ name: `Person ${i + 1}`, category: "regular" }))
-          : n.map((p) => ({ category: "regular", ...p })),
+          ? Array.from({ length: n }, (_, i) => ({
+              name: `Person ${i + 1}`,
+              category: "regular",
+              ...contact,
+            }))
+          : n.map((p) => ({ category: "regular", ...contact, ...p })),
       );
 
     /** The same instant as Postgres returns it (UTC ISO). */
@@ -1395,6 +1406,37 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           { category: "early_bird", price_cents: 400_000, id_status: null },
           { category: "student", price_cents: 400_000, id_status: "pending" },
         ]);
+      });
+    });
+
+    it("needs a mobile number and address for each person, and keeps them", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        for (const missing of [{ phone: "12" }, { address: " " }]) {
+          expect(
+            await expectFailure(c, SIGN_UP, [
+              "ana@example.com",
+              workshop,
+              1,
+              names([{ name: "Ana Cruz", ...missing }]),
+            ]),
+          ).toMatch(/attendee_contact_required/);
+        }
+        const ok = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: "Ana Cruz", phone: " 0917 555 0000 ", address: " Pasonanca " }]),
+          ])
+        ).rows[0]!;
+        const { rows } = await c.query<{ phone: string; address: string }>(
+          "select phone, address from public.booking_attendees where booking_id = $1",
+          [ok.booking_id],
+        );
+        expect(rows[0]).toEqual({ phone: "0917 555 0000", address: "Pasonanca" });
       });
     });
 
