@@ -232,7 +232,14 @@ export function BookingWizard({
   const people = workshop ? peopleCount(participants) : 1;
   const people_ = Array.from(
     { length: workshop ? people : 0 },
-    (_, i) => attendees?.[i] ?? { name: "", category: "regular" as const, idPath: "" },
+    (_, i) =>
+      attendees?.[i] ?? {
+        name: "",
+        phone: "",
+        address: "",
+        category: "regular" as const,
+        idPath: "",
+      },
   );
   const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
   /** Index of a step by id (-1 when this flow doesn't have it). */
@@ -324,19 +331,19 @@ export function BookingWizard({
       return;
     }
     if (workshop && stepId === "extras") {
-      // One card per person; the first starts as the booker's name.
+      // One card per person; the first starts with the booker's name and number.
       const current = form.getValues("attendees") ?? [];
       form.setValue(
         "attendees",
-        Array.from(
-          { length: people },
-          (_, i) =>
-            current[i] ?? {
-              name: i === 0 ? form.getValues("fullName").trim() : "",
-              category: defaultCategory(workshop.prices) ?? "regular",
-              idPath: "",
-            },
-        ),
+        Array.from({ length: people }, (_, i) => ({
+          name: i === 0 ? form.getValues("fullName").trim() : "",
+          phone: i === 0 ? form.getValues("phone").trim() : "",
+          address: "",
+          category: defaultCategory(workshop.prices) ?? "regular",
+          idPath: "",
+          // Keep what was already typed (a draft from before may lack newer fields).
+          ...current[i],
+        })),
       );
     }
     goTo(step + 1);
@@ -725,7 +732,7 @@ export function BookingWizard({
                   <div className="space-y-5">
                     <p className="text-muted-foreground">
                       Everyone who joins gets a certificate. Write each name exactly as it should be
-                      printed, and pick their price.
+                      printed, add how we can reach them, and pick their price.
                     </p>
                     {people_.map((person, i) => (
                       <AttendeeCard
@@ -1246,6 +1253,26 @@ function AttendeeCard({
         autoComplete={index === 0 ? "name" : "off"}
         maxLength={120}
       />
+      {/* Their own contact details, so the studio can reach each person. */}
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_1fr]">
+        <TextField
+          control={form.control}
+          name={`attendees.${index}.phone`}
+          label="Mobile number"
+          type="tel"
+          inputMode="tel"
+          autoComplete={index === 0 ? "tel" : "off"}
+          maxLength={32}
+        />
+        <TextField
+          control={form.control}
+          name={`attendees.${index}.address`}
+          label="Address"
+          placeholder="Street, barangay, city"
+          autoComplete={index === 0 ? "street-address" : "off"}
+          maxLength={300}
+        />
+      </div>
       <Controller
         control={form.control}
         name={`attendees.${index}.category`}

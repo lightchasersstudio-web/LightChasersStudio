@@ -193,6 +193,7 @@ export type Database = {
       }
       booking_attendees: {
         Row: {
+          address: string | null
           booking_id: string
           category: Database["public"]["Enums"]["attendee_category"]
           created_at: string
@@ -201,11 +202,13 @@ export type Database = {
           id_reviewed_at: string | null
           id_reviewed_by: string | null
           id_status: Database["public"]["Enums"]["id_review_status"] | null
+          phone: string | null
           position: number
           price_cents: number
           student_id_path: string | null
         }
         Insert: {
+          address?: string | null
           booking_id: string
           category: Database["public"]["Enums"]["attendee_category"]
           created_at?: string
@@ -214,11 +217,13 @@ export type Database = {
           id_reviewed_at?: string | null
           id_reviewed_by?: string | null
           id_status?: Database["public"]["Enums"]["id_review_status"] | null
+          phone?: string | null
           position: number
           price_cents: number
           student_id_path?: string | null
         }
         Update: {
+          address?: string | null
           booking_id?: string
           category?: Database["public"]["Enums"]["attendee_category"]
           created_at?: string
@@ -227,6 +232,7 @@ export type Database = {
           id_reviewed_at?: string | null
           id_reviewed_by?: string | null
           id_status?: Database["public"]["Enums"]["id_review_status"] | null
+          phone?: string | null
           position?: number
           price_cents?: number
           student_id_path?: string | null

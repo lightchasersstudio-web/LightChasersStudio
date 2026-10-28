@@ -117,7 +117,7 @@ export async function getBookingForAdmin(id: string) {
     supabase
       .from("bookings")
       .select(
-        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category), add_ons:booking_add_ons(add_on_id, name, price_cents), attendees:booking_attendees(id, position, full_name, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
+        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category), add_ons:booking_add_ons(add_on_id, name, price_cents), attendees:booking_attendees(id, position, full_name, phone, address, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -153,6 +153,8 @@ export async function getBookingForAdmin(id: string) {
       id: a.id,
       position: a.position,
       fullName: a.full_name,
+      phone: a.phone,
+      address: a.address,
       category: a.category,
       priceCents: a.price_cents,
       idStatus: a.id_status,

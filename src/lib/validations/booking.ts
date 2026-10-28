@@ -34,13 +34,11 @@ export const STUDENT_ID_PATH = /^[0-9a-f-]{36}\.(webp|jpg)$/;
 export const CONSENT_VERSION = "2026-10";
 
 const fullName = z.string().trim().min(2, "Enter your full name.").max(120);
-const phone = z
-  .string()
-  .trim()
-  .max(32)
-  .refine((v) => /^[+\d][\d\s()-]*$/.test(v) && v.replace(/\D/g, "").length >= 7, {
-    message: "Enter a phone number we can reach you on.",
-  });
+/** A number we can call or text: digits, spaces, ( ) - and a leading +, 7+ digits. */
+const isPhone = (v: string) => /^[+\d][\d\s()-]*$/.test(v) && v.replace(/\D/g, "").length >= 7;
+const phone = z.string().trim().max(32).refine(isPhone, {
+  message: "Enter a phone number we can reach you on.",
+});
 const messenger = optionalText(300);
 
 /** Messenger as the preferred contact needs a name or profile link to reach them. */
@@ -91,6 +89,9 @@ export const publicBookingSchema = z
       .array(
         z.object({
           name: z.string().trim().max(120),
+          // Their own contact details, so the studio can reach each person.
+          phone: z.string().trim().max(32),
+          address: z.string().trim().max(300),
           category: z.enum(ATTENDEE_CATEGORY_VALUES),
           idPath: z.string().regex(STUDENT_ID_PATH).or(z.literal("")),
         }),
@@ -120,6 +121,20 @@ export const publicBookingSchema = z
           code: "custom",
           message: "Enter their full name for the certificate.",
           path: ["attendees", i, "name"],
+        });
+      }
+      if (!isPhone(person?.phone ?? "")) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter their mobile number.",
+          path: ["attendees", i, "phone"],
+        });
+      }
+      if ((person?.address ?? "").length < 5) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter their address.",
+          path: ["attendees", i, "address"],
         });
       }
       if (person?.category === "student" && !person.idPath) {

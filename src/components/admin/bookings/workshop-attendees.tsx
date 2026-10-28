@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, MapPinIcon, PhoneIcon, XIcon } from "lucide-react";
 import { useTransition } from "react";
 
 import { handleResult } from "@/components/admin/form-utils";
@@ -14,6 +14,9 @@ export type WorkshopAttendee = {
   id: string;
   position: number;
   fullName: string;
+  /** Null on sign-ups made before contact details were asked for. */
+  phone: string | null;
+  address: string | null;
   category: AttendeeCategory;
   priceCents: number;
   idStatus: "pending" | "accepted" | "rejected" | null;
@@ -35,7 +38,7 @@ const STATUS = {
 export function WorkshopAttendees({ attendees }: { attendees: WorkshopAttendee[] }) {
   return (
     <div className="space-y-3">
-      <p className="text-sm font-semibold">Names for certificates</p>
+      <p className="text-sm font-semibold">Who&apos;s coming (names for certificates)</p>
       <ul className="space-y-3">
         {attendees.map((a) => (
           <AttendeeRow key={a.id} attendee={a} />
@@ -67,6 +70,25 @@ function AttendeeRow({ attendee: a }: { attendee: WorkshopAttendee }) {
         </span>
         <span className="font-semibold">{formatPeso(a.priceCents)}</span>
       </div>
+      {(a.phone || a.address) && (
+        <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+          {a.phone && (
+            <a
+              href={`tel:${a.phone.replace(/[^\d+]/g, "")}`}
+              className="inline-flex items-center gap-1 underline-offset-4 hover:text-foreground hover:underline"
+            >
+              <PhoneIcon className="size-3.5" aria-hidden />
+              {a.phone}
+            </a>
+          )}
+          {a.address && (
+            <span className="inline-flex items-center gap-1">
+              <MapPinIcon className="size-3.5 shrink-0" aria-hidden />
+              {a.address}
+            </span>
+          )}
+        </p>
+      )}
       {a.category === "student" && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {a.idUrl ? (
