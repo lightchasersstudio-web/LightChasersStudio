@@ -86,6 +86,11 @@ export async function submitBooking(
         p_messenger: v.messenger ?? undefined,
         p_add_on_ids: v.addOnIds,
         p_pay_in_full: v.payInFull,
+        // Workshops: names for the certificates (only as many as are coming).
+        p_attendees:
+          v.payInFull !== undefined && v.participants > 1
+            ? v.attendees?.slice(0, v.participants)
+            : undefined,
       })
       .single();
     if (error) {
@@ -98,7 +103,9 @@ export async function submitBooking(
             ? "addOnIds"
             : code === "workshop_full" || code === "invalid_participants"
               ? "participants"
-              : null;
+              : code === "invalid_attendees"
+                ? "attendees"
+                : null;
       return fail(BOOKING_ERRORS[code]!, field ? { [field]: [BOOKING_ERRORS[code]!] } : undefined);
     }
 

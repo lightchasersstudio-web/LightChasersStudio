@@ -38,8 +38,17 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await expect(page.getByRole("heading", { name: "Who's coming" })).toBeVisible();
   await expect(page.getByRole("group", { name: /^Dates in / })).toHaveCount(0);
   await expect(page.getByLabel("Location (optional)")).toHaveCount(0);
-  await page.getByLabel("How many people are joining").fill("2");
+  await expect(page.getByText("4 people")).toHaveCount(0); // up to 3 per sign-up
+  await page.getByText("2 people", { exact: true }).click();
   await expect(page.getByText(/Workshop price for 2 people/)).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // One name per person for the certificates; the first is the booker's.
+  await expect(page.getByRole("heading", { name: "Certificates" })).toBeVisible();
+  await expect(page.getByLabel("Person 1: full name")).toHaveValue(name);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Enter their full name for the certificate.")).toBeVisible();
+  await page.getByLabel("Person 2: full name").fill("E2E Guest");
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Payment: the refund rule must be accepted.
@@ -51,6 +60,7 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByText(/2 people · paying in full/)).toBeVisible();
+  await expect(page.getByText(`${name}, E2E Guest`)).toBeVisible();
   // The workshop's time shows, with no way to change it.
   await expect(page.getByRole("button", { name: "Edit when" })).toHaveCount(0);
   const pay = page.getByRole("button", { name: /^Pay ₱[\d,.]+$/ });

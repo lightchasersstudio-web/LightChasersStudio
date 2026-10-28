@@ -75,11 +75,39 @@ describe("publicBookingSchema", () => {
   });
 
   it("needs the refund rule accepted when paying for a workshop", () => {
-    const workshop = { ...input, payInFull: false };
+    const workshop = { ...input, participants: "1", payInFull: false };
     const refused = publicBookingSchema.safeParse({ ...workshop, refundRuleAccepted: false });
     expect(refused.error?.issues.map((i) => i.path.join("."))).toEqual(["refundRuleAccepted"]);
     expect(publicBookingSchema.safeParse({ ...workshop, refundRuleAccepted: true }).success).toBe(
       true,
     );
+  });
+
+  describe("workshop attendees", () => {
+    const workshop = { ...input, payInFull: true, refundRuleAccepted: true };
+    const paths = (v: object) =>
+      publicBookingSchema.safeParse(v).error?.issues.map((i) => i.path.join(".")) ?? [];
+
+    it("allows up to 3 people", () => {
+      expect(paths({ ...workshop, participants: "4" })).toEqual(["participants"]);
+    });
+
+    it("needs a name per person when 2 or more are coming", () => {
+      expect(paths({ ...workshop, participants: "3", attendees: ["Ana Cruz", " ", "B"] })).toEqual([
+        "attendees.1",
+        "attendees.2",
+      ]);
+      expect(paths({ ...workshop, participants: "2", attendees: ["Ana Cruz"] })).toEqual([
+        "attendees.1",
+      ]);
+      expect(
+        paths({ ...workshop, participants: "2", attendees: ["Ana Cruz", "Ben Reyes"] }),
+      ).toEqual([]);
+    });
+
+    it("needs no names for one person, and ignores the count limit on packages", () => {
+      expect(paths({ ...workshop, participants: "1" })).toEqual([]);
+      expect(paths({ ...input, participants: "12" })).toEqual([]);
+    });
   });
 });

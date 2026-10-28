@@ -194,6 +194,7 @@ export type Database = {
       bookings: {
         Row: {
           admin_notes: string | null
+          attendees: Json
           blocked_until: string
           client_id: string
           contact_name: string
@@ -221,6 +222,7 @@ export type Database = {
         }
         Insert: {
           admin_notes?: string | null
+          attendees?: Json
           blocked_until: string
           client_id: string
           contact_name: string
@@ -248,6 +250,7 @@ export type Database = {
         }
         Update: {
           admin_notes?: string | null
+          attendees?: Json
           blocked_until?: string
           client_id?: string
           contact_name?: string
@@ -745,6 +748,7 @@ export type Database = {
           p_location?: string
           p_messenger?: string
           p_participants?: number
+          p_attendees?: string[]
           p_pay_in_full?: boolean
           p_phone: string
           p_preferred_contact: Database["public"]["Enums"]["contact_method"]

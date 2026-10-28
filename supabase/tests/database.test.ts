@@ -1219,7 +1219,11 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
       p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
       p_start_at => now(), p_participants => $3, p_pay_in_full => true,
-      p_location => 'My house')`;
+      p_location => 'My house', p_attendees => $4)`;
+
+    /** Certificate names for n people (none needed for one). */
+    const names = (n: number) =>
+      n > 1 ? Array.from({ length: n }, (_, i) => `Person ${i + 1}`) : null;
 
     /** The same instant as Postgres returns it (UTC ISO). */
     const utc = (d: Date) => new Date(d.getTime()).toISOString();
@@ -1255,7 +1259,7 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         const workshop = await addWorkshop(c);
         await actAs(c, "service_role");
         for (const email of ["ana@example.com", "bea@example.com", "cy@example.com"]) {
-          await c.query(SIGN_UP, [email, workshop, 1]);
+          await c.query(SIGN_UP, [email, workshop, 1, null]);
         }
         const { rows } = await c.query<{
           start_at: Date;
@@ -1282,7 +1286,7 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         await setupFixtures(c); // VAT 0
         const workshop = await addWorkshop(c);
         await actAs(c, "service_role");
-        const three = (await c.query(SIGN_UP, ["ana@example.com", workshop, 3])).rows[0]!;
+        const three = (await c.query(SIGN_UP, ["ana@example.com", workshop, 3, names(3)])).rows[0]!;
         expect(three.deposit_cents).toBe(1_500_000); // 3 x 5,000.00, paid in full
         const { rows } = await c.query<{ price_cents: number }>(
           "select price_cents from public.bookings where id = $1",
@@ -1292,12 +1296,42 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("takes 1 to 3 people, each named for their certificate", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 4, names(4)])).toMatch(
+          /invalid_participants/,
+        );
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 2, null])).toMatch(
+          /invalid_attendees/,
+        );
+        expect(
+          await expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 2, ["Ana Cruz", " "]]),
+        ).toMatch(/invalid_attendees/);
+
+        const two = (
+          await c.query(SIGN_UP, ["ana@example.com", workshop, 2, [" Ana Cruz ", "Ben Reyes"]])
+        ).rows[0]!;
+        const one = (await c.query(SIGN_UP, ["cy@example.com", workshop, 1, null])).rows[0]!;
+        const { rows } = await c.query<{ id: string; attendees: string[] }>(
+          "select id, attendees from public.bookings where id = any($1)",
+          [[two.booking_id, one.booking_id]],
+        );
+        const byId = Object.fromEntries(rows.map((r) => [r.id, r.attendees]));
+        expect(byId[two.booking_id]).toEqual(["Ana Cruz", "Ben Reyes"]);
+        // One person: the booker's name goes on the certificate.
+        expect(byId[one.booking_id]).toEqual(["Ana Cruz"]);
+      });
+    });
+
     it("refuses sign-ups with no date, after it starts, or past the seats", async () => {
       await inRollback(async (c) => {
         await setupFixtures(c);
         const noDate = await addWorkshop(c, { start: null, end: null });
         await actAs(c, "service_role");
-        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", noDate, 1])).toMatch(
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", noDate, 1, names(1)])).toMatch(
           /workshop_not_scheduled/,
         );
       });
@@ -1308,7 +1342,7 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           end: new Date(Date.now() + 3_600_000),
         });
         await actAs(c, "service_role");
-        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", started, 1])).toMatch(
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", started, 1, names(1)])).toMatch(
           /workshop_closed/,
         );
       });
@@ -1316,18 +1350,18 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         await setupFixtures(c);
         const workshop = await addWorkshop(c, { seats: 3 });
         await actAs(c, "service_role");
-        await c.query(SIGN_UP, ["ana@example.com", workshop, 2]);
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 2, names(2)]);
         // Two people asked, one seat left.
-        expect(await expectFailure(c, SIGN_UP, ["bea@example.com", workshop, 2])).toMatch(
+        expect(await expectFailure(c, SIGN_UP, ["bea@example.com", workshop, 2, names(2)])).toMatch(
           /workshop_full/,
         );
-        await c.query(SIGN_UP, ["bea@example.com", workshop, 1]);
+        await c.query(SIGN_UP, ["bea@example.com", workshop, 1, names(1)]);
         const { rows } = await c.query<{ taken: number }>(
           "select public.workshop_seats_taken($1) as taken",
           [workshop],
         );
         expect(rows[0]!.taken).toBe(3);
-        expect(await expectFailure(c, SIGN_UP, ["cy@example.com", workshop, 1])).toMatch(
+        expect(await expectFailure(c, SIGN_UP, ["cy@example.com", workshop, 1, names(1)])).toMatch(
           /workshop_full/,
         );
       });
@@ -1338,7 +1372,7 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         const s = await setupFixtures(c);
         const workshop = await addWorkshop(c);
         await actAs(c, "service_role");
-        await c.query(SIGN_UP, ["ana@example.com", workshop, 1]);
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 1, names(1)]);
 
         expect(
           await expectFailure(c, CREATE, [
@@ -1373,7 +1407,8 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         await setupFixtures(c);
         const workshop = await addWorkshop(c);
         await actAs(c, "service_role");
-        const { booking_id } = (await c.query(SIGN_UP, ["ana@example.com", workshop, 1])).rows[0]!;
+        const { booking_id } = (await c.query(SIGN_UP, ["ana@example.com", workshop, 1, names(1)]))
+          .rows[0]!;
         await c.query(
           "update public.services set workshop_starts_at = $2, workshop_ends_at = $3 where id = $1",
           [workshop, manila(170, 9).toISOString(), manila(170, 12).toISOString()],

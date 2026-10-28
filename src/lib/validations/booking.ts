@@ -12,6 +12,9 @@ export const CONTACT_METHODS = [
 export type ContactMethod = (typeof CONTACT_METHODS)[number]["value"];
 const contactValues = CONTACT_METHODS.map((c) => c.value) as [ContactMethod, ...ContactMethod[]];
 
+/** Most people one workshop sign-up can be for (owner decision 2026-10-28). */
+export const WORKSHOP_MAX_PEOPLE = 3;
+
 /** Version of the privacy notice the client agreed to (stored with their consent). */
 export const CONSENT_VERSION = "2026-10";
 
@@ -67,11 +70,34 @@ export const publicBookingSchema = z
     // Workshops only: pay the full price (else half), after accepting the refund rule.
     payInFull: z.boolean().optional(),
     refundRuleAccepted: z.boolean().optional(),
+    // Workshops only: each person's name for their certificate (2+ people).
+    attendees: z.array(z.string().trim().max(120)).max(WORKSHOP_MAX_PEOPLE).optional(),
   })
   .refine(requireMessenger, messengerIssue)
   .refine((v) => v.payInFull === undefined || v.refundRuleAccepted === true, {
     message: "Please confirm you understand the refund rule.",
     path: ["refundRuleAccepted"],
+  })
+  .superRefine((v, ctx) => {
+    if (v.payInFull === undefined) return; // not a workshop
+    if (v.participants > WORKSHOP_MAX_PEOPLE) {
+      ctx.addIssue({
+        code: "custom",
+        message: `A workshop sign-up is for up to ${WORKSHOP_MAX_PEOPLE} people.`,
+        path: ["participants"],
+      });
+      return;
+    }
+    if (v.participants === 1) return; // the certificate uses the booker's name
+    for (let i = 0; i < v.participants; i++) {
+      if ((v.attendees?.[i] ?? "").length < 2) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter their full name for the certificate.",
+          path: ["attendees", i],
+        });
+      }
+    }
   });
 export type PublicBookingInput = z.input<typeof publicBookingSchema>;
 

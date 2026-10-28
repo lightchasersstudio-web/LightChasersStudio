@@ -32,6 +32,7 @@ import { formatPeso } from "@/lib/utils/money";
 import {
   CONTACT_METHODS,
   publicBookingSchema,
+  WORKSHOP_MAX_PEOPLE,
   type PublicBookingInput,
 } from "@/lib/validations/booking";
 import { getMonthSlots } from "@/server/actions/availability-slots";
@@ -42,7 +43,7 @@ type Values = PublicBookingInput;
 type Output = z.output<typeof publicBookingSchema>;
 
 type Step = {
-  id: "details" | "package" | "when" | "extras" | "review";
+  id: "details" | "package" | "when" | "extras" | "attendees" | "review";
   title: string;
   fields: FieldPath<Values>[];
 };
@@ -63,12 +64,14 @@ const PACKAGE_STEPS: Step[] = [
 ];
 /**
  * Workshops are priced per person at a time and place the admin sets: no date
- * step; who's coming comes first, so the Payment step's half/full amounts
- * already cover everyone.
+ * step; who's coming (1 to 3 people) comes first, then each person's name for
+ * their certificate (only when 2+ are coming), so the Payment step's half/full
+ * amounts already cover everyone.
  */
 const WORKSHOP_STEPS: Step[] = [
   PACKAGE_STEPS[0]!,
   { id: "extras", title: "Who's coming", fields: ["participants", "specialRequests"] },
+  { id: "attendees", title: "Certificates", fields: ["attendees"] },
   { id: "package", title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
   PACKAGE_STEPS[4]!,
 ];
@@ -122,9 +125,6 @@ export function BookingWizard({
     seatsLeft: number | null;
   } | null;
 }) {
-  const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
-  /** Index of a step by id (-1 when this flow doesn't have it). */
-  const at = (id: Step["id"]) => STEPS.findIndex((s) => s.id === id);
   const [step, setStep] = useState(0);
   // +1 moving forward, -1 going back: steps slide in from that side.
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -208,6 +208,12 @@ export function BookingWizard({
     });
   // Workshops are priced per person; packages per booking.
   const people = workshop ? peopleCount(participants) : 1;
+  // Workshops ask for certificate names only when 2 or more people are coming.
+  const STEPS = workshop
+    ? WORKSHOP_STEPS.filter((s) => s.id !== "attendees" || people > 1)
+    : PACKAGE_STEPS;
+  /** Index of a step by id (-1 when this flow doesn't have it). */
+  const at = (id: Step["id"]) => STEPS.findIndex((s) => s.id === id);
   const service = services.find((s) => s.id === serviceId);
   // Each add-on lists the packages it goes with (e.g. extensions only for the Photobooth).
   const offeredAddOns = service ? addOns.filter((a) => addOnOffered(a, service.id)) : [];
@@ -293,6 +299,19 @@ export function BookingWizard({
         message: `Only ${seatsLeft} ${seatsLeft === 1 ? "seat is" : "seats are"} left.`,
       });
       return;
+    }
+    if (workshop && stepId === "extras") {
+      // One name box per person; the first starts as the booker's name.
+      const names = form.getValues("attendees") ?? [];
+      form.setValue(
+        "attendees",
+        people > 1
+          ? Array.from(
+              { length: people },
+              (_, i) => names[i] ?? (i === 0 ? form.getValues("fullName").trim() : ""),
+            )
+          : [],
+      );
     }
     goTo(step + 1);
   }
@@ -650,22 +669,21 @@ export function BookingWizard({
                         maxLength={300}
                       />
                     )}
-                    <TextField
-                      control={form.control}
-                      name="participants"
-                      label={workshop ? "How many people are joining" : "Number of people"}
-                      description={
-                        workshop && service
-                          ? `${formatPeso(service.price_cents)} per person${
-                              workshop.seatsLeft !== null
-                                ? ` · ${workshop.seatsLeft} ${workshop.seatsLeft === 1 ? "seat" : "seats"} left`
-                                : ""
-                            }`
-                          : undefined
-                      }
-                      inputMode="numeric"
-                      className="max-w-40"
-                    />
+                    {workshop && service ? (
+                      <PeoplePicker
+                        form={form}
+                        priceCents={service.price_cents}
+                        seatsLeft={workshop.seatsLeft}
+                      />
+                    ) : (
+                      <TextField
+                        control={form.control}
+                        name="participants"
+                        label="Number of people"
+                        inputMode="numeric"
+                        className="max-w-40"
+                      />
+                    )}
                     {workshop && service && (
                       <p className="font-semibold">
                         Workshop price for {people} {people === 1 ? "person" : "people"}:{" "}
@@ -685,6 +703,28 @@ export function BookingWizard({
                   </FieldGroup>
                 )}
 
+                {stepId === "attendees" && (
+                  <FieldGroup>
+                    <p className="text-muted-foreground">
+                      Everyone who joins gets a certificate. Write each name exactly as it should be
+                      printed.
+                    </p>
+                    {Array.from({ length: people }, (_, i) => (
+                      <TextField
+                        key={i}
+                        control={form.control}
+                        name={`attendees.${i}`}
+                        label={`Person ${i + 1}: full name`}
+                        description={
+                          i === 0 ? "That's you, unless you're signing up someone else." : undefined
+                        }
+                        autoComplete={i === 0 ? "name" : "off"}
+                        maxLength={120}
+                      />
+                    ))}
+                  </FieldGroup>
+                )}
+
                 {last && service && startAt && (
                   <div className="space-y-6">
                     <dl className="divide-y rounded-3xl border bg-card">
@@ -699,6 +739,16 @@ export function BookingWizard({
                           label="Package"
                           value={service.name}
                           onEdit={() => goTo(at("package"))}
+                        />
+                      )}
+                      {workshop && (
+                        <ReviewRow
+                          label={people > 1 ? "Names for certificates" : "Name for the certificate"}
+                          value={(people > 1
+                            ? (form.getValues("attendees") ?? []).slice(0, people)
+                            : [form.getValues("fullName")]
+                          ).join(", ")}
+                          onEdit={() => goTo(at(people > 1 ? "attendees" : "details"))}
                         />
                       )}
                       {chosenAddOns.length > 0 && (
@@ -780,8 +830,10 @@ export function BookingWizard({
                           )}
                           {workshop && <p className="mt-3 text-sm">{WORKSHOP_REFUND_RULE}</p>}
                           <p className="mt-3 text-sm">
-                            We hold {workshop ? "your seat" : "this time"} for {holdMinutes} minutes
-                            while you pay securely with PayMongo (GCash, card and more).
+                            We hold{" "}
+                            {workshop ? (people > 1 ? "your seats" : "your seat") : "this time"} for{" "}
+                            {holdMinutes} minutes while you pay securely with PayMongo (GCash, card
+                            and more).
                           </p>
                         </>
                       )}
@@ -1042,5 +1094,68 @@ function WorkshopPayment({
         )}
       />
     </FieldGroup>
+  );
+}
+
+/** Workshop "Who's coming": 1 to 3 people, priced per person; more than the seats left is disabled. */
+function PeoplePicker({
+  form,
+  priceCents,
+  seatsLeft,
+}: {
+  form: UseFormReturn<Values, unknown, Output>;
+  priceCents: number;
+  seatsLeft: number | null;
+}) {
+  return (
+    <Controller
+      control={form.control}
+      name="participants"
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid}>
+          <p className="font-semibold">How many people are joining?</p>
+          <p className="text-sm text-muted-foreground">
+            {formatPeso(priceCents)} per person · up to {WORKSHOP_MAX_PEOPLE} per sign-up
+            {seatsLeft !== null && ` · ${seatsLeft} ${seatsLeft === 1 ? "seat" : "seats"} left`}
+          </p>
+          <div
+            role="radiogroup"
+            aria-label="How many people are joining"
+            className="grid gap-3 sm:grid-cols-3"
+          >
+            {Array.from({ length: WORKSHOP_MAX_PEOPLE }, (_, i) => i + 1).map((n) => {
+              const checked = field.value === String(n);
+              const full = seatsLeft !== null && n > seatsLeft;
+              return (
+                <label
+                  key={n}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-card p-4 transition-all duration-200 hover:border-primary",
+                    "has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+                    checked && "border-primary bg-accent/50 ring-1 ring-primary",
+                    full && "cursor-not-allowed opacity-50 hover:border-border",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name={field.name}
+                    value={n}
+                    checked={checked}
+                    disabled={full}
+                    onChange={() => field.onChange(String(n))}
+                    className="sr-only"
+                  />
+                  <span className="font-semibold">{n === 1 ? "Just me" : `${n} people`}</span>
+                  <span className="text-sm text-muted-foreground">
+                    {formatPeso(priceCents * n)}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+        </Field>
+      )}
+    />
   );
 }

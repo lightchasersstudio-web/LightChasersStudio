@@ -181,6 +181,12 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                   {workshopRefundCents(b.price_cents, b.paidCents) > 0
                     ? `If they can't attend, refund ${formatPeso(workshopRefundCents(b.price_cents, b.paidCents))} (half).`
                     : "No refund if they can't attend (not paid in full)."}
+                  {attendeeNames(b.attendees).length > 0 && (
+                    <span className="mt-2 block">
+                      <strong>Names for certificates:</strong>{" "}
+                      {attendeeNames(b.attendees).join(", ")}
+                    </span>
+                  )}
                 </p>
               )}
               {b.payments.length > 0 ? (
@@ -264,4 +270,9 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
       </div>
     </>
   );
+}
+
+/** Workshop certificate names stored on the booking (a JSON list of strings). */
+function attendeeNames(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((n): n is string => typeof n === "string") : [];
 }

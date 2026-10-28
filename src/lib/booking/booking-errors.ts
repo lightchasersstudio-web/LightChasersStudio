@@ -12,7 +12,8 @@ export const BOOKING_ERRORS: Record<string, string> = {
   email_required: "Enter a valid email address.",
   payment_option_required: "Choose to pay half or the full price.",
   workshop_not_scheduled: "The workshop's date hasn't been announced yet. Please check back soon.",
-  invalid_participants: "Enter how many people are joining.",
+  invalid_participants: "A workshop sign-up is for 1 to 3 people.",
+  invalid_attendees: "Enter the full name of everyone joining, for their certificates.",
   workshop_closed: "Sign-ups for this workshop have closed.",
   workshop_full:
     "Sorry, the workshop is fully booked (or doesn't have enough seats left for everyone).",
