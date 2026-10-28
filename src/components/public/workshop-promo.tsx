@@ -6,7 +6,7 @@ import { PhotoPolaroid, PlaceholderPolaroid } from "@/components/public/photo-po
 import { Reveal } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
-import { formatWorkshopWhen } from "@/lib/booking/workshop";
+import { formatWorkshopWhen, workshopPrices } from "@/lib/booking/workshop";
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
@@ -28,6 +28,10 @@ export function WorkshopPromo({
   className?: string;
 }) {
   const [back, front] = photos;
+  // The lowest per-person price (early bird / student), shown as "from".
+  const fromCents = Math.min(
+    ...Object.values(workshopPrices(workshop)).filter((c): c is number => c !== null),
+  );
   // The admin sets the date; until then the banner teases it.
   const when =
     workshop.workshop_starts_at && workshop.workshop_ends_at
@@ -89,9 +93,10 @@ export function WorkshopPromo({
               </Link>
             </Button>
             <p>
-              <span className="font-heading text-2xl font-semibold">
-                {formatPeso(workshop.price_cents)}
-              </span>
+              {fromCents < workshop.price_cents && (
+                <span className="mr-1.5 text-sm text-primary-foreground/80">from</span>
+              )}
+              <span className="font-heading text-2xl font-semibold">{formatPeso(fromCents)}</span>
               <span className="ml-1.5 text-sm text-primary-foreground/80">
                 per person{vatPercent > 0 && " + VAT"}
               </span>

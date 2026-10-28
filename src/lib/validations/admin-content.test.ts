@@ -24,6 +24,10 @@ const service: ServiceFormInput = {
   workshopEnd: "",
   workshopSeats: "",
   workshopLocation: "",
+  earlyBirdPrice: "",
+  earlyBirdUntil: "",
+  earlyBirdSeats: "",
+  studentPrice: "",
 };
 
 describe("serviceSchema", () => {
@@ -95,6 +99,10 @@ describe("serviceSchema: workshop schedule", () => {
       workshopEnd: "17:30",
       workshopSeats: "15",
       workshopLocation: "Light Chasers Studio, Tetuan",
+      earlyBirdPrice: "",
+      earlyBirdUntil: "",
+      earlyBirdSeats: "",
+      studentPrice: "",
     });
   });
 
@@ -126,6 +134,34 @@ describe("serviceSchema: workshop schedule", () => {
       expect(r.success).toBe(false);
       expect(r.error?.issues[0]?.path).toEqual([path]);
     }
+  });
+
+  it("stores early-bird and student prices, or none when empty", () => {
+    expect(
+      serviceSchema.parse({
+        ...workshop,
+        earlyBirdPrice: "4,000",
+        earlyBirdUntil: "2027-01-31",
+        earlyBirdSeats: "25",
+        studentPrice: "4000",
+      }),
+    ).toMatchObject({
+      workshop_early_bird_price_cents: 400_000,
+      workshop_early_bird_until: "2027-01-31",
+      workshop_early_bird_seats: 25,
+      workshop_student_price_cents: 400_000,
+    });
+    // No early-bird price: its date and places are dropped too.
+    expect(
+      serviceSchema.parse({ ...workshop, earlyBirdUntil: "2027-01-31", earlyBirdSeats: "25" }),
+    ).toMatchObject({
+      workshop_early_bird_price_cents: null,
+      workshop_early_bird_until: null,
+      workshop_early_bird_seats: null,
+      workshop_student_price_cents: null,
+    });
+    const bad = serviceSchema.safeParse({ ...workshop, studentPrice: "abc" });
+    expect(bad.error?.issues[0]?.path).toEqual(["studentPrice"]);
   });
 
   it("ignores the schedule on other packages", () => {

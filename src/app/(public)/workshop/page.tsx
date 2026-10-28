@@ -8,11 +8,18 @@ import { BookingWizard } from "@/components/booking/booking-wizard";
 import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatWorkshopWhen, workshopOpening } from "@/lib/booking/workshop";
+import {
+  earlyBirdOpening,
+  formatEarlyBirdUntil,
+  formatWorkshopWhen,
+  workshopOpening,
+  workshopPrices,
+} from "@/lib/booking/workshop";
 import { formatPeso } from "@/lib/utils/money";
 import {
   getActiveWorkshop,
   getPublicSettings,
+  getWorkshopEarlyBirdsTaken,
   getWorkshopSeatsTaken,
 } from "@/server/queries/public";
 
@@ -68,7 +75,13 @@ async function Workshop() {
       </div>
     );
   }
-  const opening = workshopOpening(workshop, await getWorkshopSeatsTaken(workshop.id));
+  const [seatsTaken, earlyBirdsTaken] = await Promise.all([
+    getWorkshopSeatsTaken(workshop.id),
+    getWorkshopEarlyBirdsTaken(workshop.id),
+  ]);
+  const opening = workshopOpening(workshop, seatsTaken);
+  const prices = workshopPrices(workshop);
+  const earlyBird = earlyBirdOpening(workshop, earlyBirdsTaken);
   const when =
     workshop.workshop_starts_at && workshop.workshop_ends_at
       ? formatWorkshopWhen(workshop.workshop_starts_at, workshop.workshop_ends_at)
@@ -91,9 +104,17 @@ async function Workshop() {
             {workshop.workshop_location}
           </Detail>
         )}
-        <Detail Icon={TagIcon} label="Price">
-          {formatPeso(workshop.price_cents)} per person
-          {settings.vat_percent > 0 && " + VAT"}
+        <Detail Icon={TagIcon} label={`Per person${settings.vat_percent > 0 ? " (+ VAT)" : ""}`}>
+          Regular {formatPeso(prices.regular)}
+          {earlyBird.open && prices.early_bird !== null && (
+            <>
+              {" "}
+              · Early bird {formatPeso(prices.early_bird)}
+              {workshop.workshop_early_bird_until &&
+                ` (until ${formatEarlyBirdUntil(workshop.workshop_early_bird_until)})`}
+            </>
+          )}
+          {prices.student !== null && <> · Student {formatPeso(prices.student)}</>}
         </Detail>
         {opening.open && opening.seatsLeft !== null && (
           <Detail Icon={UsersIcon} label="Seats">
@@ -110,6 +131,8 @@ async function Workshop() {
               endAt: workshop.workshop_ends_at,
               location: workshop.workshop_location,
               seatsLeft: opening.seatsLeft,
+              prices,
+              earlyBird: { ...earlyBird, until: workshop.workshop_early_bird_until },
             }}
             services={[
               {

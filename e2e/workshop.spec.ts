@@ -43,12 +43,20 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await expect(page.getByText(/Workshop price for 2 people/)).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // One name per person for the certificates; the first is the booker's.
+  // A card per person: certificate name and price category. The first name is the booker's.
   await expect(page.getByRole("heading", { name: "Certificates" })).toBeVisible();
-  await expect(page.getByLabel("Person 1: full name")).toHaveValue(name);
+  const names = page.getByLabel("Full name (for the certificate)");
+  await expect(names.first()).toHaveValue(name);
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Enter their full name for the certificate.")).toBeVisible();
-  await page.getByLabel("Person 2: full name").fill("E2E Guest");
+  await names.nth(1).fill("E2E Guest");
+  // A student must upload an ID; switch back to Regular instead.
+  const person2 = page.getByRole("radiogroup", { name: "Person 2: price category" });
+  await person2.getByText("Student").click();
+  await expect(page.getByRole("button", { name: "Upload ID" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Upload a photo of their student ID.")).toBeVisible();
+  await person2.getByText("Regular").click();
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Payment: the refund rule must be accepted.
@@ -60,7 +68,7 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByText(/2 people · paying in full/)).toBeVisible();
-  await expect(page.getByText(`${name}, E2E Guest`)).toBeVisible();
+  await expect(page.getByText(`${name} (Regular), E2E Guest (Regular)`)).toBeVisible();
   // The workshop's time shows, with no way to change it.
   await expect(page.getByRole("button", { name: "Edit when" })).toHaveCount(0);
   const pay = page.getByRole("button", { name: /^Pay ₱[\d,.]+$/ });

@@ -4,6 +4,7 @@ import { TZDate } from "@date-fns/tz";
 import { addDays, getDaysInMonth } from "date-fns";
 
 import type { BookingStatus } from "@/lib/booking/status";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 
@@ -116,7 +117,7 @@ export async function getBookingForAdmin(id: string) {
     supabase
       .from("bookings")
       .select(
-        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contact_name, contact_phone, preferred_contact, messenger, location, participants, attendees, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category), add_ons:booking_add_ons(add_on_id, name, price_cents), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
+        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category), add_ons:booking_add_ons(add_on_id, name, price_cents), attendees:booking_attendees(id, position, full_name, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -127,6 +128,17 @@ export async function getBookingForAdmin(id: string) {
   if (!data) return null;
 
   const payments = [...data.payments].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Workshop people in order, with short-lived links to students' ID photos
+  // (a private bucket; the caller has already passed requireAdmin()).
+  const attendees = [...data.attendees].sort((a, b) => a.position - b.position);
+  const idPaths = attendees.flatMap((a) => (a.student_id_path ? [a.student_id_path] : []));
+  const idUrls = new Map<string, string>();
+  if (idPaths.length) {
+    const { data: signed } = await createAdminClient()
+      .storage.from("student-ids")
+      .createSignedUrls(idPaths, 60 * 30);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) idUrls.set(s.path, s.signedUrl);
+  }
   const paidCents = payments
     .filter((p) => p.status === "paid")
     .reduce((sum, p) => sum + p.amount_cents, 0);
@@ -137,6 +149,15 @@ export async function getBookingForAdmin(id: string) {
     vatPercent: settings.data.vat_percent,
     payments,
     paidCents,
+    attendees: attendees.map((a) => ({
+      id: a.id,
+      position: a.position,
+      fullName: a.full_name,
+      category: a.category,
+      priceCents: a.price_cents,
+      idStatus: a.id_status,
+      idUrl: a.student_id_path ? (idUrls.get(a.student_id_path) ?? null) : null,
+    })),
     summary: {
       reference: data.reference_code,
       serviceName: data.service?.name ?? "Session",

@@ -191,3 +191,9 @@ export const adminNotesSchema = z.object({ id: z.uuid(), notes: optionalText(500
 
 /** Charge or waive VAT on one booking (e.g. no VAT for a friend). */
 export const bookingVatSchema = z.object({ id: z.uuid(), chargeVat: z.boolean() });
+
+/** Accept or reject a workshop student's ID (a rejection is then handled by hand). */
+export const reviewStudentIdSchema = z.object({
+  attendeeId: z.uuid(),
+  status: z.enum(["accepted", "rejected"]),
+});

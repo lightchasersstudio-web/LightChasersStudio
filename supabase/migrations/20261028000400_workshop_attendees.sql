@@ -1,18 +1,88 @@
--- Workshop attendees (owner decision 2026-10-28): a workshop sign-up is for 1
--- to 3 people, and each one is named for their certificate. The names are kept
--- on the booking (bookings.attendees, a JSON list in order) for the admin.
+-- Workshop attendees (owner decisions 2026-10-28): a workshop sign-up is for 1
+-- to 3 people. Each is named for their certificate and picks a price category:
+-- regular (the workshop price), early bird or student (prices set per workshop).
+-- Early bird closes after a date and a number of early-bird seats; a student
+-- uploads an ID, which the admin accepts or rejects (a rejection is then
+-- handled by hand).
 --
--- create_booking gains p_attendees (workshops only; same as 20261028000300
--- otherwise). New codes: invalid_participants (outside 1-3), invalid_attendees.
+-- * services: workshop_early_bird_price_cents / _until / _seats,
+--   workshop_student_price_cents (null price = category not offered).
+-- * booking_attendees: one row per person (admins only).
+-- * Private bucket student-ids: uploads go through a server-made signed URL;
+--   only the server (service role) reads them, for the admin.
+-- * create_booking(p_attendees jsonb: [{name, category, id_path}]) prices the
+--   workshop per attendee. New codes: invalid_participants, invalid_attendees,
+--   category_unavailable, student_id_required, early_bird_closed, early_bird_full.
 
-alter table public.bookings
-  add column attendees jsonb not null default '[]'
-    constraint bookings_attendees_check check (jsonb_typeof(attendees) = 'array');
+create type public.attendee_category as enum ('regular', 'early_bird', 'student');
+create type public.id_review_status as enum ('pending', 'accepted', 'rejected');
 
-comment on column public.bookings.attendees is
-  'Workshops: the names to print on each attendee''s certificate, in order.';
+alter table public.services
+  add column workshop_early_bird_price_cents integer
+    constraint services_workshop_early_bird_price_check check (workshop_early_bird_price_cents >= 0),
+  add column workshop_early_bird_until date,
+  add column workshop_early_bird_seats integer
+    constraint services_workshop_early_bird_seats_check check (workshop_early_bird_seats > 0),
+  add column workshop_student_price_cents integer
+    constraint services_workshop_student_price_check check (workshop_student_price_cents >= 0);
 
-drop function public.create_booking(text, text, text, public.contact_method, text, uuid, timestamptz, text, integer, text, text, uuid[], boolean);
+create table public.booking_attendees (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references public.bookings (id) on delete cascade,
+  position smallint not null check (position between 1 and 3),
+  full_name text not null check (char_length(full_name) between 2 and 120),
+  category public.attendee_category not null,
+  price_cents integer not null check (price_cents >= 0),
+  student_id_path text,
+  id_status public.id_review_status,
+  id_reviewed_at timestamptz,
+  id_reviewed_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (booking_id, position),
+  check ((category = 'student') = (student_id_path is not null and id_status is not null))
+);
+
+comment on table public.booking_attendees is
+  'Workshop sign-ups: each person, their certificate name, price category and (students) ID review.';
+
+alter table public.booking_attendees enable row level security;
+
+create policy "booking_attendees: admin read"
+on public.booking_attendees for select to authenticated
+using ((select public.is_admin()));
+
+create policy "booking_attendees: admin update"
+on public.booking_attendees for update to authenticated
+using ((select public.is_admin())) with check ((select public.is_admin()));
+
+-- Student IDs: private, images only, 5 MB. No policies: the server uploads via
+-- signed URLs and reads with the service role.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('student-ids', 'student-ids', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+
+-- Early-bird places taken (paid, confirmed, done, or held while paying).
+create function public.workshop_early_birds_taken(p_service_id uuid)
+returns integer
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select count(*)::integer
+  from public.booking_attendees a
+  join public.bookings b on b.id = a.booking_id
+  where b.service_id = p_service_id
+    and a.category = 'early_bird'
+    and public.booking_holds_place(b.status, b.hold_expires_at);
+$$;
+
+revoke execute on function public.workshop_early_birds_taken(uuid) from public;
+grant execute on function public.workshop_early_birds_taken(uuid) to anon, authenticated, service_role;
+
+drop function public.create_booking(
+  text, text, text, public.contact_method, text, uuid, timestamptz, text, integer, text, text, uuid[], boolean
+);
 
 create function public.create_booking(
   p_full_name text,
@@ -28,7 +98,7 @@ create function public.create_booking(
   p_messenger text default null,
   p_add_on_ids uuid[] default null,
   p_pay_in_full boolean default null,
-  p_attendees text[] default null
+  p_attendees jsonb default null
 )
 returns table (
   booking_id uuid,
@@ -49,7 +119,12 @@ declare
   v_workshop boolean;
   v_start_at timestamptz;
   v_participants integer := coalesce(p_participants, 1);
-  v_attendees jsonb := '[]';
+  v_attendee record;
+  v_name text;
+  v_category text;
+  v_price integer;
+  v_people_cents integer := 0;
+  v_early integer := 0;
   v_add_on_ids uuid[];
   v_add_ons_cents integer;
   v_extra_minutes integer;
@@ -96,27 +171,57 @@ begin
   if v_offered <> cardinality(v_add_on_ids) then
     raise exception 'add_on_unavailable';
   end if;
-  -- Workshops are priced per person (owner decision 2026-10-28).
   if v_workshop then
-    -- Up to 3 people per sign-up, each named for their certificate. One person
-    -- may leave the name out: the certificate uses the booker's name.
-    if v_participants not between 1 and 3 then
+    -- 1 to 3 people, each named for their certificate and priced by category
+    -- (owner decisions 2026-10-28). Under the booking lock, so early-bird and
+    -- seat counts can't race.
+    perform pg_advisory_xact_lock(4242001);
+    if jsonb_typeof(p_attendees) is distinct from 'array'
+       or jsonb_array_length(p_attendees) not between 1 and 3 then
       raise exception 'invalid_participants';
     end if;
-    if v_participants = 1 and coalesce(cardinality(p_attendees), 0) = 0 then
-      v_attendees := jsonb_build_array(trim(p_full_name));
-    elsif coalesce(cardinality(p_attendees), 0) <> v_participants
-       or exists (
-         select 1 from unnest(p_attendees) a
-         where a is null or char_length(trim(a)) not between 2 and 120
-       ) then
-      raise exception 'invalid_attendees';
-    else
-      select jsonb_agg(trim(a) order by i) into v_attendees
-      from unnest(p_attendees) with ordinality as t(a, i);
+    v_participants := jsonb_array_length(p_attendees);
+
+    for v_attendee in select e.value as a from jsonb_array_elements(p_attendees) e loop
+      v_name := trim(v_attendee.a ->> 'name');
+      v_category := v_attendee.a ->> 'category';
+      if v_name is null or char_length(v_name) not between 2 and 120 then
+        raise exception 'invalid_attendees';
+      end if;
+      v_price := case v_category
+        when 'regular' then v_service.price_cents
+        when 'early_bird' then v_service.workshop_early_bird_price_cents
+        when 'student' then v_service.workshop_student_price_cents
+      end;
+      if v_price is null then
+        raise exception 'category_unavailable';
+      end if;
+      -- A student must have uploaded their ID (checked by the admin later).
+      if v_category = 'student' and not exists (
+        select 1 from storage.objects o
+        where o.bucket_id = 'student-ids' and o.name = v_attendee.a ->> 'id_path'
+      ) then
+        raise exception 'student_id_required';
+      end if;
+      if v_category = 'early_bird' then
+        v_early := v_early + 1;
+      end if;
+      v_people_cents := v_people_cents + v_price;
+    end loop;
+
+    if v_early > 0 then
+      if v_service.workshop_early_bird_until is not null
+         and (now() at time zone v_settings.timezone)::date > v_service.workshop_early_bird_until then
+        raise exception 'early_bird_closed';
+      end if;
+      if v_service.workshop_early_bird_seats is not null
+         and public.workshop_early_birds_taken(v_service.id) + v_early
+             > v_service.workshop_early_bird_seats then
+        raise exception 'early_bird_full';
+      end if;
     end if;
   end if;
-  v_subtotal := v_service.price_cents * (case when v_workshop then v_participants else 1 end)
+  v_subtotal := (case when v_workshop then v_people_cents else v_service.price_cents end)
                 + v_add_ons_cents;
   v_vat := round(v_subtotal * v_settings.vat_percent / 100.0)::integer;
   v_total := v_subtotal + v_vat;
@@ -229,14 +334,13 @@ begin
       insert into public.bookings (
         reference_code, client_id, service_id, status, start_at, end_at, blocked_until,
         has_end_time, contact_name, contact_phone, preferred_contact, messenger, location,
-        participants, special_requests, price_cents, vat_cents, deposit_cents, hold_expires_at,
-        attendees
+        participants, special_requests, price_cents, vat_cents, deposit_cents, hold_expires_at
       ) values (
         v_reference, v_client_id, v_service.id, v_status, v_start_at, v_end_at, v_blocked_until,
         v_workshop or v_service.duration_minutes is not null, trim(p_full_name), trim(p_phone),
         p_preferred_contact, nullif(trim(p_messenger), ''), nullif(trim(p_location), ''),
         v_participants, nullif(trim(p_special_requests), ''), v_total, v_vat,
-        v_deposit, v_hold, v_attendees
+        v_deposit, v_hold
       )
       returning id into v_booking_id;
       exit;
@@ -254,13 +358,44 @@ begin
   from public.add_ons a where a.id = any (v_add_on_ids)
   order by a.sort_order;
 
+  if v_workshop then
+    insert into public.booking_attendees (
+      booking_id, position, full_name, category, price_cents, student_id_path, id_status
+    )
+    select
+      v_booking_id,
+      e.ordinality,
+      trim(e.value ->> 'name'),
+      (e.value ->> 'category')::public.attendee_category,
+      case e.value ->> 'category'
+        when 'regular' then v_service.price_cents
+        when 'early_bird' then v_service.workshop_early_bird_price_cents
+        else v_service.workshop_student_price_cents
+      end,
+      case when e.value ->> 'category' = 'student' then e.value ->> 'id_path' end,
+      case when e.value ->> 'category' = 'student' then 'pending'::public.id_review_status end
+    from jsonb_array_elements(p_attendees) with ordinality e;
+  end if;
+
   return query select v_booking_id, v_reference, v_status, v_deposit, v_hold;
 end;
 $$;
 
 revoke execute on function public.create_booking(
-  text, text, text, public.contact_method, text, uuid, timestamptz, text, integer, text, text, uuid[], boolean, text[]
+  text, text, text, public.contact_method, text, uuid, timestamptz, text, integer, text, text, uuid[], boolean, jsonb
 ) from public, anon, authenticated;
 grant execute on function public.create_booking(
-  text, text, text, public.contact_method, text, uuid, timestamptz, text, integer, text, text, uuid[], boolean, text[]
+  text, text, text, public.contact_method, text, uuid, timestamptz, text, integer, text, text, uuid[], boolean, jsonb
 ) to service_role;
+
+-- The owner's prices for the current workshop (2026-10-28): early bird and
+-- student ₱4,000; early bird until the end of January 2027, 25 places.
+-- Only fills in what isn't set yet; edit them in Admin -> Services.
+update public.services
+set workshop_early_bird_price_cents = 400000,
+    workshop_early_bird_until = '2027-01-31',
+    workshop_early_bird_seats = 25,
+    workshop_student_price_cents = 400000
+where category = 'workshop'
+  and workshop_early_bird_price_cents is null
+  and workshop_student_price_cents is null;

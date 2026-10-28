@@ -14,6 +14,10 @@ export const BOOKING_ERRORS: Record<string, string> = {
   workshop_not_scheduled: "The workshop's date hasn't been announced yet. Please check back soon.",
   invalid_participants: "A workshop sign-up is for 1 to 3 people.",
   invalid_attendees: "Enter the full name of everyone joining, for their certificates.",
+  category_unavailable: "One of the price categories you picked isn't offered for this workshop.",
+  student_id_required: "Upload a photo of the student ID for everyone signing up as a student.",
+  early_bird_closed: "Early bird has ended. Please pick Regular or Student.",
+  early_bird_full: "There aren't enough early-bird places left. Please pick Regular or Student.",
   workshop_closed: "Sign-ups for this workshop have closed.",
   workshop_full:
     "Sorry, the workshop is fully booked (or doesn't have enough seats left for everyone).",

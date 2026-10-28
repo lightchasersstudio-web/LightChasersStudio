@@ -15,6 +15,21 @@ const contactValues = CONTACT_METHODS.map((c) => c.value) as [ContactMethod, ...
 /** Most people one workshop sign-up can be for (owner decision 2026-10-28). */
 export const WORKSHOP_MAX_PEOPLE = 3;
 
+/** Workshop price categories (owner decision 2026-10-28). */
+export const ATTENDEE_CATEGORIES = [
+  { value: "regular", label: "Regular" },
+  { value: "early_bird", label: "Early bird" },
+  { value: "student", label: "Student" },
+] as const;
+export type AttendeeCategory = (typeof ATTENDEE_CATEGORIES)[number]["value"];
+const ATTENDEE_CATEGORY_VALUES = ATTENDEE_CATEGORIES.map((c) => c.value) as [
+  AttendeeCategory,
+  ...AttendeeCategory[],
+];
+
+/** A student ID upload in the private `student-ids` bucket: "<uuid>.webp" or ".jpg". */
+export const STUDENT_ID_PATH = /^[0-9a-f-]{36}\.(webp|jpg)$/;
+
 /** Version of the privacy notice the client agreed to (stored with their consent). */
 export const CONSENT_VERSION = "2026-10";
 
@@ -70,8 +85,18 @@ export const publicBookingSchema = z
     // Workshops only: pay the full price (else half), after accepting the refund rule.
     payInFull: z.boolean().optional(),
     refundRuleAccepted: z.boolean().optional(),
-    // Workshops only: each person's name for their certificate (2+ people).
-    attendees: z.array(z.string().trim().max(120)).max(WORKSHOP_MAX_PEOPLE).optional(),
+    // Workshops only: each person's certificate name and price category (a
+    // student also uploads their ID; `idPath` is the uploaded file).
+    attendees: z
+      .array(
+        z.object({
+          name: z.string().trim().max(120),
+          category: z.enum(ATTENDEE_CATEGORY_VALUES),
+          idPath: z.string().regex(STUDENT_ID_PATH).or(z.literal("")),
+        }),
+      )
+      .max(WORKSHOP_MAX_PEOPLE)
+      .optional(),
   })
   .refine(requireMessenger, messengerIssue)
   .refine((v) => v.payInFull === undefined || v.refundRuleAccepted === true, {
@@ -88,13 +113,20 @@ export const publicBookingSchema = z
       });
       return;
     }
-    if (v.participants === 1) return; // the certificate uses the booker's name
     for (let i = 0; i < v.participants; i++) {
-      if ((v.attendees?.[i] ?? "").length < 2) {
+      const person = v.attendees?.[i];
+      if ((person?.name ?? "").length < 2) {
         ctx.addIssue({
           code: "custom",
           message: "Enter their full name for the certificate.",
-          path: ["attendees", i],
+          path: ["attendees", i, "name"],
+        });
+      }
+      if (person?.category === "student" && !person.idPath) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Upload a photo of their student ID.",
+          path: ["attendees", i, "idPath"],
         });
       }
     }

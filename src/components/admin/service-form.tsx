@@ -66,6 +66,10 @@ export function ServiceForm({ service }: { service?: Service }) {
           workshopEnd: "",
           workshopSeats: "",
           workshopLocation: "",
+          earlyBirdPrice: "",
+          earlyBirdUntil: "",
+          earlyBirdSeats: "",
+          studentPrice: "",
         },
   });
   const { control } = form;
@@ -228,8 +232,9 @@ export function ServiceForm({ service }: { service?: Service }) {
               <CardTitle>Workshop schedule</CardTitle>
               <CardDescription>
                 Clients don&apos;t pick a time or place: everyone who signs up joins this date, time
-                and location. Leave the date empty until it&apos;s decided (sign-up stays closed).
-                Changing it moves everyone already signed up, so let them know.
+                and location. The price above is the Regular price per person. Leave the date empty
+                until it&apos;s decided (sign-up stays closed). Changing it moves everyone already
+                signed up, so let them know.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -245,6 +250,42 @@ export function ServiceForm({ service }: { service?: Service }) {
                   label="Location"
                   placeholder="e.g. Light Chasers Studio, 3rd floor, MPO Building, Tetuan"
                   maxLength={300}
+                />
+                <div className="grid gap-5 sm:grid-cols-3">
+                  <TextField
+                    control={control}
+                    name="earlyBirdPrice"
+                    label="Early bird price"
+                    prefix="₱"
+                    inputMode="decimal"
+                    placeholder="4000"
+                    description="Per person. Empty = no early bird."
+                  />
+                  <TextField
+                    control={control}
+                    name="earlyBirdUntil"
+                    label="Early bird until"
+                    type="date"
+                    description="Last day (empty = no end date)."
+                  />
+                  <TextField
+                    control={control}
+                    name="earlyBirdSeats"
+                    label="Early-bird places"
+                    inputMode="numeric"
+                    placeholder="25"
+                    description="Empty = no limit."
+                  />
+                </div>
+                <TextField
+                  control={control}
+                  name="studentPrice"
+                  label="Student price"
+                  prefix="₱"
+                  inputMode="decimal"
+                  placeholder="4000"
+                  description="Per person; students upload an ID you check on the booking. Empty = no student price."
+                  className="sm:max-w-[calc(33%-0.5rem)]"
                 />
                 <TextField
                   control={control}

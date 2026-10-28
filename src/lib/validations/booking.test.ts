@@ -74,39 +74,58 @@ describe("publicBookingSchema", () => {
     );
   });
 
-  it("needs the refund rule accepted when paying for a workshop", () => {
-    const workshop = { ...input, participants: "1", payInFull: false };
-    const refused = publicBookingSchema.safeParse({ ...workshop, refundRuleAccepted: false });
-    expect(refused.error?.issues.map((i) => i.path.join("."))).toEqual(["refundRuleAccepted"]);
-    expect(publicBookingSchema.safeParse({ ...workshop, refundRuleAccepted: true }).success).toBe(
-      true,
-    );
-  });
-
-  describe("workshop attendees", () => {
-    const workshop = { ...input, payInFull: true, refundRuleAccepted: true };
+  describe("workshops", () => {
+    const ID = "0f8fad5b-d9cb-469f-a165-70867728950e.webp";
+    const person = (name: string, category = "regular", idPath = "") => ({
+      name,
+      category,
+      idPath,
+    });
+    const workshop = {
+      ...input,
+      participants: "1",
+      attendees: [person("Ana Cruz")],
+      payInFull: true,
+      refundRuleAccepted: true,
+    };
     const paths = (v: object) =>
       publicBookingSchema.safeParse(v).error?.issues.map((i) => i.path.join(".")) ?? [];
+
+    it("needs the refund rule accepted", () => {
+      expect(paths({ ...workshop, refundRuleAccepted: false })).toEqual(["refundRuleAccepted"]);
+      expect(paths(workshop)).toEqual([]);
+    });
 
     it("allows up to 3 people", () => {
       expect(paths({ ...workshop, participants: "4" })).toEqual(["participants"]);
     });
 
-    it("needs a name per person when 2 or more are coming", () => {
-      expect(paths({ ...workshop, participants: "3", attendees: ["Ana Cruz", " ", "B"] })).toEqual([
-        "attendees.1",
-        "attendees.2",
-      ]);
-      expect(paths({ ...workshop, participants: "2", attendees: ["Ana Cruz"] })).toEqual([
-        "attendees.1",
-      ]);
+    it("needs a certificate name for everyone coming", () => {
       expect(
-        paths({ ...workshop, participants: "2", attendees: ["Ana Cruz", "Ben Reyes"] }),
-      ).toEqual([]);
+        paths({
+          ...workshop,
+          participants: "3",
+          attendees: [person("Ana Cruz"), person(" "), person("B")],
+        }),
+      ).toEqual(["attendees.1.name", "attendees.2.name"]);
+      expect(paths({ ...workshop, participants: "2" })).toEqual(["attendees.1.name"]);
     });
 
-    it("needs no names for one person, and ignores the count limit on packages", () => {
-      expect(paths({ ...workshop, participants: "1" })).toEqual([]);
+    it("needs an uploaded ID for each student", () => {
+      expect(paths({ ...workshop, attendees: [person("Ana Cruz", "student")] })).toEqual([
+        "attendees.0.idPath",
+      ]);
+      expect(paths({ ...workshop, attendees: [person("Ana Cruz", "student", ID)] })).toEqual([]);
+      // Only paths the server hands out are accepted.
+      expect(
+        paths({ ...workshop, attendees: [person("Ana Cruz", "student", "../other.webp")] }),
+      ).toEqual(["attendees.0.idPath"]);
+      expect(paths({ ...workshop, attendees: [person("Ana Cruz", "vip")] })).toEqual([
+        "attendees.0.category",
+      ]);
+    });
+
+    it("ignores the people limit on packages", () => {
       expect(paths({ ...input, participants: "12" })).toEqual([]);
     });
   });

@@ -1155,7 +1155,8 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     const WORKSHOP = `select * from public.create_booking(
       p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
       p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
-      p_start_at => $3, p_pay_in_full => $4)`;
+      p_start_at => $3, p_pay_in_full => $4,
+      p_attendees => '[{"name": "Ana Cruz", "category": "regular"}]'::jsonb)`;
 
     it("charges half or the full price, and needs the choice", async () => {
       await inRollback(async (c) => {
@@ -1191,12 +1192,11 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         expect(full.deposit_cents).toBe(100001);
 
         expect(
-          await expectFailure(c, CREATE, [
-            "Cy",
+          await expectFailure(c, WORKSHOP, [
             "cy@example.com",
-            "09171234567",
             workshop,
             manila(152, 12).toISOString(),
+            null,
           ]),
         ).toMatch(/payment_option_required/);
 
@@ -1219,11 +1219,17 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
       p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
       p_start_at => now(), p_participants => $3, p_pay_in_full => true,
-      p_location => 'My house', p_attendees => $4)`;
+      p_location => 'My house', p_attendees => $4::jsonb)`;
 
     /** Certificate names for n people (none needed for one). */
-    const names = (n: number) =>
-      n > 1 ? Array.from({ length: n }, (_, i) => `Person ${i + 1}`) : null;
+    type Person = { name: string; category?: string; id_path?: string | null };
+    /** The attendees as create_booking takes them (JSON); n regular people by default. */
+    const names = (n: number | Person[]) =>
+      JSON.stringify(
+        typeof n === "number"
+          ? Array.from({ length: n }, (_, i) => ({ name: `Person ${i + 1}`, category: "regular" }))
+          : n.map((p) => ({ category: "regular", ...p })),
+      );
 
     /** The same instant as Postgres returns it (UTC ISO). */
     const utc = (d: Date) => new Date(d.getTime()).toISOString();
@@ -1235,19 +1241,28 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         end?: Date | null;
         seats?: number | null;
         location?: string | null;
+        earlyBirdUntil?: string | null;
+        earlyBirdSeats?: number | null;
+        studentPrice?: number | null;
       } = {},
     ) {
       const start = opts.start === undefined ? manila(160, 13) : opts.start;
       const end = opts.end === undefined ? manila(160, 17) : opts.end;
       const { rows } = await c.query<{ id: string }>(
         `insert into public.services (name, slug, category, price_cents,
-           workshop_starts_at, workshop_ends_at, workshop_seats, workshop_location)
-         values ('Test Workshop', 'test-workshop', 'workshop', 500000, $1, $2, $3, $4) returning id`,
+           workshop_starts_at, workshop_ends_at, workshop_seats, workshop_location,
+           workshop_early_bird_price_cents, workshop_early_bird_until, workshop_early_bird_seats,
+           workshop_student_price_cents)
+         values ('Test Workshop', 'test-workshop', 'workshop', 500000, $1, $2, $3, $4,
+           400000, $5, $6, $7) returning id`,
         [
           start?.toISOString() ?? null,
           end?.toISOString() ?? null,
           opts.seats ?? null,
           opts.location === undefined ? "The studio" : opts.location,
+          opts.earlyBirdUntil ?? null,
+          opts.earlyBirdSeats ?? null,
+          opts.studentPrice === undefined ? 400000 : opts.studentPrice,
         ],
       );
       return rows[0]!.id;
@@ -1259,7 +1274,7 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         const workshop = await addWorkshop(c);
         await actAs(c, "service_role");
         for (const email of ["ana@example.com", "bea@example.com", "cy@example.com"]) {
-          await c.query(SIGN_UP, [email, workshop, 1, null]);
+          await c.query(SIGN_UP, [email, workshop, 1, names(1)]);
         }
         const { rows } = await c.query<{
           start_at: Date;
@@ -1301,28 +1316,129 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         await setupFixtures(c);
         const workshop = await addWorkshop(c);
         await actAs(c, "service_role");
-        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 4, names(4)])).toMatch(
-          /invalid_participants/,
-        );
-        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 2, null])).toMatch(
+        const fails = (people: string | null) =>
+          expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 1, people]);
+        expect(await fails(names(4))).toMatch(/invalid_participants/);
+        expect(await fails(null)).toMatch(/invalid_participants/);
+        expect(await fails(names([{ name: "Ana Cruz" }, { name: " " }]))).toMatch(
           /invalid_attendees/,
         );
-        expect(
-          await expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 2, ["Ana Cruz", " "]]),
-        ).toMatch(/invalid_attendees/);
-
-        const two = (
-          await c.query(SIGN_UP, ["ana@example.com", workshop, 2, [" Ana Cruz ", "Ben Reyes"]])
-        ).rows[0]!;
-        const one = (await c.query(SIGN_UP, ["cy@example.com", workshop, 1, null])).rows[0]!;
-        const { rows } = await c.query<{ id: string; attendees: string[] }>(
-          "select id, attendees from public.bookings where id = any($1)",
-          [[two.booking_id, one.booking_id]],
+        expect(await fails(names([{ name: "Ana Cruz", category: "vip" }]))).toMatch(
+          /category_unavailable/,
         );
-        const byId = Object.fromEntries(rows.map((r) => [r.id, r.attendees]));
-        expect(byId[two.booking_id]).toEqual(["Ana Cruz", "Ben Reyes"]);
-        // One person: the booker's name goes on the certificate.
-        expect(byId[one.booking_id]).toEqual(["Ana Cruz"]);
+
+        // The count follows the names, whatever p_participants says.
+        const two = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: " Ana Cruz " }, { name: "Ben Reyes" }]),
+          ])
+        ).rows[0]!;
+        const { rows } = await c.query<{ position: number; full_name: string }>(
+          "select position, full_name from public.booking_attendees where booking_id = $1 order by position",
+          [two.booking_id],
+        );
+        expect(rows).toEqual([
+          { position: 1, full_name: "Ana Cruz" },
+          { position: 2, full_name: "Ben Reyes" },
+        ]);
+        const { rows: booking } = await c.query<{ participants: number }>(
+          "select participants from public.bookings where id = $1",
+          [two.booking_id],
+        );
+        expect(booking[0]!.participants).toBe(2);
+      });
+    });
+
+    it("prices each person by category; a student needs an uploaded ID", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // VAT 0
+        const workshop = await addWorkshop(c);
+        await c.query(
+          "insert into storage.objects (bucket_id, name) values ('student-ids', 'test-id.webp')",
+        );
+        await actAs(c, "service_role");
+        expect(
+          await expectFailure(c, SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: "Ana Cruz", category: "student", id_path: "missing.webp" }]),
+          ]),
+        ).toMatch(/student_id_required/);
+
+        const mixed = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            3,
+            names([
+              { name: "Ana Cruz" },
+              { name: "Ben Reyes", category: "early_bird" },
+              { name: "Cy Lim", category: "student", id_path: "test-id.webp" },
+            ]),
+          ])
+        ).rows[0]!;
+        expect(mixed.deposit_cents).toBe(1_300_000); // 5,000 + 4,000 + 4,000, paid in full
+        const { rows } = await c.query<{
+          category: string;
+          price_cents: number;
+          id_status: string | null;
+        }>(
+          "select category, price_cents, id_status from public.booking_attendees where booking_id = $1 order by position",
+          [mixed.booking_id],
+        );
+        expect(rows).toEqual([
+          { category: "regular", price_cents: 500_000, id_status: null },
+          { category: "early_bird", price_cents: 400_000, id_status: null },
+          { category: "student", price_cents: 400_000, id_status: "pending" },
+        ]);
+      });
+    });
+
+    it("closes early bird after its last day or its places, and unoffered categories", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const ended = await addWorkshop(c, { earlyBirdUntil: "2020-01-31", studentPrice: null });
+        await actAs(c, "service_role");
+        const early = names([{ name: "Ana Cruz", category: "early_bird" }]);
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", ended, 1, early])).toMatch(
+          /early_bird_closed/,
+        );
+        expect(
+          await expectFailure(c, SIGN_UP, [
+            "ana@example.com",
+            ended,
+            1,
+            names([{ name: "Ana Cruz", category: "student", id_path: "x.webp" }]),
+          ]),
+        ).toMatch(/category_unavailable/);
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c, { earlyBirdSeats: 2 });
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, [
+          "ana@example.com",
+          workshop,
+          1,
+          names([{ name: "Ana Cruz", category: "early_bird" }]),
+        ]);
+        // One early-bird place left: two more can't both have it.
+        const two = names([
+          { name: "Ben Reyes", category: "early_bird" },
+          { name: "Cy Lim", category: "early_bird" },
+        ]);
+        expect(await expectFailure(c, SIGN_UP, ["ben@example.com", workshop, 2, two])).toMatch(
+          /early_bird_full/,
+        );
+        const { rows } = await c.query<{ taken: number }>(
+          "select public.workshop_early_birds_taken($1) as taken",
+          [workshop],
+        );
+        expect(rows[0]!.taken).toBe(1);
       });
     });
 

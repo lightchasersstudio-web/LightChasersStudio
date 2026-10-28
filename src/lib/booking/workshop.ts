@@ -50,3 +50,62 @@ export function formatWorkshopWhen(startsAt: string, endsAt: string) {
     time: `${time(startsAt)} – ${time(endsAt)}`,
   };
 }
+
+/** Per-person prices by category; null = that category isn't offered. Mirrors create_booking. */
+export type WorkshopPrices = { regular: number; early_bird: number | null; student: number | null };
+
+export function workshopPrices(workshop: {
+  price_cents: number;
+  workshop_early_bird_price_cents: number | null;
+  workshop_student_price_cents: number | null;
+}): WorkshopPrices {
+  return {
+    regular: workshop.price_cents,
+    early_bird: workshop.workshop_early_bird_price_cents,
+    student: workshop.workshop_student_price_cents,
+  };
+}
+
+/** The workshop price (before VAT) for these people. */
+export function attendeesCents(
+  attendees: { category: keyof WorkshopPrices }[],
+  prices: WorkshopPrices,
+): number {
+  return attendees.reduce((sum, a) => sum + (prices[a.category] ?? prices.regular), 0);
+}
+
+/**
+ * Whether Early bird can still be picked: it has a price, today (Manila) is on
+ * or before the last day, and early-bird places are left. `left` is null when
+ * there's no cap.
+ */
+export function earlyBirdOpening(
+  workshop: {
+    workshop_early_bird_price_cents: number | null;
+    workshop_early_bird_until: string | null;
+    workshop_early_bird_seats: number | null;
+  },
+  taken: number,
+  now: Date = new Date(),
+): { open: boolean; left: number | null } {
+  const left =
+    workshop.workshop_early_bird_seats === null
+      ? null
+      : Math.max(workshop.workshop_early_bird_seats - taken, 0);
+  // "YYYY-MM-DD" in Manila, comparable with the stored date.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: BUSINESS_TZ }).format(now);
+  const open =
+    workshop.workshop_early_bird_price_cents !== null &&
+    (workshop.workshop_early_bird_until === null || today <= workshop.workshop_early_bird_until) &&
+    (left === null || left > 0);
+  return { open, left };
+}
+
+/** "31 January 2027" for an early-bird last day ("2027-01-31"). */
+export function formatEarlyBirdUntil(date: string): string {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  const month = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(
+    new Date(Date.UTC(y, m - 1, d)),
+  );
+  return `${d} ${month} ${y}`;
+}

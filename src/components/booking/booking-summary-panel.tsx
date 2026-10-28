@@ -26,8 +26,8 @@ type Props = {
   packageStep: number;
   /** The step that picks the date and time; null when it's fixed (workshops). */
   whenStep: number | null;
-  /** People the price is for (workshops are per person; packages are 1). */
-  people: number;
+  /** Replaces the package price line (workshops: "3 people · ₱13,000"). */
+  priceText: string | null;
   className?: string;
 };
 
@@ -91,7 +91,7 @@ function Rows({
   onGoTo,
   packageStep,
   whenStep,
-  people,
+  priceText,
 }: Props) {
   if (!service) return null;
   const change = (to: number, label: string) =>
@@ -115,8 +115,7 @@ function Rows({
             <span className="text-muted-foreground">
               {service.duration_minutes !== null &&
                 `${formatDuration(service.duration_minutes)} · `}
-              {formatPeso(service.price_cents)}
-              {people > 1 && ` × ${people}`}
+              {priceText ?? formatPeso(service.price_cents)}
             </span>
           </span>
           {change(packageStep, "package")}

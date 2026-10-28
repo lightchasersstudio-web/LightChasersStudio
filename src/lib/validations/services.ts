@@ -4,6 +4,7 @@ import { z } from "zod";
 import { PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
+import { centsToPesoInput } from "@/lib/utils/money";
 import { optionalText, pesoString } from "@/lib/validations/shared";
 
 export const serviceSchema = z
@@ -47,6 +48,11 @@ export const serviceSchema = z
     workshopEnd: z.string().trim(),
     workshopSeats: z.string().trim(),
     workshopLocation: optionalText(300),
+    // Workshops only: discounted categories (empty price = not offered).
+    earlyBirdPrice: z.string().trim(),
+    earlyBirdUntil: z.string().trim(),
+    earlyBirdSeats: z.string().trim(),
+    studentPrice: z.string().trim(),
   })
   .transform((v, ctx) => {
     let durationMinutes: number | null = null;
@@ -94,7 +100,8 @@ export const serviceSchema = z
     }
 
     const workshop = v.category === "workshop" ? workshopSchedule(v, ctx) : NO_SCHEDULE;
-    if (!workshop) return z.NEVER;
+    const pricing = v.category === "workshop" ? workshopPricing(v, ctx) : NO_PRICING;
+    if (!workshop || !pricing) return z.NEVER;
     return {
       name: v.name,
       slug: v.slug,
@@ -108,8 +115,63 @@ export const serviceSchema = z
       cover_image_path: v.coverImagePath,
       is_active: v.isActive,
       ...workshop,
+      ...pricing,
     };
   });
+
+type WorkshopPricing = {
+  workshop_early_bird_price_cents: number | null;
+  workshop_early_bird_until: string | null;
+  workshop_early_bird_seats: number | null;
+  workshop_student_price_cents: number | null;
+};
+const NO_PRICING: WorkshopPricing = {
+  workshop_early_bird_price_cents: null,
+  workshop_early_bird_until: null,
+  workshop_early_bird_seats: null,
+  workshop_student_price_cents: null,
+};
+
+/** Early-bird and student prices per person; an empty price means that category isn't offered. */
+function workshopPricing(
+  v: {
+    earlyBirdPrice: string;
+    earlyBirdUntil: string;
+    earlyBirdSeats: string;
+    studentPrice: string;
+  },
+  ctx: z.RefinementCtx,
+): WorkshopPricing | null {
+  const issue = (path: string, message: string) => {
+    ctx.addIssue({ code: "custom", path: [path], message });
+    return null;
+  };
+  const price = (path: string, value: string): number | null | false => {
+    if (!value) return null;
+    const parsed = pesoString.safeParse(value);
+    if (!parsed.success) return issue(path, parsed.error.issues[0]!.message) ?? false;
+    return parsed.data;
+  };
+  const early = price("earlyBirdPrice", v.earlyBirdPrice);
+  const student = price("studentPrice", v.studentPrice);
+  if (early === false || student === false) return null;
+  if (v.earlyBirdUntil && !/^\d{4}-\d{2}-\d{2}$/.test(v.earlyBirdUntil)) {
+    return issue("earlyBirdUntil", "Pick the last day of early bird.");
+  }
+  let seats: number | null = null;
+  if (v.earlyBirdSeats) {
+    if (!/^\d+$/.test(v.earlyBirdSeats) || Number(v.earlyBirdSeats) < 1) {
+      return issue("earlyBirdSeats", "Enter a whole number, or leave it empty for no limit.");
+    }
+    seats = Number(v.earlyBirdSeats);
+  }
+  return {
+    workshop_early_bird_price_cents: early,
+    workshop_early_bird_until: early === null ? null : v.earlyBirdUntil || null,
+    workshop_early_bird_seats: early === null ? null : seats,
+    workshop_student_price_cents: student,
+  };
+}
 
 type WorkshopSchedule = {
   workshop_starts_at: string | null;
@@ -183,6 +245,10 @@ export function workshopFormValues(service: {
   workshop_ends_at: string | null;
   workshop_seats: number | null;
   workshop_location: string | null;
+  workshop_early_bird_price_cents: number | null;
+  workshop_early_bird_until: string | null;
+  workshop_early_bird_seats: number | null;
+  workshop_student_price_cents: number | null;
 }) {
   const local = (iso: string | null, part: "date" | "time") => {
     if (!iso) return "";
@@ -198,6 +264,17 @@ export function workshopFormValues(service: {
     workshopEnd: local(service.workshop_ends_at, "time"),
     workshopSeats: service.workshop_seats === null ? "" : String(service.workshop_seats),
     workshopLocation: service.workshop_location ?? "",
+    earlyBirdPrice:
+      service.workshop_early_bird_price_cents === null
+        ? ""
+        : centsToPesoInput(service.workshop_early_bird_price_cents),
+    earlyBirdUntil: service.workshop_early_bird_until ?? "",
+    earlyBirdSeats:
+      service.workshop_early_bird_seats === null ? "" : String(service.workshop_early_bird_seats),
+    studentPrice:
+      service.workshop_student_price_cents === null
+        ? ""
+        : centsToPesoInput(service.workshop_student_price_cents),
   };
 }
 
