@@ -22,6 +22,12 @@ type Props = {
   /** Current wizard step: rows for finished steps get a "Change" link. */
   step: number;
   onGoTo?: (step: number) => void;
+  /** The step that picks the package (workshops: the payment step). */
+  packageStep: number;
+  /** The step that picks the date and time; null when it's fixed (workshops). */
+  whenStep: number | null;
+  /** Replaces the package price line (workshops: "3 people · ₱13,000"). */
+  priceText: string | null;
   className?: string;
 };
 
@@ -83,6 +89,9 @@ function Rows({
   deposit,
   step,
   onGoTo,
+  packageStep,
+  whenStep,
+  priceText,
 }: Props) {
   if (!service) return null;
   const change = (to: number, label: string) =>
@@ -106,10 +115,10 @@ function Rows({
             <span className="text-muted-foreground">
               {service.duration_minutes !== null &&
                 `${formatDuration(service.duration_minutes)} · `}
-              {formatPeso(service.price_cents)}
+              {priceText ?? formatPeso(service.price_cents)}
             </span>
           </span>
-          {change(1, "package")}
+          {change(packageStep, "package")}
         </li>
         {addOns.length > 0 && (
           <li className="flex gap-2.5">
@@ -131,7 +140,7 @@ function Rows({
           <span className={cn("min-w-0 flex-1", !startAt && "text-muted-foreground")}>
             {startAt ? formatBookingWhen(startAt, endAt) : "Date and time not picked yet"}
           </span>
-          {startAt && change(2, "date and time")}
+          {startAt && whenStep !== null && change(whenStep, "date and time")}
         </li>
       </ul>
       <dl className="space-y-1 rounded-2xl bg-accent p-3 text-accent-foreground">

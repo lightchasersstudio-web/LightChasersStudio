@@ -17,21 +17,31 @@ import { rememberBooking } from "@/components/booking/add-to-calendar";
 import { clearDraft, loadDraft, saveDraft } from "@/components/booking/booking-draft";
 import { BookingSummaryPanel } from "@/components/booking/booking-summary-panel";
 import { SlotPicker } from "@/components/booking/slot-picker";
+import { StudentIdUpload } from "@/components/booking/student-id-upload";
 import { Turnstile } from "@/components/booking/turnstile";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { formatBookingWhen } from "@/lib/booking/booking-summary";
 import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
 import { bookingTotals } from "@/lib/booking/pricing";
-import { WORKSHOP_REFUND_RULE } from "@/lib/booking/workshop";
+import {
+  attendeesCents,
+  defaultCategory,
+  formatEarlyBirdUntil,
+  WORKSHOP_REFUND_RULE,
+  type WorkshopPrices,
+} from "@/lib/booking/workshop";
 import { categoryLabel } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
 import {
+  ATTENDEE_CATEGORIES,
   CONTACT_METHODS,
   publicBookingSchema,
+  WORKSHOP_MAX_PEOPLE,
+  type AttendeeCategory,
   type PublicBookingInput,
 } from "@/lib/validations/booking";
 import { getMonthSlots } from "@/server/actions/availability-slots";
@@ -41,24 +51,45 @@ import type { PublicAddOn, PublicService } from "@/server/queries/public";
 type Values = PublicBookingInput;
 type Output = z.output<typeof publicBookingSchema>;
 
-const PACKAGE_STEPS: { title: string; fields: FieldPath<Values>[] }[] = [
+type Step = {
+  id: "details" | "package" | "when" | "extras" | "attendees" | "review";
+  title: string;
+  fields: FieldPath<Values>[];
+};
+const PACKAGE_STEPS: Step[] = [
   {
+    id: "details",
     title: "Your details",
     fields: ["fullName", "email", "phone", "preferredContact", "messenger", "consent"],
   },
-  { title: "Package", fields: ["serviceId", "addOnIds"] },
-  { title: "Date & time", fields: ["startAt"] },
-  { title: "Shoot details", fields: ["location", "participants", "specialRequests"] },
-  { title: "Review & pay", fields: [] },
+  { id: "package", title: "Package", fields: ["serviceId", "addOnIds"] },
+  { id: "when", title: "Date & time", fields: ["startAt"] },
+  {
+    id: "extras",
+    title: "Shoot details",
+    fields: ["location", "participants", "specialRequests"],
+  },
+  { id: "review", title: "Review & pay", fields: [] },
 ];
-/** Workshops have one fixed price: step 2 is choosing to pay half or in full. */
-const WORKSHOP_STEPS: typeof PACKAGE_STEPS = [
+/**
+ * Workshops are priced per person at a time and place the admin sets: no date
+ * step; who's coming (1 to 3 people) comes first, then each person's
+ * certificate name and price category (students upload an ID), so the Payment
+ * step's half/full amounts already cover everyone.
+ */
+const WORKSHOP_STEPS: Step[] = [
   PACKAGE_STEPS[0]!,
-  { title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
-  PACKAGE_STEPS[2]!,
-  { title: "Other details", fields: PACKAGE_STEPS[3]!.fields },
+  { id: "extras", title: "Who's coming", fields: ["participants", "specialRequests"] },
+  { id: "attendees", title: "Certificates", fields: ["attendees"] },
+  { id: "package", title: "Payment", fields: ["payInFull", "refundRuleAccepted"] },
   PACKAGE_STEPS[4]!,
 ];
+
+/** People on a workshop sign-up as typed (the price is per person); at least 1. */
+function peopleCount(participants: string | undefined): number {
+  const n = Number((participants ?? "").replace(/,/g, ""));
+  return Number.isInteger(n) && n >= 1 ? n : 1;
+}
 
 export type WizardService = Pick<
   PublicService,
@@ -81,7 +112,7 @@ export function BookingWizard({
   vatPercent,
   holdMinutes,
   maxAdvanceDays,
-  workshop = false,
+  workshop = null,
 }: {
   services: WizardService[];
   addOns: PublicAddOn[];
@@ -91,10 +122,22 @@ export function BookingWizard({
   vatPercent: number;
   holdMinutes: number;
   maxAdvanceDays: number;
-  /** Workshop flow: one fixed-price workshop (services[0]), paid half or in full. */
-  workshop?: boolean;
+  /**
+   * Workshop flow: one fixed-price workshop (services[0]) at the time the admin
+   * set, paid half or in full.
+   */
+  workshop?: {
+    startAt: string;
+    endAt: string;
+    location: string | null;
+    /** Seats still free, or null for no limit. */
+    seatsLeft: number | null;
+    /** Per-person price by category (null = not offered). */
+    prices: WorkshopPrices;
+    /** Early bird: still open, places left (null = no cap) and its last day. */
+    earlyBird: { open: boolean; left: number | null; until: string | null };
+  } | null;
 }) {
-  const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
   const [step, setStep] = useState(0);
   // +1 moving forward, -1 going back: steps slide in from that side.
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -112,7 +155,7 @@ export function BookingWizard({
     consent: false as unknown as true,
     serviceId: initialServiceId ?? "",
     addOnIds: [],
-    startAt: "",
+    startAt: workshop?.startAt ?? "",
     location: "",
     participants: "1",
     specialRequests: "",
@@ -140,6 +183,8 @@ export function BookingWizard({
       addOnIds: (draft.addOnIds ?? []).filter((id) =>
         addOns.some((a) => a.id === id && addOnOffered(a, draft.serviceId ?? "")),
       ),
+      // A workshop's time is set by the studio, never by an old draft.
+      ...(workshop && { startAt: workshop.startAt }),
     });
     // Browser storage can only be read after hydration, so this can't be initial state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -161,10 +206,37 @@ export function BookingWizard({
     setRestored(false);
     goTo(0);
   }
-  const [serviceId, startAt, preferredContact, addOnIds, location, payInFull] = useWatch({
+  const [
+    serviceId,
+    startAt,
+    preferredContact,
+    addOnIds,
+    location,
+    payInFull,
+    participants,
+    attendees,
+  ] = useWatch({
     control: form.control,
-    name: ["serviceId", "startAt", "preferredContact", "addOnIds", "location", "payInFull"],
+    name: [
+      "serviceId",
+      "startAt",
+      "preferredContact",
+      "addOnIds",
+      "location",
+      "payInFull",
+      "participants",
+      "attendees",
+    ],
   });
+  // Workshops are priced per person, by category; packages per booking.
+  const people = workshop ? peopleCount(participants) : 1;
+  const people_ = Array.from(
+    { length: workshop ? people : 0 },
+    (_, i) => attendees?.[i] ?? { name: "", category: "regular" as const, idPath: "" },
+  );
+  const STEPS = workshop ? WORKSHOP_STEPS : PACKAGE_STEPS;
+  /** Index of a step by id (-1 when this flow doesn't have it). */
+  const at = (id: Step["id"]) => STEPS.findIndex((s) => s.id === id);
   const service = services.find((s) => s.id === serviceId);
   // Each add-on lists the packages it goes with (e.g. extensions only for the Photobooth).
   const offeredAddOns = service ? addOns.filter((a) => addOnOffered(a, service.id)) : [];
@@ -179,7 +251,7 @@ export function BookingWizard({
   // Mirrors create_booking, which recomputes both on the server.
   const { subtotal, vat, total, deposit } = service
     ? bookingTotals({
-        packageCents: service.price_cents,
+        packageCents: workshop ? attendeesCents(people_, workshop.prices) : service.price_cents,
         addOnsCents: chosenAddOns.reduce((sum, a) => sum + a.price_cents, 0),
         vatPercent,
         fixedDepositCents: service.deposit_cents,
@@ -187,8 +259,11 @@ export function BookingWizard({
         payInFull,
       })
     : { subtotal: 0, vat: 0, total: 0, deposit: 0 };
-  const endAt =
-    service && startAt ? sessionEndAt(startAt, service.duration_minutes, extraMinutes) : null;
+  const endAt = workshop
+    ? workshop.endAt
+    : service && startAt
+      ? sessionEndAt(startAt, service.duration_minutes, extraMinutes)
+      : null;
 
   const now = TZDate.tz(BUSINESS_TZ);
   const minMonth = format(now, "yyyy-MM");
@@ -239,7 +314,32 @@ export function BookingWizard({
   }, [step]);
 
   async function next() {
-    if (await form.trigger(STEPS[step]!.fields)) goTo(step + 1);
+    if (!(await form.trigger(STEPS[step]!.fields))) return;
+    // Say so now rather than at payment if there aren't enough seats left.
+    const seatsLeft = workshop?.seatsLeft ?? null;
+    if (stepId === "extras" && seatsLeft !== null && people > seatsLeft) {
+      form.setError("participants", {
+        message: `Only ${seatsLeft} ${seatsLeft === 1 ? "seat is" : "seats are"} left.`,
+      });
+      return;
+    }
+    if (workshop && stepId === "extras") {
+      // One card per person; the first starts as the booker's name.
+      const current = form.getValues("attendees") ?? [];
+      form.setValue(
+        "attendees",
+        Array.from(
+          { length: people },
+          (_, i) =>
+            current[i] ?? {
+              name: i === 0 ? form.getValues("fullName").trim() : "",
+              category: defaultCategory(workshop.prices) ?? "regular",
+              idPath: "",
+            },
+        ),
+      );
+    }
+    goTo(step + 1);
   }
 
   /** The step that shows the first of these fields (to reveal an error). */
@@ -260,7 +360,7 @@ export function BookingWizard({
             title: `${service.name} · ${businessName}`,
             startAt,
             endAt,
-            location: location || null,
+            location: (workshop ? workshop.location : location) || null,
           });
         }
         window.location.assign(result.data.redirectUrl);
@@ -271,7 +371,7 @@ export function BookingWizard({
         // Someone else just took that time: back to the calendar with fresh slots.
         form.setValue("startAt", "");
         setReloadKey((k) => k + 1);
-        goTo(2);
+        if (at("when") !== -1) goTo(at("when"));
         toast.error(result.error);
         return;
       }
@@ -281,6 +381,7 @@ export function BookingWizard({
   }
 
   const last = step === STEPS.length - 1;
+  const stepId = STEPS[step]!.id;
 
   return (
     <form
@@ -401,16 +502,18 @@ export function BookingWizard({
                   </FieldGroup>
                 )}
 
-                {step === 1 && workshop && service && (
+                {stepId === "package" && workshop && service && (
                   <WorkshopPayment
                     form={form}
                     service={service}
+                    people={people}
+                    packageCents={attendeesCents(people_, workshop.prices)}
                     vatPercent={vatPercent}
                     depositPercent={depositPercent}
                   />
                 )}
 
-                {step === 1 && !workshop && (
+                {stepId === "package" && !workshop && (
                   <Controller
                     control={form.control}
                     name="serviceId"
@@ -489,7 +592,7 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 1 && offeredAddOns.length > 0 && (
+                {stepId === "package" && offeredAddOns.length > 0 && (
                   <Controller
                     control={form.control}
                     name="addOnIds"
@@ -555,7 +658,7 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 2 && service && (
+                {stepId === "when" && service && (
                   <Controller
                     control={form.control}
                     name="startAt"
@@ -581,22 +684,33 @@ export function BookingWizard({
                   />
                 )}
 
-                {step === 3 && (
+                {stepId === "extras" && (
                   <FieldGroup>
-                    <TextField
-                      control={form.control}
-                      name="location"
-                      label="Location (optional)"
-                      placeholder="Our studio, a venue, or an address"
-                      maxLength={300}
-                    />
-                    <TextField
-                      control={form.control}
-                      name="participants"
-                      label="Number of people"
-                      inputMode="numeric"
-                      className="max-w-40"
-                    />
+                    {/* A workshop's place is set by the studio. */}
+                    {!workshop && (
+                      <TextField
+                        control={form.control}
+                        name="location"
+                        label="Location (optional)"
+                        placeholder="Our studio, a venue, or an address"
+                        maxLength={300}
+                      />
+                    )}
+                    {workshop && service ? (
+                      <PeoplePicker
+                        form={form}
+                        prices={workshop.prices}
+                        seatsLeft={workshop.seatsLeft}
+                      />
+                    ) : (
+                      <TextField
+                        control={form.control}
+                        name="participants"
+                        label="Number of people"
+                        inputMode="numeric"
+                        className="max-w-40"
+                      />
+                    )}
                     <TextAreaField
                       control={form.control}
                       name="specialRequests"
@@ -607,48 +721,100 @@ export function BookingWizard({
                   </FieldGroup>
                 )}
 
+                {stepId === "attendees" && workshop && (
+                  <div className="space-y-5">
+                    <p className="text-muted-foreground">
+                      Everyone who joins gets a certificate. Write each name exactly as it should be
+                      printed, and pick their price.
+                    </p>
+                    {people_.map((person, i) => (
+                      <AttendeeCard
+                        key={i}
+                        form={form}
+                        index={i}
+                        category={person.category}
+                        prices={workshop.prices}
+                        earlyBird={workshop.earlyBird}
+                        // Early-bird places already picked by the others on this sign-up.
+                        earlyBirdTakenHere={
+                          people_.filter((p, j) => j !== i && p.category === "early_bird").length
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+
                 {last && service && startAt && (
                   <div className="space-y-6">
                     <dl className="divide-y rounded-3xl border bg-card">
                       {workshop ? (
                         <ReviewRow
                           label="Workshop"
-                          value={`${service.name} · ${payInFull ? "paying in full" : "paying half now"}`}
-                          onEdit={() => goTo(1)}
+                          value={`${service.name} · ${people} ${people === 1 ? "person" : "people"} · ${payInFull ? "paying in full" : "paying half now"}`}
+                          onEdit={() => goTo(at("package"))}
                         />
                       ) : (
-                        <ReviewRow label="Package" value={service.name} onEdit={() => goTo(1)} />
+                        <ReviewRow
+                          label="Package"
+                          value={service.name}
+                          onEdit={() => goTo(at("package"))}
+                        />
+                      )}
+                      {workshop && (
+                        <ReviewRow
+                          label={people > 1 ? "Names for certificates" : "Name for the certificate"}
+                          value={people_
+                            .map((p) => `${p.name} (${categoryName(p.category)})`)
+                            .join(", ")}
+                          onEdit={() => goTo(at("attendees"))}
+                        />
                       )}
                       {chosenAddOns.length > 0 && (
                         <ReviewRow
                           label="Add-ons"
                           value={chosenAddOns.map((a) => a.name).join(", ")}
-                          onEdit={() => goTo(1)}
+                          onEdit={() => goTo(at("package"))}
                         />
                       )}
                       <ReviewRow
                         label="When"
                         value={formatBookingWhen(startAt, endAt)}
-                        onEdit={() => goTo(2)}
+                        onEdit={workshop ? undefined : () => goTo(at("when"))}
                       />
                       <ReviewRow
                         label="Contact"
                         value={`${form.getValues("fullName")} · ${form.getValues("email")} · ${form.getValues("phone")}`}
                         onEdit={() => goTo(0)}
                       />
-                      {form.getValues("location") && (
+                      {workshop?.location && (
+                        <ReviewRow label="Location" value={workshop.location} />
+                      )}
+                      {!workshop && form.getValues("location") && (
                         <ReviewRow
                           label="Location"
                           value={form.getValues("location")!}
-                          onEdit={() => goTo(3)}
+                          onEdit={() => goTo(at("extras"))}
                         />
                       )}
                     </dl>
                     <div className="rounded-3xl bg-accent p-5 text-accent-foreground">
-                      <div className="flex justify-between gap-4">
-                        <span>{workshop ? "Workshop price" : "Package price"}</span>
-                        <span className="font-bold">{formatPeso(service.price_cents)}</span>
-                      </div>
+                      {workshop ? (
+                        people_.map((p, i) => (
+                          <div key={i} className="mt-1 flex justify-between gap-4 first:mt-0">
+                            <span>
+                              {p.name || `Person ${i + 1}`} · {categoryName(p.category)}
+                            </span>
+                            <span className="font-bold">
+                              {formatPeso(workshop.prices[p.category] ?? 0)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex justify-between gap-4">
+                          <span>Package price</span>
+                          <span className="font-bold">{formatPeso(service.price_cents)}</span>
+                        </div>
+                      )}
                       {chosenAddOns.map((a) => (
                         <div key={a.id} className="mt-1 flex justify-between gap-4">
                           <span>{a.name}</span>
@@ -689,8 +855,10 @@ export function BookingWizard({
                           )}
                           {workshop && <p className="mt-3 text-sm">{WORKSHOP_REFUND_RULE}</p>}
                           <p className="mt-3 text-sm">
-                            We hold this time for {holdMinutes} minutes while you pay securely with
-                            PayMongo (GCash, card and more).
+                            We hold{" "}
+                            {workshop ? (people > 1 ? "your seats" : "your seat") : "this time"} for{" "}
+                            {holdMinutes} minutes while you pay securely with PayMongo (GCash, card
+                            and more).
                           </p>
                         </>
                       )}
@@ -715,6 +883,15 @@ export function BookingWizard({
           deposit={deposit}
           step={step}
           onGoTo={submitting ? undefined : goTo}
+          packageStep={at("package")}
+          whenStep={workshop ? null : at("when")}
+          priceText={
+            workshop
+              ? `${people} ${people === 1 ? "person" : "people"} · ${formatPeso(
+                  attendeesCents(people_, workshop.prices),
+                )}`
+              : null
+          }
         />
       </div>
 
@@ -767,7 +944,7 @@ function StepTracker({
   onGoTo,
   disabled,
 }: {
-  steps: typeof PACKAGE_STEPS;
+  steps: Step[];
   step: number;
   onGoTo: (step: number) => void;
   disabled: boolean;
@@ -821,16 +998,27 @@ function StepTracker({
   );
 }
 
-function ReviewRow({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
+function ReviewRow({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: string;
+  /** Omitted for details the client can't change (a workshop's time). */
+  onEdit?: () => void;
+}) {
   return (
     <div className="flex items-start justify-between gap-4 p-4">
       <div className="min-w-0">
         <dt className="text-sm text-muted-foreground">{label}</dt>
         <dd className="font-semibold break-words">{value}</dd>
       </div>
-      <Button type="button" variant="link" className="shrink-0 px-0" onClick={onEdit}>
-        Edit<span className="sr-only"> {label.toLowerCase()}</span>
-      </Button>
+      {onEdit && (
+        <Button type="button" variant="link" className="shrink-0 px-0" onClick={onEdit}>
+          Edit<span className="sr-only"> {label.toLowerCase()}</span>
+        </Button>
+      )}
     </div>
   );
 }
@@ -839,17 +1027,22 @@ function ReviewRow({ label, value, onEdit }: { label: string; value: string; onE
 function WorkshopPayment({
   form,
   service,
+  people,
+  packageCents,
   vatPercent,
   depositPercent,
 }: {
   form: UseFormReturn<Values, unknown, Output>;
   service: WizardService;
+  people: number;
+  /** The workshop price for everyone on this sign-up (by category), before VAT. */
+  packageCents: number;
   vatPercent: number;
   depositPercent: number;
 }) {
   const totals = (payInFull: boolean) =>
     bookingTotals({
-      packageCents: service.price_cents,
+      packageCents,
       addOnsCents: 0,
       vatPercent,
       fixedDepositCents: null,
@@ -865,7 +1058,10 @@ function WorkshopPayment({
       <div className="rounded-2xl border bg-card p-4">
         <p className="font-heading text-lg font-semibold">{service.name}</p>
         {service.summary && <p className="text-sm text-muted-foreground">{service.summary}</p>}
-        <p className="mt-1 font-bold">
+        <p className="mt-1 text-sm text-muted-foreground">
+          {people} {people === 1 ? "person" : "people"} · {formatPeso(packageCents)} before VAT
+        </p>
+        <p className="font-bold">
           {formatPeso(totals(true).total)}
           {vatPercent > 0 && (
             <span className="font-normal text-muted-foreground"> incl. {vatPercent}% VAT</span>
@@ -932,5 +1128,187 @@ function WorkshopPayment({
         )}
       />
     </FieldGroup>
+  );
+}
+
+/** Workshop "Who's coming": 1 to 3 people; more than the seats left is disabled. */
+function PeoplePicker({
+  form,
+  prices,
+  seatsLeft,
+}: {
+  form: UseFormReturn<Values, unknown, Output>;
+  prices: WorkshopPrices;
+  seatsLeft: number | null;
+}) {
+  const priceLine = ATTENDEE_CATEGORIES.filter((c) => prices[c.value] !== null)
+    .map((c) => `${c.label} ${formatPeso(prices[c.value]!)}`)
+    .join(" · ");
+  return (
+    <Controller
+      control={form.control}
+      name="participants"
+      render={({ field, fieldState }) => (
+        <Field data-invalid={fieldState.invalid}>
+          <p className="font-semibold">How many people are joining?</p>
+          <p className="text-sm text-muted-foreground">
+            Per person: {priceLine} · up to {WORKSHOP_MAX_PEOPLE} per sign-up
+            {seatsLeft !== null && ` · ${seatsLeft} ${seatsLeft === 1 ? "seat" : "seats"} left`}
+          </p>
+          <div
+            role="radiogroup"
+            aria-label="How many people are joining"
+            className="grid gap-3 sm:grid-cols-3"
+          >
+            {Array.from({ length: WORKSHOP_MAX_PEOPLE }, (_, i) => i + 1).map((n) => {
+              const checked = field.value === String(n);
+              const full = seatsLeft !== null && n > seatsLeft;
+              return (
+                <label
+                  key={n}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-card p-4 transition-all duration-200 hover:border-primary",
+                    "has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+                    checked && "border-primary bg-accent/50 ring-1 ring-primary",
+                    full && "cursor-not-allowed opacity-50 hover:border-border",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name={field.name}
+                    value={n}
+                    checked={checked}
+                    disabled={full}
+                    onChange={() => field.onChange(String(n))}
+                    className="sr-only"
+                  />
+                  <span className="font-semibold">{n === 1 ? "Just me" : `${n} people`}</span>
+                </label>
+              );
+            })}
+          </div>
+          {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+        </Field>
+      )}
+    />
+  );
+}
+
+const categoryName = (category: AttendeeCategory) =>
+  ATTENDEE_CATEGORIES.find((c) => c.value === category)!.label;
+
+/**
+ * One person on a workshop sign-up: their name for the certificate and their
+ * price category. Early bird can run out (date or places); a student uploads
+ * an ID that the studio checks.
+ */
+function AttendeeCard({
+  form,
+  index,
+  category,
+  prices,
+  earlyBird,
+  earlyBirdTakenHere,
+}: {
+  form: UseFormReturn<Values, unknown, Output>;
+  index: number;
+  category: AttendeeCategory;
+  prices: WorkshopPrices;
+  earlyBird: { open: boolean; left: number | null; until: string | null };
+  earlyBirdTakenHere: number;
+}) {
+  const earlyBirdLeft = earlyBird.left === null ? null : earlyBird.left - earlyBirdTakenHere;
+  const options = ATTENDEE_CATEGORIES.filter((c) => prices[c.value] !== null).map((c) => {
+    if (c.value === "early_bird") {
+      const open = earlyBird.open && (earlyBirdLeft === null || earlyBirdLeft > 0);
+      const note = !open
+        ? "No longer available"
+        : [
+            earlyBird.until && `Until ${formatEarlyBirdUntil(earlyBird.until)}`,
+            earlyBirdLeft !== null && `${earlyBirdLeft} left`,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+      return { ...c, disabled: !open, note };
+    }
+    if (c.value === "student") return { ...c, disabled: false, note: "Needs a valid student ID" };
+    return { ...c, disabled: false, note: "" };
+  });
+
+  return (
+    <fieldset className="space-y-4 rounded-3xl border bg-card p-4 sm:p-5">
+      <legend className="px-1 font-heading text-lg font-semibold">Person {index + 1}</legend>
+      <TextField
+        control={form.control}
+        name={`attendees.${index}.name`}
+        label="Full name (for the certificate)"
+        description={index === 0 ? "That's you, unless you're signing up someone else." : undefined}
+        autoComplete={index === 0 ? "name" : "off"}
+        maxLength={120}
+      />
+      <Controller
+        control={form.control}
+        name={`attendees.${index}.category`}
+        render={({ field }) => (
+          <div
+            role="radiogroup"
+            aria-label={`Person ${index + 1}: price category`}
+            className="grid gap-3 sm:grid-cols-3"
+          >
+            {options.map((o) => {
+              const checked = field.value === o.value;
+              return (
+                <label
+                  key={o.value}
+                  className={cn(
+                    "flex cursor-pointer flex-col gap-0.5 rounded-2xl border bg-background p-3 transition-all duration-200 hover:border-primary",
+                    "has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+                    checked && "border-primary bg-accent/50 ring-1 ring-primary",
+                    o.disabled && "cursor-not-allowed opacity-50 hover:border-border",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name={field.name}
+                    value={o.value}
+                    checked={checked}
+                    disabled={o.disabled}
+                    onChange={() => field.onChange(o.value)}
+                    className="sr-only"
+                  />
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="font-semibold">{o.label}</span>
+                    <span className="font-heading font-semibold">
+                      {formatPeso(prices[o.value]!)}
+                    </span>
+                  </span>
+                  {o.note && <span className="text-xs text-muted-foreground">{o.note}</span>}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      />
+      {category === "student" && (
+        <Controller
+          control={form.control}
+          name={`attendees.${index}.idPath`}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <StudentIdUpload
+                value={field.value ?? ""}
+                onChange={(path) => {
+                  field.onChange(path);
+                  void form.trigger(`attendees.${index}.idPath`);
+                }}
+                invalid={fieldState.invalid}
+                label={`Person ${index + 1}: student ID photo`}
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+      )}
+    </fieldset>
   );
 }

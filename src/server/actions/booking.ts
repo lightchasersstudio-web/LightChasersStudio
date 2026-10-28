@@ -3,6 +3,7 @@
 import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
 import type { BookingSummary } from "@/lib/booking/booking-summary";
 import { bookingTotals } from "@/lib/booking/pricing";
+import { attendeesCents, workshopPrices } from "@/lib/booking/workshop";
 import { getPublicEnv } from "@/lib/env";
 import { createCheckoutSession, paymongoConfigured } from "@/lib/payments/paymongo";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -48,14 +49,20 @@ export async function submitBooking(
       const [{ data: service }, { data: settings }, { data: addOns }] = await Promise.all([
         supabase
           .from("services")
-          .select("price_cents, deposit_cents")
+          .select(
+            "price_cents, deposit_cents, category, workshop_regular_enabled, workshop_early_bird_enabled, workshop_early_bird_price_cents, workshop_student_enabled, workshop_student_price_cents",
+          )
           .eq("id", v.serviceId)
           .maybeSingle(),
         supabase.from("business_settings").select("default_deposit_percent, vat_percent").single(),
         supabase.from("add_ons").select("price_cents").in("id", v.addOnIds),
       ]);
       const { deposit } = bookingTotals({
-        packageCents: service?.price_cents ?? 0,
+        // Workshops are priced per person, by category.
+        packageCents:
+          service?.category === "workshop"
+            ? attendeesCents((v.attendees ?? []).slice(0, v.participants), workshopPrices(service))
+            : (service?.price_cents ?? 0),
         addOnsCents: (addOns ?? []).reduce((sum, a) => sum + a.price_cents, 0),
         vatPercent: settings?.vat_percent ?? 0,
         fixedDepositCents: service?.deposit_cents ?? null,
@@ -84,13 +91,35 @@ export async function submitBooking(
         p_messenger: v.messenger ?? undefined,
         p_add_on_ids: v.addOnIds,
         p_pay_in_full: v.payInFull,
+        // Workshops: names for the certificates (only as many as are coming).
+        // Workshops: each person's certificate name, category and student ID.
+        p_attendees:
+          v.payInFull !== undefined
+            ? (v.attendees ?? []).slice(0, v.participants).map((a) => ({
+                name: a.name,
+                category: a.category,
+                id_path: a.idPath || null,
+              }))
+            : undefined,
       })
       .single();
     if (error) {
       const code = bookingErrorCode(error.message);
       if (!code) throw error;
       const field =
-        code === "slot_unavailable" ? "startAt" : code === "add_on_unavailable" ? "addOnIds" : null;
+        code === "slot_unavailable"
+          ? "startAt"
+          : code === "add_on_unavailable"
+            ? "addOnIds"
+            : code === "workshop_full" || code === "invalid_participants"
+              ? "participants"
+              : code === "invalid_attendees" ||
+                  code === "category_unavailable" ||
+                  code === "student_id_required" ||
+                  code === "early_bird_closed" ||
+                  code === "early_bird_full"
+                ? "attendees"
+                : null;
       return fail(BOOKING_ERRORS[code]!, field ? { [field]: [BOOKING_ERRORS[code]!] } : undefined);
     }
 

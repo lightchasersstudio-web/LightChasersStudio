@@ -14,6 +14,7 @@ import {
   bookingVatSchema,
   deleteBookingSchema,
   recordPaymentSchema,
+  reviewStudentIdSchema,
 } from "@/lib/validations/admin-booking";
 import { CONSENT_VERSION } from "@/lib/validations/booking";
 import { adminAction, audit, PG, revalidate, TAGS } from "@/server/admin-action";
@@ -350,6 +351,29 @@ export async function deleteBooking(input: unknown): Promise<ActionResult> {
       contact_name: booking.contact_name,
       price_cents: booking.price_cents,
       start_at: booking.start_at,
+    });
+    revalidate(TAGS.bookings);
+    return ok(undefined);
+  });
+}
+
+export async function reviewStudentId(input: unknown): Promise<ActionResult> {
+  return adminAction(reviewStudentIdSchema, input, async ({ attendeeId, status }, ctx) => {
+    const { data, error } = await ctx.supabase
+      .from("booking_attendees")
+      .update({
+        id_status: status,
+        id_reviewed_at: new Date().toISOString(),
+        id_reviewed_by: ctx.admin.userId,
+      })
+      .eq("id", attendeeId)
+      .eq("category", "student")
+      .select("booking_id, full_name")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return fail("That student isn't on this booking any more.");
+    await audit(ctx, `booking.student_id_${status}`, "booking", data.booking_id, {
+      attendee: data.full_name,
     });
     revalidate(TAGS.bookings);
     return ok(undefined);

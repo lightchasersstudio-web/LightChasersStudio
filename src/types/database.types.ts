@@ -191,6 +191,56 @@ export type Database = {
           },
         ]
       }
+      booking_attendees: {
+        Row: {
+          booking_id: string
+          category: Database["public"]["Enums"]["attendee_category"]
+          created_at: string
+          full_name: string
+          id: string
+          id_reviewed_at: string | null
+          id_reviewed_by: string | null
+          id_status: Database["public"]["Enums"]["id_review_status"] | null
+          position: number
+          price_cents: number
+          student_id_path: string | null
+        }
+        Insert: {
+          booking_id: string
+          category: Database["public"]["Enums"]["attendee_category"]
+          created_at?: string
+          full_name: string
+          id?: string
+          id_reviewed_at?: string | null
+          id_reviewed_by?: string | null
+          id_status?: Database["public"]["Enums"]["id_review_status"] | null
+          position: number
+          price_cents: number
+          student_id_path?: string | null
+        }
+        Update: {
+          booking_id?: string
+          category?: Database["public"]["Enums"]["attendee_category"]
+          created_at?: string
+          full_name?: string
+          id?: string
+          id_reviewed_at?: string | null
+          id_reviewed_by?: string | null
+          id_status?: Database["public"]["Enums"]["id_review_status"] | null
+          position?: number
+          price_cents?: number
+          student_id_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_attendees_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           admin_notes: string | null
@@ -614,6 +664,17 @@ export type Database = {
           sort_order: number
           summary: string | null
           updated_at: string
+          workshop_early_bird_enabled: boolean
+          workshop_early_bird_price_cents: number | null
+          workshop_early_bird_seats: number | null
+          workshop_early_bird_until: string | null
+          workshop_ends_at: string | null
+          workshop_location: string | null
+          workshop_regular_enabled: boolean
+          workshop_seats: number | null
+          workshop_starts_at: string | null
+          workshop_student_enabled: boolean
+          workshop_student_price_cents: number | null
         }
         Insert: {
           category: Database["public"]["Enums"]["service_category"]
@@ -631,6 +692,17 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_early_bird_enabled?: boolean
+          workshop_early_bird_price_cents?: number | null
+          workshop_early_bird_seats?: number | null
+          workshop_early_bird_until?: string | null
+          workshop_ends_at?: string | null
+          workshop_location?: string | null
+          workshop_regular_enabled?: boolean
+          workshop_seats?: number | null
+          workshop_starts_at?: string | null
+          workshop_student_enabled?: boolean
+          workshop_student_price_cents?: number | null
         }
         Update: {
           category?: Database["public"]["Enums"]["service_category"]
@@ -648,6 +720,17 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_early_bird_enabled?: boolean
+          workshop_early_bird_price_cents?: number | null
+          workshop_early_bird_seats?: number | null
+          workshop_early_bird_until?: string | null
+          workshop_ends_at?: string | null
+          workshop_location?: string | null
+          workshop_regular_enabled?: boolean
+          workshop_seats?: number | null
+          workshop_starts_at?: string | null
+          workshop_student_enabled?: boolean
+          workshop_student_price_cents?: number | null
         }
         Relationships: []
       }
@@ -733,6 +816,7 @@ export type Database = {
           p_location?: string
           p_messenger?: string
           p_participants?: number
+          p_attendees?: Json
           p_pay_in_full?: boolean
           p_phone: string
           p_preferred_contact: Database["public"]["Enums"]["contact_method"]
@@ -747,6 +831,13 @@ export type Database = {
           reference_code: string
           status: Database["public"]["Enums"]["booking_status"]
         }[]
+      }
+      booking_holds_place: {
+        Args: {
+          p_hold_expires_at: string
+          p_status: Database["public"]["Enums"]["booking_status"]
+        }
+        Returns: boolean
       }
       delete_booking: {
         Args: { p_booking_id: string }
@@ -786,9 +877,12 @@ export type Database = {
         Returns: undefined
       }
       staff_add_on_minutes: { Args: { p_add_ons: Json }; Returns: number }
+      workshop_early_birds_taken: { Args: { p_service_id: string }; Returns: number }
+      workshop_seats_taken: { Args: { p_service_id: string }; Returns: number }
     }
     Enums: {
       admin_role: "owner" | "admin"
+      attendee_category: "regular" | "early_bird" | "student"
       booking_status:
         | "pending_payment"
         | "pending"
@@ -798,6 +892,7 @@ export type Database = {
         | "declined"
         | "expired"
       contact_method: "email" | "phone" | "sms" | "messenger" | "viber"
+      id_review_status: "pending" | "accepted" | "rejected"
       payment_status: "pending" | "paid" | "failed" | "expired" | "refunded"
       service_category:
         | "wedding"
@@ -934,6 +1029,7 @@ export const Constants = {
   public: {
     Enums: {
       admin_role: ["owner", "admin"],
+      attendee_category: ["regular", "early_bird", "student"],
       booking_status: [
         "pending_payment",
         "pending",
@@ -944,6 +1040,7 @@ export const Constants = {
         "expired",
       ],
       contact_method: ["email", "phone", "sms", "messenger", "viber"],
+      id_review_status: ["pending", "accepted", "rejected"],
       payment_status: ["pending", "paid", "failed", "expired", "refunded"],
       service_category: [
         "wedding",

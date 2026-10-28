@@ -1155,15 +1155,18 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     const WORKSHOP = `select * from public.create_booking(
       p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
       p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
-      p_start_at => $3, p_pay_in_full => $4)`;
+      p_start_at => $3, p_pay_in_full => $4,
+      p_attendees => '[{"name": "Ana Cruz", "category": "regular"}]'::jsonb)`;
 
     it("charges half or the full price, and needs the choice", async () => {
       await inRollback(async (c) => {
         const s = await setupFixtures(c);
         // A fixed package deposit is ignored for workshops.
         const { rows } = await c.query<{ id: string }>(`
-          insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents)
-          values ('Test Workshop', 'test-workshop', 'workshop', null, 100001, 5000) returning id`);
+          insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents,
+            workshop_starts_at, workshop_ends_at)
+          values ('Test Workshop', 'test-workshop', 'workshop', null, 100001, 5000,
+            '${manila(152, 9).toISOString()}', '${manila(152, 12).toISOString()}') returning id`);
         const workshop = rows[0]!.id;
         await actAs(c, "service_role");
 
@@ -1189,12 +1192,11 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         expect(full.deposit_cents).toBe(100001);
 
         expect(
-          await expectFailure(c, CREATE, [
-            "Cy",
+          await expectFailure(c, WORKSHOP, [
             "cy@example.com",
-            "09171234567",
             workshop,
             manila(152, 12).toISOString(),
+            null,
           ]),
         ).toMatch(/payment_option_required/);
 
@@ -1208,6 +1210,360 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           ])
         ).rows[0]!;
         expect(pkg.deposit_cents).toBe(105000);
+      });
+    });
+  });
+
+  describe("workshop schedule (admin sets the time and place)", () => {
+    const SIGN_UP = `select * from public.create_booking(
+      p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+      p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+      p_start_at => now(), p_participants => $3, p_pay_in_full => true,
+      p_location => 'My house', p_attendees => $4::jsonb)`;
+
+    /** Certificate names for n people (none needed for one). */
+    type Person = { name: string; category?: string; id_path?: string | null };
+    /** The attendees as create_booking takes them (JSON); n regular people by default. */
+    const names = (n: number | Person[]) =>
+      JSON.stringify(
+        typeof n === "number"
+          ? Array.from({ length: n }, (_, i) => ({ name: `Person ${i + 1}`, category: "regular" }))
+          : n.map((p) => ({ category: "regular", ...p })),
+      );
+
+    /** The same instant as Postgres returns it (UTC ISO). */
+    const utc = (d: Date) => new Date(d.getTime()).toISOString();
+
+    async function addWorkshop(
+      c: PoolClient,
+      opts: {
+        start?: Date | null;
+        end?: Date | null;
+        seats?: number | null;
+        location?: string | null;
+        earlyBirdUntil?: string | null;
+        earlyBirdSeats?: number | null;
+        studentPrice?: number | null;
+      } = {},
+    ) {
+      const start = opts.start === undefined ? manila(160, 13) : opts.start;
+      const end = opts.end === undefined ? manila(160, 17) : opts.end;
+      const { rows } = await c.query<{ id: string }>(
+        `insert into public.services (name, slug, category, price_cents,
+           workshop_starts_at, workshop_ends_at, workshop_seats, workshop_location,
+           workshop_early_bird_price_cents, workshop_early_bird_until, workshop_early_bird_seats,
+           workshop_student_price_cents)
+         values ('Test Workshop', 'test-workshop', 'workshop', 500000, $1, $2, $3, $4,
+           400000, $5, $6, $7) returning id`,
+        [
+          start?.toISOString() ?? null,
+          end?.toISOString() ?? null,
+          opts.seats ?? null,
+          opts.location === undefined ? "The studio" : opts.location,
+          opts.earlyBirdUntil ?? null,
+          opts.earlyBirdSeats ?? null,
+          opts.studentPrice === undefined ? 400000 : opts.studentPrice,
+        ],
+      );
+      return rows[0]!.id;
+    }
+
+    it("every sign-up takes the workshop's time, whatever time is sent", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // one shoot at a time: sign-ups must not count as shoots
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        for (const email of ["ana@example.com", "bea@example.com", "cy@example.com"]) {
+          await c.query(SIGN_UP, [email, workshop, 1, names(1)]);
+        }
+        const { rows } = await c.query<{
+          start_at: Date;
+          end_at: Date;
+          has_end_time: boolean;
+          location: string | null;
+        }>(
+          "select start_at, end_at, has_end_time, location from public.bookings where service_id = $1",
+          [workshop],
+        );
+        expect(rows).toHaveLength(3);
+        for (const r of rows) {
+          // The client's location is ignored: the workshop's own place wins.
+          expect(r.location).toBe("The studio");
+          expect(r.start_at.toISOString()).toBe(utc(manila(160, 13)));
+          expect(r.end_at.toISOString()).toBe(utc(manila(160, 17)));
+          expect(r.has_end_time).toBe(true);
+        }
+      });
+    });
+
+    it("prices the workshop per person; half or full is of that total", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // VAT 0
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const three = (await c.query(SIGN_UP, ["ana@example.com", workshop, 3, names(3)])).rows[0]!;
+        expect(three.deposit_cents).toBe(1_500_000); // 3 x 5,000.00, paid in full
+        const { rows } = await c.query<{ price_cents: number }>(
+          "select price_cents from public.bookings where id = $1",
+          [three.booking_id],
+        );
+        expect(rows[0]!.price_cents).toBe(1_500_000);
+      });
+    });
+
+    it("takes 1 to 3 people, each named for their certificate", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const fails = (people: string | null) =>
+          expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 1, people]);
+        expect(await fails(names(4))).toMatch(/invalid_participants/);
+        expect(await fails(null)).toMatch(/invalid_participants/);
+        expect(await fails(names([{ name: "Ana Cruz" }, { name: " " }]))).toMatch(
+          /invalid_attendees/,
+        );
+        expect(await fails(names([{ name: "Ana Cruz", category: "vip" }]))).toMatch(
+          /category_unavailable/,
+        );
+
+        // The count follows the names, whatever p_participants says.
+        const two = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: " Ana Cruz " }, { name: "Ben Reyes" }]),
+          ])
+        ).rows[0]!;
+        const { rows } = await c.query<{ position: number; full_name: string }>(
+          "select position, full_name from public.booking_attendees where booking_id = $1 order by position",
+          [two.booking_id],
+        );
+        expect(rows).toEqual([
+          { position: 1, full_name: "Ana Cruz" },
+          { position: 2, full_name: "Ben Reyes" },
+        ]);
+        const { rows: booking } = await c.query<{ participants: number }>(
+          "select participants from public.bookings where id = $1",
+          [two.booking_id],
+        );
+        expect(booking[0]!.participants).toBe(2);
+      });
+    });
+
+    it("prices each person by category; a student needs an uploaded ID", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // VAT 0
+        const workshop = await addWorkshop(c);
+        await c.query(
+          "insert into storage.objects (bucket_id, name) values ('student-ids', 'test-id.webp')",
+        );
+        await actAs(c, "service_role");
+        expect(
+          await expectFailure(c, SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: "Ana Cruz", category: "student", id_path: "missing.webp" }]),
+          ]),
+        ).toMatch(/student_id_required/);
+
+        const mixed = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            3,
+            names([
+              { name: "Ana Cruz" },
+              { name: "Ben Reyes", category: "early_bird" },
+              { name: "Cy Lim", category: "student", id_path: "test-id.webp" },
+            ]),
+          ])
+        ).rows[0]!;
+        expect(mixed.deposit_cents).toBe(1_300_000); // 5,000 + 4,000 + 4,000, paid in full
+        const { rows } = await c.query<{
+          category: string;
+          price_cents: number;
+          id_status: string | null;
+        }>(
+          "select category, price_cents, id_status from public.booking_attendees where booking_id = $1 order by position",
+          [mixed.booking_id],
+        );
+        expect(rows).toEqual([
+          { category: "regular", price_cents: 500_000, id_status: null },
+          { category: "early_bird", price_cents: 400_000, id_status: null },
+          { category: "student", price_cents: 400_000, id_status: "pending" },
+        ]);
+      });
+    });
+
+    it("refuses a category the admin switched off", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await c.query(
+          "update public.services set workshop_regular_enabled = false, workshop_early_bird_enabled = false where id = $1",
+          [workshop],
+        );
+        await actAs(c, "service_role");
+        for (const category of ["regular", "early_bird"]) {
+          expect(
+            await expectFailure(c, SIGN_UP, [
+              "ana@example.com",
+              workshop,
+              1,
+              names([{ name: "Ana Cruz", category }]),
+            ]),
+          ).toMatch(/category_unavailable/);
+        }
+      });
+    });
+
+    it("closes early bird after its last day or its places, and unoffered categories", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const ended = await addWorkshop(c, { earlyBirdUntil: "2020-01-31", studentPrice: null });
+        await actAs(c, "service_role");
+        const early = names([{ name: "Ana Cruz", category: "early_bird" }]);
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", ended, 1, early])).toMatch(
+          /early_bird_closed/,
+        );
+        expect(
+          await expectFailure(c, SIGN_UP, [
+            "ana@example.com",
+            ended,
+            1,
+            names([{ name: "Ana Cruz", category: "student", id_path: "x.webp" }]),
+          ]),
+        ).toMatch(/category_unavailable/);
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c, { earlyBirdSeats: 2 });
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, [
+          "ana@example.com",
+          workshop,
+          1,
+          names([{ name: "Ana Cruz", category: "early_bird" }]),
+        ]);
+        // One early-bird place left: two more can't both have it.
+        const two = names([
+          { name: "Ben Reyes", category: "early_bird" },
+          { name: "Cy Lim", category: "early_bird" },
+        ]);
+        expect(await expectFailure(c, SIGN_UP, ["ben@example.com", workshop, 2, two])).toMatch(
+          /early_bird_full/,
+        );
+        const { rows } = await c.query<{ taken: number }>(
+          "select public.workshop_early_birds_taken($1) as taken",
+          [workshop],
+        );
+        expect(rows[0]!.taken).toBe(1);
+      });
+    });
+
+    it("refuses sign-ups with no date, after it starts, or past the seats", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const noDate = await addWorkshop(c, { start: null, end: null });
+        await actAs(c, "service_role");
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", noDate, 1, names(1)])).toMatch(
+          /workshop_not_scheduled/,
+        );
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const started = await addWorkshop(c, {
+          start: new Date(Date.now() - 3_600_000),
+          end: new Date(Date.now() + 3_600_000),
+        });
+        await actAs(c, "service_role");
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", started, 1, names(1)])).toMatch(
+          /workshop_closed/,
+        );
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c, { seats: 3 });
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 2, names(2)]);
+        // Two people asked, one seat left.
+        expect(await expectFailure(c, SIGN_UP, ["bea@example.com", workshop, 2, names(2)])).toMatch(
+          /workshop_full/,
+        );
+        await c.query(SIGN_UP, ["bea@example.com", workshop, 1, names(1)]);
+        const { rows } = await c.query<{ taken: number }>(
+          "select public.workshop_seats_taken($1) as taken",
+          [workshop],
+        );
+        expect(rows[0]!.taken).toBe(3);
+        expect(await expectFailure(c, SIGN_UP, ["cy@example.com", workshop, 1, names(1)])).toMatch(
+          /workshop_full/,
+        );
+      });
+    });
+
+    it("blocks shoots during the workshop, on the calendar and in create_booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 1, names(1)]);
+
+        expect(
+          await expectFailure(c, CREATE, [
+            "Bea",
+            "bea@example.com",
+            "09171234567",
+            s.portrait,
+            manila(160, 14).toISOString(),
+          ]),
+        ).toMatch(/slot_unavailable/);
+        // Before the workshop (ends with the 30-min buffer at 12:00) is fine.
+        await book(c, s.portrait, manila(160, 10, 30), "cy@example.com");
+        // Staff can still book during it (the sign-up doesn't count as a shoot).
+        await adminBook(c, s.portrait, manila(160, 15));
+
+        await actAs(c, "anon");
+        const { rows } = await c.query<{ start_at: Date; blocked_until: Date }>(
+          "select * from public.get_busy_ranges($1, $2)",
+          [manila(160, 0).toISOString(), manila(161, 0).toISOString()],
+        );
+        const ranges = rows.map((r) => [r.start_at.toISOString(), r.blocked_until.toISOString()]);
+        // The workshop once (capacity 1), not once per sign-up; plus the two shoots.
+        expect(ranges.filter(([a]) => a === utc(manila(160, 13)))).toEqual([
+          [utc(manila(160, 13)), utc(manila(160, 17))],
+        ]);
+        expect(ranges).toHaveLength(3);
+      });
+    });
+
+    it("moving the workshop (time or place) moves its open sign-ups", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const { booking_id } = (await c.query(SIGN_UP, ["ana@example.com", workshop, 1, names(1)]))
+          .rows[0]!;
+        await c.query(
+          "update public.services set workshop_starts_at = $2, workshop_ends_at = $3 where id = $1",
+          [workshop, manila(170, 9).toISOString(), manila(170, 12).toISOString()],
+        );
+        await c.query("update public.services set workshop_location = 'New venue' where id = $1", [
+          workshop,
+        ]);
+        const { rows } = await c.query<{
+          start_at: Date;
+          blocked_until: Date;
+          location: string | null;
+        }>("select start_at, blocked_until, location from public.bookings where id = $1", [
+          booking_id,
+        ]);
+        expect(rows[0]!.location).toBe("New venue");
+        expect(rows[0]!.start_at.toISOString()).toBe(utc(manila(170, 9)));
+        expect(rows[0]!.blocked_until.toISOString()).toBe(utc(manila(170, 12)));
       });
     });
   });
