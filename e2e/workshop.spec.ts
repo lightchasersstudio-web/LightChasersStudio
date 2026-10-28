@@ -52,11 +52,11 @@ test("sign up, pay in full, and the admin sees the half refund due", async ({ pa
   await names.nth(1).fill("E2E Guest");
   // A student must upload an ID; switch back to Regular instead.
   const person2 = page.getByRole("radiogroup", { name: "Person 2: price category" });
-  await person2.getByText("Student").click();
+  await person2.getByText("Student", { exact: true }).click();
   await expect(page.getByRole("button", { name: "Upload ID" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Upload a photo of their student ID.")).toBeVisible();
-  await person2.getByText("Regular").click();
+  await person2.getByText("Regular", { exact: true }).click();
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Payment: the refund rule must be accepted.
