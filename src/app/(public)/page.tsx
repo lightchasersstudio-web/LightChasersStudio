@@ -11,6 +11,7 @@ import { ReviewsSection } from "@/components/public/reviews-section";
 import { SectionHeading } from "@/components/public/section-heading";
 import { ServiceCard } from "@/components/public/service-card";
 import { BOOK_HREF } from "@/components/public/site-nav";
+import { WorkshopPromo } from "@/components/public/workshop-promo";
 import { Reveal, RevealItem, RevealList } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { SERVICE_CATEGORIES } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import {
+  getActiveWorkshop,
   getPublicSettings,
   listActiveServices,
   listFeaturedPhotos,
@@ -46,11 +48,12 @@ const HOW_IT_WORKS = [
 const PACKAGE_REEL_MIN = 5;
 
 export default async function HomePage() {
-  const [settings, services, featured, portfolio] = await Promise.all([
+  const [settings, services, featured, portfolio, workshop] = await Promise.all([
     getPublicSettings(),
     listActiveServices(),
     listFeaturedPhotos(9),
     listPortfolio(),
+    getActiveWorkshop(),
   ]);
   // One highlight reel per kind of shoot, newest-first up to 8 photos each, followed
   // by its own reel for any package with enough photos linked to it (e.g. Wedding Day).
@@ -103,6 +106,9 @@ export default async function HomePage() {
     };
   });
   const highlights = featured.slice(3, 9).length >= 3 ? featured.slice(3, 9) : featured.slice(0, 6);
+  // Upright photos suit the workshop banner's polaroids best.
+  const upright = portfolio.filter((p) => (p.height ?? 0) > (p.width ?? 0));
+  const workshopPhotos = (upright.length >= 2 ? upright : portfolio).slice(0, 2);
 
   return (
     <>
@@ -300,6 +306,14 @@ export default async function HomePage() {
           </Button>
         </Reveal>
       </section>
+
+      {workshop && (
+        <WorkshopPromo
+          workshop={workshop}
+          photos={workshopPhotos}
+          vatPercent={settings.vat_percent}
+        />
+      )}
 
       <ReviewsSection className="pt-0" />
 
