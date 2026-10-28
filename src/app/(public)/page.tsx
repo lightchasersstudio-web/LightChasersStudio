@@ -148,6 +148,16 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* Workshop sign-up */}
+      {workshop && (
+        <WorkshopPromo
+          workshop={workshop}
+          photos={workshopPhotos}
+          vatPercent={settings.vat_percent}
+          className="pt-12 pb-0"
+        />
+      )}
+
       {/* Highlight reels */}
       {stories.length > 0 && (
         <section aria-labelledby="stories" className="mx-auto max-w-6xl px-4 pt-12 sm:px-6">
@@ -306,14 +316,6 @@ export default async function HomePage() {
           </Button>
         </Reveal>
       </section>
-
-      {workshop && (
-        <WorkshopPromo
-          workshop={workshop}
-          photos={workshopPhotos}
-          vatPercent={settings.vat_percent}
-        />
-      )}
 
       <ReviewsSection className="pt-0" />
 

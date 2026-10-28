@@ -7,6 +7,7 @@ import { Reveal } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { publicImageUrl } from "@/lib/storage";
+import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
 import type { PublicPhoto, PublicService } from "@/server/queries/public";
 
@@ -23,14 +24,19 @@ export function WorkshopPromo({
   workshop,
   photos,
   vatPercent,
+  className,
 }: {
   workshop: PublicService;
   photos: PublicPhoto[];
   vatPercent: number;
+  className?: string;
 }) {
   const [back, front] = photos;
   return (
-    <section aria-labelledby="workshop-promo" className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
+    <section
+      aria-labelledby="workshop-promo"
+      className={cn("mx-auto max-w-6xl px-4 pb-20 sm:px-6", className)}
+    >
       <Reveal className="relative grid items-center gap-10 overflow-hidden rounded-[2rem] bg-primary p-6 text-primary-foreground sm:p-10 md:grid-cols-[1.2fr_1fr] lg:p-14">
         {/* Soft glow + sparkles, decoration only. */}
         <span
