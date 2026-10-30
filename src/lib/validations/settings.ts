@@ -43,6 +43,7 @@ export const bookingRulesSchema = z
     slotIntervalMinutes: z.enum(["15", "30", "60"]).transform(Number),
     bufferMinutes: intString(0, 480),
     defaultDepositPercent: intString(0, 100),
+    vatPercent: intString(0, 50),
     holdMinutes: intString(5, 120),
     maxConcurrentBookings: intString(1, 10),
   })
@@ -52,6 +53,7 @@ export const bookingRulesSchema = z
     slot_interval_minutes: v.slotIntervalMinutes,
     buffer_minutes: v.bufferMinutes,
     default_deposit_percent: v.defaultDepositPercent,
+    vat_percent: v.vatPercent,
     hold_minutes: v.holdMinutes,
     max_concurrent_bookings: v.maxConcurrentBookings,
   }));

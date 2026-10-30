@@ -64,12 +64,14 @@ test("pay through the pretend checkout, then review and confirm it as admin", as
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   const review = page.locator("section", {
-    has: page.getByRole("heading", { name: /Needs your OK/ }),
+    has: page.getByRole("heading", { name: /Needs your (OK|attention)/ }),
   });
   await review.getByRole("link", { name: new RegExp(name) }).click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-  await expect(page.getByText("Needs review").first()).toBeVisible();
-  await expect(page.getByText("PayMongo")).toBeVisible();
+  await expect(
+    page.getByText("Needs review", { exact: true }).filter({ visible: true }).first(),
+  ).toBeVisible();
+  await expect(page.getByText("PayMongo").filter({ visible: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Confirm booking" }).click();
   await expect(page.getByText("Booking confirmed.")).toBeVisible();
 

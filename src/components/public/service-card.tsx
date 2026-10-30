@@ -13,7 +13,7 @@ import type { PublicService } from "@/server/queries/public";
 /** Whole card links to the package; "Book now" sits above that link and opens the wizard with it chosen. */
 export function ServiceCard({ service }: { service: PublicService }) {
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-3xl border bg-card transition-shadow duration-300 focus-within:ring-3 focus-within:ring-ring/50 hover:shadow-xl">
+    <article className="group relative flex w-full flex-col overflow-hidden rounded-3xl border bg-card transition-all duration-300 focus-within:ring-3 focus-within:ring-ring/50 hover:-translate-y-1 hover:border-terracotta/40 hover:shadow-xl motion-reduce:hover:translate-y-0">
       <div className="relative aspect-[4/3] overflow-hidden bg-accent">
         {service.cover_image_path ? (
           <Image
@@ -44,10 +44,12 @@ export function ServiceCard({ service }: { service: PublicService }) {
           <div>
             <p className="text-xs text-muted-foreground">from</p>
             <p className="font-heading text-2xl font-semibold">{formatPeso(service.price_cents)}</p>
-            <p className="flex items-center gap-1 text-sm text-muted-foreground">
-              <ClockIcon className="size-3.5" aria-hidden />
-              {formatDuration(service.duration_minutes)}
-            </p>
+            {service.duration_minutes !== null && (
+              <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                <ClockIcon className="size-3.5" aria-hidden />
+                {formatDuration(service.duration_minutes)}
+              </p>
+            )}
           </div>
           <Button asChild className="relative z-10 shrink-0">
             <Link href={bookHref(service.slug)} aria-label={`Book now: ${service.name}`}>

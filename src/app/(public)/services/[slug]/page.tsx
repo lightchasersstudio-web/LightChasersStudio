@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, CheckIcon, ClockIcon, WalletIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, WalletIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -6,19 +6,25 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { BookCta } from "@/components/public/book-cta";
-import { PlaceholderPolaroid } from "@/components/public/photo-polaroid";
+import { PackageCompare } from "@/components/public/package-compare";
+import { ReviewsSection } from "@/components/public/reviews-section";
+import { PhotoPolaroid, PlaceholderPolaroid } from "@/components/public/photo-polaroid";
 import { bookHref } from "@/components/public/site-nav";
+import { ShareButton } from "@/components/shared/share-button";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { bookingTotals } from "@/lib/booking/pricing";
 import { categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
+import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
 import {
   getActiveServiceBySlug,
   getPublicSettings,
   listActiveServices,
+  listPackagePhotos,
 } from "@/server/queries/public";
 
 // Cache Components needs at least one param to validate the route at build time.
@@ -58,17 +64,23 @@ export default function ServicePage({ params }: PageProps<"/services/[slug]">) {
 
 async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "params">) {
   const { slug } = await params;
-  const [service, settings] = await Promise.all([
+  const [service, settings, allServices] = await Promise.all([
     getActiveServiceBySlug(slug),
     getPublicSettings(),
+    listActiveServices(),
   ]);
   if (!service) notFound();
+  const photos = await listPackagePhotos(service);
 
   const inclusions = service.inclusions as string[];
-  // Same rule as create_booking(): fixed deposit, else round(price × default %).
-  const depositCents =
-    service.deposit_cents ??
-    Math.round((service.price_cents * settings.default_deposit_percent) / 100);
+  // Same rule as create_booking() for the package on its own (add-ons raise it).
+  const { deposit: depositCents } = bookingTotals({
+    packageCents: service.price_cents,
+    addOnsCents: 0,
+    vatPercent: settings.vat_percent,
+    fixedDepositCents: service.deposit_cents,
+    depositPercent: settings.default_deposit_percent,
+  });
 
   return (
     <>
@@ -113,22 +125,32 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
               <p className="mt-4 text-lg text-muted-foreground">{service.summary}</p>
             )}
 
-            <dl className="mt-6 grid grid-cols-2 gap-3">
+            <dl
+              className={cn(
+                "mt-6 grid gap-3",
+                service.duration_minutes !== null ? "grid-cols-2" : "max-w-xs",
+              )}
+            >
               <div className="rounded-2xl border bg-card p-4">
                 <dt className="text-sm text-muted-foreground">Package price</dt>
                 <dd className="font-heading text-2xl font-semibold">
                   {formatPeso(service.price_cents)}
                 </dd>
+                {settings.vat_percent > 0 && (
+                  <dd className="text-xs text-muted-foreground">+ {settings.vat_percent}% VAT</dd>
+                )}
               </div>
-              <div className="rounded-2xl border bg-card p-4">
-                <dt className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <ClockIcon className="size-3.5" aria-hidden />
-                  Session
-                </dt>
-                <dd className="font-heading text-2xl font-semibold">
-                  {formatDuration(service.duration_minutes)}
-                </dd>
-              </div>
+              {service.duration_minutes !== null && (
+                <div className="rounded-2xl border bg-card p-4">
+                  <dt className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <ClockIcon className="size-3.5" aria-hidden />
+                    Session
+                  </dt>
+                  <dd className="font-heading text-2xl font-semibold">
+                    {formatDuration(service.duration_minutes)}
+                  </dd>
+                </div>
+              )}
             </dl>
             {depositCents > 0 && (
               <p className="mt-3 flex items-start gap-2 rounded-2xl bg-accent p-4 text-sm text-accent-foreground">
@@ -140,9 +162,18 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
               </p>
             )}
 
-            <Button asChild size="lg" className="mt-6 w-full sm:w-auto">
-              <Link href={bookHref(service.slug)}>Book now</Link>
-            </Button>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button asChild size="lg" className="w-full sm:w-auto">
+                <Link href={bookHref(service.slug)}>Book now</Link>
+              </Button>
+              <ShareButton
+                path={`/services/${service.slug}`}
+                title={service.name}
+                text={service.summary ?? `${service.name} at ${settings.business_name}`}
+                size="lg"
+                className="w-full sm:w-auto"
+              />
+            </div>
           </div>
         </div>
 
@@ -177,7 +208,55 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
             )}
           </div>
         )}
+
+        {photos.length > 0 && (
+          <section aria-labelledby="package-highlights" className="mt-16">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="font-script text-2xl text-terracotta-ink">highlights</p>
+                <h2 id="package-highlights" className="text-3xl font-semibold">
+                  Moments we&apos;ve captured
+                </h2>
+              </div>
+              <Button asChild variant="outline">
+                <Link href="/portfolio">
+                  View portfolio
+                  <ArrowRightIcon aria-hidden />
+                </Link>
+              </Button>
+            </div>
+            <ul className="mt-8 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3">
+              {photos.map((photo, i) => (
+                <li
+                  key={photo.id}
+                  className={cn(
+                    i % 2 ? "rotate-1" : "-rotate-1",
+                    "transition-transform duration-300 hover:-translate-y-1 hover:rotate-0",
+                  )}
+                >
+                  <PhotoPolaroid
+                    photo={photo}
+                    caption={photo.caption}
+                    sizes="(min-width: 1024px) 33vw, 50vw"
+                    className="pb-8"
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </article>
+      <PackageCompare
+        packages={allServices.filter((s) => s.category === service.category)}
+        currentId={service.id}
+        categoryName={categoryLabel(service.category)}
+        vatPercent={settings.vat_percent}
+      />
+      <ReviewsSection
+        category={service.category}
+        title="Clients who booked this"
+        className="pt-0"
+      />
       <BookCta href={bookHref(service.slug)} />
     </>
   );

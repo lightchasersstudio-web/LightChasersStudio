@@ -3,6 +3,8 @@ import "server-only";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import nodemailer, { type Transporter } from "nodemailer";
+
 import { getServerEnv } from "@/lib/env.server";
 import { paymentsMockEnabled } from "@/lib/payments/mock";
 
@@ -11,12 +13,27 @@ export const MOCK_EMAIL_DIR = path.join(process.cwd(), ".mock-emails");
 
 export type Email = { to: string; subject: string; html: string; text: string };
 
+let gmail: Transporter | undefined;
+
 /**
- * Sends through Resend. Never throws: an email failure must not undo a booking,
- * so problems (or a missing API key) are logged and skipped.
+ * Sends through the studio Gmail (app password) when set, else Resend. Gmail
+ * also sends in trial mode, so pretend payments email real inboxes. Never
+ * throws: an email failure must not undo a booking, so problems are logged.
  */
 export async function sendEmail(email: Email): Promise<void> {
-  const { RESEND_API_KEY, EMAIL_FROM } = getServerEnv();
+  const { RESEND_API_KEY, EMAIL_FROM, GMAIL_USER, GMAIL_APP_PASSWORD } = getServerEnv();
+  if (GMAIL_USER && GMAIL_APP_PASSWORD) {
+    try {
+      gmail ??= nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+      });
+      await gmail.sendMail({ from: `"Light Chasers Studio" <${GMAIL_USER}>`, ...email });
+    } catch (error) {
+      console.error("[email] gmail", error);
+    }
+    return;
+  }
   if (paymentsMockEnabled() && !RESEND_API_KEY) {
     try {
       await mkdir(MOCK_EMAIL_DIR, { recursive: true });

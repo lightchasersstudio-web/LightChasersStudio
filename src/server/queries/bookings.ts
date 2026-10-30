@@ -4,6 +4,7 @@ import { TZDate } from "@date-fns/tz";
 import { addDays, getDaysInMonth } from "date-fns";
 
 import type { BookingStatus } from "@/lib/booking/status";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 
@@ -116,17 +117,28 @@ export async function getBookingForAdmin(id: string) {
     supabase
       .from("bookings")
       .select(
-        "id, reference_code, status, source, start_at, end_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
+        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category), add_ons:booking_add_ons(add_on_id, name, price_cents), attendees:booking_attendees(id, position, full_name, phone, address, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at)",
       )
       .eq("id", id)
       .maybeSingle(),
-    supabase.from("business_settings").select("business_name, phone, email").single(),
+    supabase.from("business_settings").select("business_name, phone, email, vat_percent").single(),
   ]);
   if (error) throw error;
   if (settings.error) throw settings.error;
   if (!data) return null;
 
   const payments = [...data.payments].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Workshop people in order, with short-lived links to students' ID photos
+  // (a private bucket; the caller has already passed requireAdmin()).
+  const attendees = [...data.attendees].sort((a, b) => a.position - b.position);
+  const idPaths = attendees.flatMap((a) => (a.student_id_path ? [a.student_id_path] : []));
+  const idUrls = new Map<string, string>();
+  if (idPaths.length) {
+    const { data: signed } = await createAdminClient()
+      .storage.from("student-ids")
+      .createSignedUrls(idPaths, 60 * 30);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) idUrls.set(s.path, s.signedUrl);
+  }
   const paidCents = payments
     .filter((p) => p.status === "paid")
     .reduce((sum, p) => sum + p.amount_cents, 0);
@@ -134,15 +146,29 @@ export async function getBookingForAdmin(id: string) {
     ...data,
     email: data.client?.email ?? null,
     serviceName: data.service?.name ?? "Session",
+    vatPercent: settings.data.vat_percent,
     payments,
     paidCents,
+    attendees: attendees.map((a) => ({
+      id: a.id,
+      position: a.position,
+      fullName: a.full_name,
+      phone: a.phone,
+      address: a.address,
+      category: a.category,
+      priceCents: a.price_cents,
+      idStatus: a.id_status,
+      idUrl: a.student_id_path ? (idUrls.get(a.student_id_path) ?? null) : null,
+    })),
     summary: {
       reference: data.reference_code,
       serviceName: data.service?.name ?? "Session",
+      addOns: data.add_ons.map((a) => ({ name: a.name, priceCents: a.price_cents })),
       startAt: data.start_at,
-      endAt: data.end_at,
+      endAt: data.has_end_time ? data.end_at : null,
       location: data.location,
       priceCents: data.price_cents,
+      vatCents: data.vat_cents,
       paidCents,
       contactName: data.contact_name,
       studioName: settings.data.business_name,
@@ -150,4 +176,122 @@ export async function getBookingForAdmin(id: string) {
       studioEmail: settings.data.email,
     },
   };
+}
+
+export type DashboardBooking = {
+  id: string;
+  reference: string;
+  status: BookingStatus;
+  startAt: string;
+  endAt: string;
+  contactName: string;
+  serviceName: string;
+  needsRefundReview: boolean;
+};
+
+export type Dashboard = {
+  todayCount: number;
+  weekCount: number;
+  needsReviewCount: number;
+  refundReviewCount: number;
+  /** The next shoots (today onwards, up to two weeks), soonest first. */
+  upcoming: DashboardBooking[];
+  /** Paid requests waiting for a yes/no, and late payments to check. */
+  attention: DashboardBooking[];
+};
+
+const DASHBOARD_FIELDS =
+  "id, reference_code, status, start_at, end_at, contact_name, needs_refund_review, hold_expires_at, service:services(name)";
+
+/** Counts and short lists for the admin home page (RLS: admins only). */
+export async function getDashboard(now: Date = new Date()): Promise<Dashboard> {
+  const today = new TZDate(now, BUSINESS_TZ);
+  const dayStart = new TZDate(today.getFullYear(), today.getMonth(), today.getDate(), BUSINESS_TZ);
+  const iso = (days: number) => addDays(dayStart, days).toISOString();
+
+  const supabase = await createClient();
+  const [upcoming, attention] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select(DASHBOARD_FIELDS)
+      .in("status", ["pending_payment", "pending", "confirmed"])
+      .gte("end_at", iso(0))
+      .lt("start_at", iso(14))
+      .order("start_at")
+      .limit(50),
+    supabase
+      .from("bookings")
+      .select(DASHBOARD_FIELDS)
+      .or("status.eq.pending,needs_refund_review.eq.true")
+      .not("status", "in", "(cancelled,declined,expired,completed)")
+      .order("start_at")
+      .limit(50),
+  ]);
+  if (upcoming.error) throw upcoming.error;
+  if (attention.error) throw attention.error;
+
+  type Row = (typeof upcoming.data)[number];
+  const live = (b: Row) =>
+    // A lapsed hold no longer holds the slot, even before the cron job marks it.
+    !(
+      b.status === "pending_payment" &&
+      b.hold_expires_at &&
+      Date.parse(b.hold_expires_at) <= now.getTime()
+    );
+  const toItem = (b: Row): DashboardBooking => ({
+    id: b.id,
+    reference: b.reference_code,
+    status: b.status,
+    startAt: b.start_at,
+    endAt: b.end_at,
+    contactName: b.contact_name,
+    serviceName: b.service?.name ?? "Session",
+    needsRefundReview: b.needs_refund_review,
+  });
+
+  const shoots = upcoming.data.filter(live).map(toItem);
+  const before = (days: number) =>
+    shoots.filter((b) => Date.parse(b.startAt) < Date.parse(iso(days))).length;
+  const needs = attention.data.map(toItem);
+  return {
+    todayCount: before(1),
+    weekCount: before(7),
+    needsReviewCount: needs.filter((b) => b.status === "pending").length,
+    refundReviewCount: needs.filter((b) => b.needsRefundReview).length,
+    upcoming: shoots.slice(0, 8),
+    attention: needs.slice(0, 6),
+  };
+}
+
+export type HistoryEntry = {
+  id: number;
+  action: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor: string;
+};
+
+/** Who changed this booking and when, newest first (audit_logs; RLS: admins only). */
+export async function listBookingHistory(bookingId: string): Promise<HistoryEntry[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, action, metadata, created_at, actor_id")
+    .eq("entity", "booking")
+    .eq("entity_id", bookingId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  const actorIds = [...new Set(data.map((r) => r.actor_id).filter((id): id is string => !!id))];
+  const { data: admins } = actorIds.length
+    ? await supabase.from("admin_profiles").select("user_id, full_name").in("user_id", actorIds)
+    : { data: [] };
+  const names = new Map((admins ?? []).map((a) => [a.user_id, a.full_name]));
+  return data.map((r) => ({
+    id: r.id,
+    action: r.action,
+    metadata: (r.metadata ?? {}) as Record<string, unknown>,
+    createdAt: r.created_at,
+    actor: (r.actor_id && names.get(r.actor_id)) || "Staff",
+  }));
 }

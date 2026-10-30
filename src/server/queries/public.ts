@@ -29,6 +29,7 @@ export type PublicSettings = Pick<
   | "instagram_url"
   | "tiktok_url"
   | "default_deposit_percent"
+  | "vat_percent"
   | "hold_minutes"
   | "max_advance_days"
 >;
@@ -40,13 +41,14 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   const { data, error } = await createPublicClient()
     .from("business_settings")
     .select(
-      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent, hold_minutes, max_advance_days",
+      "business_name, tagline, about, logo_path, email, phone, address, city, facebook_url, instagram_url, tiktok_url, default_deposit_percent, vat_percent, hold_minutes, max_advance_days",
     )
     .single();
   if (error) throw error;
   return data;
 }
 
+/** Active packages. The workshop is booked from its own button, so it's left out here. */
 export async function listActiveServices(): Promise<PublicService[]> {
   "use cache";
   cacheTag(TAGS.services);
@@ -55,6 +57,7 @@ export async function listActiveServices(): Promise<PublicService[]> {
     .from("services")
     .select("*")
     .eq("is_active", true)
+    .neq("category", "workshop")
     .order("sort_order")
     .order("created_at");
   if (error) throw error;
@@ -70,7 +73,43 @@ export async function getActiveServiceBySlug(slug: string): Promise<PublicServic
     .select("*")
     .eq("slug", slug)
     .eq("is_active", true)
+    .neq("category", "workshop")
     .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** The workshop clients can book from the floating button (first active one), or null. */
+export async function getActiveWorkshop(): Promise<PublicService | null> {
+  "use cache";
+  cacheTag(TAGS.services);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("services")
+    .select("*")
+    .eq("is_active", true)
+    .eq("category", "workshop")
+    .order("sort_order")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** People signed up (or holding a seat while paying) for a workshop. Not cached: it changes with every sign-up. */
+export async function getWorkshopSeatsTaken(serviceId: string): Promise<number> {
+  const { data, error } = await createPublicClient().rpc("workshop_seats_taken", {
+    p_service_id: serviceId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** Early-bird places taken on a workshop. Not cached, like the seats. */
+export async function getWorkshopEarlyBirdsTaken(serviceId: string): Promise<number> {
+  const { data, error } = await createPublicClient().rpc("workshop_early_birds_taken", {
+    p_service_id: serviceId,
+  });
   if (error) throw error;
   return data;
 }
@@ -100,6 +139,71 @@ export async function listFeaturedPhotos(limit: number): Promise<PublicPhoto[]> 
     .eq("is_featured", true)
     .order("sort_order")
     .limit(limit);
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Highlights for a package page: photos linked to the package first (Admin →
+ * Portfolio → "Book this package"), then others of the same kind, up to `limit`.
+ */
+export async function listPackagePhotos(
+  service: Pick<PublicService, "id" | "category">,
+  limit = 6,
+): Promise<PublicPhoto[]> {
+  "use cache";
+  cacheTag(TAGS.portfolio);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("portfolio_images")
+    // RLS only exposes active services to anon, so a hidden package joins as null.
+    .select("*, service:services(slug, name)")
+    .or(`service_id.eq.${service.id},category.eq.${service.category}`)
+    .order("sort_order")
+    .order("created_at", { ascending: false })
+    .limit(48);
+  if (error) throw error;
+  const linked = data.filter((p) => p.service_id === service.id);
+  const sameKind = data.filter((p) => p.service_id !== service.id);
+  return [...linked, ...sameKind].slice(0, limit);
+}
+
+export type PublicReview = Pick<
+  Tables<"reviews">,
+  "id" | "name" | "category" | "shoot" | "quote" | "rating"
+>;
+
+/** Published client reviews, in the order the admin set. */
+export async function listPublishedReviews(): Promise<PublicReview[]> {
+  "use cache";
+  cacheTag(TAGS.reviews);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("reviews")
+    .select("id, name, category, shoot, quote, rating")
+    .eq("is_published", true)
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
+export type PublicAddOn = Pick<
+  Tables<"add_ons">,
+  "id" | "name" | "description" | "price_cents" | "extra_minutes" | "service_ids"
+>;
+
+/** Extras clients can add when booking, in the order the admin set (each lists its packages). */
+export async function listActiveAddOns(): Promise<PublicAddOn[]> {
+  "use cache";
+  cacheTag(TAGS.addOns);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("add_ons")
+    .select("id, name, description, price_cents, extra_minutes, service_ids")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("created_at");
   if (error) throw error;
   return data;
 }

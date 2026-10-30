@@ -2,6 +2,8 @@
 
 import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
 import type { BookingSummary } from "@/lib/booking/booking-summary";
+import { bookingTotals } from "@/lib/booking/pricing";
+import { attendeesCents, workshopPrices } from "@/lib/booking/workshop";
 import { getPublicEnv } from "@/lib/env";
 import { createCheckoutSession, paymongoConfigured } from "@/lib/payments/paymongo";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -28,7 +30,7 @@ function fieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
  */
 export async function submitBooking(
   input: unknown,
-): Promise<ActionResult<{ redirectUrl: string }>> {
+): Promise<ActionResult<{ redirectUrl: string; reference: string }>> {
   const parsed = publicBookingSchema.safeParse(input);
   if (!parsed.success) {
     return fail("Please check the highlighted fields.", fieldErrors(parsed.error.issues));
@@ -44,17 +46,29 @@ export async function submitBooking(
     // Refuse before holding a slot if a deposit is due but payments aren't set up
     // (checked before Turnstile so visitors get the clear message, not a security error).
     if (!paymongoConfigured()) {
-      const [{ data: service }, { data: settings }] = await Promise.all([
+      const [{ data: service }, { data: settings }, { data: addOns }] = await Promise.all([
         supabase
           .from("services")
-          .select("price_cents, deposit_cents")
+          .select(
+            "price_cents, deposit_cents, category, workshop_regular_enabled, workshop_early_bird_enabled, workshop_early_bird_price_cents, workshop_student_enabled, workshop_student_price_cents",
+          )
           .eq("id", v.serviceId)
           .maybeSingle(),
-        supabase.from("business_settings").select("default_deposit_percent").single(),
+        supabase.from("business_settings").select("default_deposit_percent, vat_percent").single(),
+        supabase.from("add_ons").select("price_cents").in("id", v.addOnIds),
       ]);
-      const deposit =
-        service?.deposit_cents ??
-        Math.round(((service?.price_cents ?? 0) * (settings?.default_deposit_percent ?? 0)) / 100);
+      const { deposit } = bookingTotals({
+        // Workshops are priced per person, by category.
+        packageCents:
+          service?.category === "workshop"
+            ? attendeesCents((v.attendees ?? []).slice(0, v.participants), workshopPrices(service))
+            : (service?.price_cents ?? 0),
+        addOnsCents: (addOns ?? []).reduce((sum, a) => sum + a.price_cents, 0),
+        vatPercent: settings?.vat_percent ?? 0,
+        fixedDepositCents: service?.deposit_cents ?? null,
+        depositPercent: settings?.default_deposit_percent ?? 0,
+        payInFull: v.payInFull,
+      });
       if (deposit > 0) return fail(NO_ONLINE_PAYMENT);
     }
 
@@ -75,15 +89,41 @@ export async function submitBooking(
         p_participants: v.participants,
         p_special_requests: v.specialRequests ?? undefined,
         p_messenger: v.messenger ?? undefined,
+        p_add_on_ids: v.addOnIds,
+        p_pay_in_full: v.payInFull,
+        // Workshops: names for the certificates (only as many as are coming).
+        // Workshops: each person's certificate name, category and student ID.
+        p_attendees:
+          v.payInFull !== undefined
+            ? (v.attendees ?? []).slice(0, v.participants).map((a) => ({
+                name: a.name,
+                phone: a.phone,
+                address: a.address,
+                category: a.category,
+                id_path: a.idPath || null,
+              }))
+            : undefined,
       })
       .single();
     if (error) {
       const code = bookingErrorCode(error.message);
       if (!code) throw error;
-      return fail(
-        BOOKING_ERRORS[code]!,
-        code === "slot_unavailable" ? { startAt: [BOOKING_ERRORS[code]!] } : undefined,
-      );
+      const field =
+        code === "slot_unavailable"
+          ? "startAt"
+          : code === "add_on_unavailable"
+            ? "addOnIds"
+            : code === "workshop_full" || code === "invalid_participants"
+              ? "participants"
+              : code === "invalid_attendees" ||
+                  code === "attendee_contact_required" ||
+                  code === "category_unavailable" ||
+                  code === "student_id_required" ||
+                  code === "early_bird_closed" ||
+                  code === "early_bird_full"
+                ? "attendees"
+                : null;
+      return fail(BOOKING_ERRORS[code]!, field ? { [field]: [BOOKING_ERRORS[code]!] } : undefined);
     }
 
     if (data.deposit_cents > 0) {
@@ -93,12 +133,15 @@ export async function submitBooking(
         await supabase.from("bookings").update({ status: "cancelled" }).eq("id", data.booking_id);
         return fail("We couldn't start the payment. Please try again in a moment.");
       }
-      return ok({ redirectUrl: url });
+      return ok({ redirectUrl: url, reference: data.reference_code });
     }
 
     const record = await loadBookingRecord({ id: data.booking_id });
     if (record) await notifyBookingReceived(record);
-    return ok({ redirectUrl: `/book/done?ref=${data.reference_code}` });
+    return ok({
+      redirectUrl: `/book/done?ref=${data.reference_code}`,
+      reference: data.reference_code,
+    });
   } catch (error) {
     console.error("[submitBooking]", error);
     return fail("Something went wrong. Please try again.");
@@ -115,13 +158,13 @@ async function startCheckout(
   try {
     const { data: booking } = await createAdminClient()
       .from("bookings")
-      .select("service:services(name)")
+      .select("price_cents, service:services(name)")
       .eq("id", bookingId)
       .single();
     const session = await createCheckoutSession({
       referenceCode: reference,
       amountCents,
-      description: `Deposit · ${booking?.service?.name ?? "Photo session"} (${reference})`,
+      description: `${amountCents >= (booking?.price_cents ?? Infinity) ? "Payment" : "Deposit"} · ${booking?.service?.name ?? "Photo session"} (${reference})`,
       successUrl: `${siteUrl()}/book/done?ref=${reference}`,
       cancelUrl: `${siteUrl()}/book/cancelled?ref=${reference}`,
       name: client.fullName,

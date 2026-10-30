@@ -63,17 +63,19 @@ cp .env.example .env.local
 
 Open `.env.local` in your editor and fill in the values the owner gave you:
 
-| Variable                                                 | What it is                                        | Needed now?                                 |
-| -------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`                                   | Leave as `http://localhost:3000`                  | ✅ Yes                                      |
-| `BUSINESS_TIMEZONE`                                      | Leave as `Asia/Manila`                            | ✅ Yes                                      |
-| `NEXT_PUBLIC_SUPABASE_URL`                               | Supabase project URL                              | ✅ Yes                                      |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                          | Supabase public (anon) key                        | ✅ Yes                                      |
-| `SUPABASE_SERVICE_ROLE_KEY`                              | Supabase secret key: **server only, never share** | ✅ Yes                                      |
-| `DATABASE_URL_TEST`                                      | Database connection string for DB tests           | Only for `npm run test:db`                  |
-| `RESEND_API_KEY`, `EMAIL_FROM`                           | Email sending                                     | Optional in dev; needed for emails          |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Bot protection                                    | Optional in dev; **required in production** |
-| `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`         | Payments                                          | Optional in dev; needed to take deposits    |
+| Variable                                                 | What it is                                         | Needed now?                                 |
+| -------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                                   | Leave as `http://localhost:3000`                   | ✅ Yes                                      |
+| `BUSINESS_TIMEZONE`                                      | Leave as `Asia/Manila`                             | ✅ Yes                                      |
+| `NEXT_PUBLIC_SUPABASE_URL`                               | Supabase project URL                               | ✅ Yes                                      |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`                          | Supabase public (anon) key                         | ✅ Yes                                      |
+| `SUPABASE_SERVICE_ROLE_KEY`                              | Supabase secret key: **server only, never share**  | ✅ Yes                                      |
+| `DATABASE_URL_TEST`                                      | Database connection string for DB tests            | Only for `npm run test:db`                  |
+| `GMAIL_USER`, `GMAIL_APP_PASSWORD`                       | Email sending from the studio Gmail (app password) | Optional in dev; needed for emails          |
+| `RESEND_API_KEY`, `EMAIL_FROM`                           | Email via Resend (only with an owned domain)       | Optional; Gmail is used first when set      |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Bot protection                                     | Optional in dev; **required in production** |
+| `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`         | Payments                                           | Optional in dev; needed to take deposits    |
+| `PAYMONGO_PAYMENT_METHODS`                               | Methods offered at checkout (default `qrph`)       | Only methods active on the PayMongo account |
 
 Without these keys the site still runs: emails are skipped (you'll see "[email] not configured" in the terminal), the security check is skipped on your computer, and online booking stops at "Online payment isn't available yet." Staff bookings in the admin work fully.
 
@@ -119,7 +121,7 @@ Stop the server with **Ctrl + C**. If styles ever look stale or broken, stop it 
 2. Go to **http://localhost:3000/admin/login** and sign in.
 3. Open **Account** in the admin menu and **change your password** right away.
 
-What you can manage from the admin: Services, Availability (hours and blocked dates), Portfolio (photos), Settings (studio profile, logo, booking rules) and Account.
+What you can manage from the admin: Dashboard, Calendar (bookings, staff bookings, editing), Sales report (with monthly CSV), Services (packages, add-ons, the workshop), Availability (hours and blocked dates), Portfolio (photos), Reviews, Settings (studio profile, logo, booking rules, VAT) and Account.
 
 > The dev database is **shared**. Changes you make in the admin (prices, photos, hours) are seen by everyone using it. Test with obviously fake names, such as "TEST package", and delete them afterwards.
 

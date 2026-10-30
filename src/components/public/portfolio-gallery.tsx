@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon, ImagesIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, ExpandIcon, ImagesIcon, XIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { bookHref } from "@/components/public/site-nav";
+import { ShareButton } from "@/components/shared/share-button";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +19,11 @@ import { categoryLabel, SERVICE_CATEGORIES, type ServiceCategory } from "@/lib/c
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import type { PublicPhoto } from "@/server/queries/public";
+
+/** Taller than wide by a clear margin; these get a two-row cell. Unknown sizes count as wide. */
+function isUpright(photo: PublicPhoto) {
+  return (photo.height ?? 0) > (photo.width ?? 0) * 1.1;
+}
 
 export function PortfolioGallery({ photos }: { photos: PublicPhoto[] }) {
   const [filter, setFilter] = useState<ServiceCategory | "all">("all");
@@ -57,30 +63,49 @@ export function PortfolioGallery({ photos }: { photos: PublicPhoto[] }) {
         Showing {visible.length} photo{visible.length === 1 ? "" : "s"}
       </p>
 
-      {/* Masonry via CSS columns; stored width/height reserve space, so no layout shift. */}
-      <ul className="columns-2 gap-3 sm:gap-4 lg:columns-3">
-        {visible.map((photo, i) => (
-          <li key={photo.id} className="mb-3 break-inside-avoid sm:mb-4">
-            <button
-              type="button"
-              onClick={() => setOpen(i)}
-              className="group block w-full overflow-hidden rounded-2xl bg-muted focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
-              aria-label={`Open photo: ${photo.alt_text}`}
-            >
-              <Image
-                src={publicImageUrl("portfolio", photo.storage_path)}
-                alt={photo.alt_text}
-                width={photo.width ?? 1200}
-                height={photo.height ?? 900}
-                sizes="(min-width: 1024px) 33vw, 50vw"
-                placeholder={photo.blur_data_url ? "blur" : "empty"}
-                blurDataURL={photo.blur_data_url ?? undefined}
-                className="h-auto w-full transition-transform duration-500 group-hover:scale-[1.03] motion-reduce:transition-none"
-              />
-            </button>
-          </li>
-        ))}
-      </ul>
+      {/*
+        Gallery wall: every row is a landscape (3:2) cell sized from the container width,
+        so wide photos fill one cell and upright ones span two rows; `dense` packs the gaps.
+        The full photo, uncropped, opens in the viewer.
+      */}
+      <div className="@container">
+        <ul className="grid grid-flow-row-dense auto-rows-[calc((100cqw-var(--gap))/2*2/3)] grid-cols-2 gap-(--gap) [--gap:0.75rem] sm:[--gap:1.25rem] lg:auto-rows-[calc((100cqw-2*var(--gap))/3*2/3)] lg:grid-cols-3">
+          {visible.map((photo, i) => (
+            <li key={photo.id} className={cn(isUpright(photo) && "row-span-2")}>
+              <button
+                type="button"
+                onClick={() => setOpen(i)}
+                className="group relative block size-full rounded-md bg-white p-1.5 shadow-[0_10px_30px_-14px_rgb(43_58_56/0.45)] ring-1 ring-black/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_36px_-14px_rgb(43_58_56/0.55)] focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-2.5"
+                aria-label={`Open photo: ${photo.alt_text}`}
+              >
+                <span className="relative block size-full overflow-hidden rounded-[3px] bg-muted">
+                  <Image
+                    src={publicImageUrl("portfolio", photo.storage_path)}
+                    alt={photo.alt_text}
+                    fill
+                    sizes="(min-width: 1024px) 33vw, 50vw"
+                    placeholder={photo.blur_data_url ? "blur" : "empty"}
+                    blurDataURL={photo.blur_data_url ?? undefined}
+                    className="object-cover transition-transform duration-500 group-hover:scale-[1.04] motion-reduce:transition-none"
+                  />
+                  {/* Label on hover/focus: the package if linked, else the kind of shoot. */}
+                  <span className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-linear-to-t from-black/65 to-transparent px-3 pt-10 pb-2 text-left text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <span className="truncate font-script text-xl leading-tight">
+                      {photo.service?.name ?? categoryLabel(photo.category)}
+                    </span>
+                    <ExpandIcon className="mb-1 size-4 shrink-0" aria-hidden />
+                  </span>
+                </span>
+                {/* Viewfinder corners, shown on hover. */}
+                <span
+                  aria-hidden
+                  className="viewfinder pointer-events-none absolute inset-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100 sm:inset-4"
+                />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <Lightbox photos={visible} index={open} onIndex={setOpen} />
     </>
@@ -158,6 +183,13 @@ function Lightbox({
                   </Link>
                 )}
               </Button>
+              <ShareButton
+                path={photo.service ? `/services/${photo.service.slug}` : "/portfolio"}
+                title={photo.service ? photo.service.name : "Our portfolio"}
+                text={photo.caption ?? photo.alt_text}
+                variant="ghost"
+                className="h-12 rounded-full bg-white/10 px-4 text-white hover:bg-white/20 hover:text-white"
+              />
               {photos.length > 1 && (
                 <div className="flex gap-2">
                   <LightboxButton label="Previous photo" onClick={() => go(-1)}>

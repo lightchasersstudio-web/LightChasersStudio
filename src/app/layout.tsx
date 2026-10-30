@@ -31,6 +31,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      // Smooth in-page jumps (FAQ topics); Next keeps page-to-page navigation instant.
+      data-scroll-behavior="smooth"
       suppressHydrationWarning
       className={`${display.variable} ${body.variable} ${hand.variable} h-full antialiased`}
     >
