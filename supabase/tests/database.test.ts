@@ -650,9 +650,17 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     it("skips the notice rule, warns outside hours, and never exceeds capacity", async () => {
       await inRollback(async (c) => {
         const s = await setupFixtures(c, 1);
+        // The shared dev DB may hold a real booking tomorrow at 10:00; free it (rolled back).
+        const tomorrow = manila(1, 10);
+        await c.query(
+          `update public.bookings set status = 'cancelled'
+           where status in ('pending_payment', 'pending', 'confirmed')
+             and start_at < $1::timestamptz + interval '2 hours' and blocked_until > $1::timestamptz - interval '1 hour'`,
+          [tomorrow.toISOString()],
+        );
         await actAs(c, "service_role");
         // Tomorrow is too soon for the public, fine for staff.
-        const created = (await adminBook(c, s.portrait, manila(1, 10))).rows[0]!;
+        const created = (await adminBook(c, s.portrait, tomorrow)).rows[0]!;
         const { rows } = await c.query(
           "select status, source, hold_expires_at from public.bookings where id = $1",
           [created.booking_id],
@@ -1148,6 +1156,123 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           ).toMatch(/permission denied/);
           await c.query("reset role");
         }
+      });
+    });
+  });
+  describe("privacy (anonymise a client, clear student IDs)", () => {
+    it("wipes a client's personal data but keeps the money records", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10), { pay: ["cash", 50000] }))
+          .rows[0]!;
+        await c.query(
+          "update public.bookings set special_requests = 'Bring the dog', admin_notes = 'VIP', status = 'cancelled' where id = $1",
+          [b.booking_id],
+        );
+        await c.query(
+          'update public.payments set raw = \'{"billing":{"name":"Walk In"}}\' where booking_id = $1',
+          [b.booking_id],
+        );
+        await c.query(
+          `insert into public.audit_logs (action, entity, entity_id, metadata)
+           values ('booking.update', 'booking', $1, '{"before":{"contact_name":"Walk In","price_cents":1},"emailed_client":true}')`,
+          [b.booking_id],
+        );
+        const { rows: before } = await c.query(
+          "select client_id, price_cents, reference_code from public.bookings where id = $1",
+          [b.booking_id],
+        );
+
+        await c.query("select * from public.anonymise_client($1)", [before[0].client_id]);
+
+        const { rows: client } = await c.query(
+          "select full_name, email, phone, consent_version from public.clients where id = $1",
+          [before[0].client_id],
+        );
+        expect(client[0]).toEqual({
+          full_name: "Deleted client",
+          email: null,
+          phone: "0000000",
+          consent_version: "anonymised",
+        });
+        const { rows: booking } = await c.query(
+          "select contact_name, contact_phone, special_requests, admin_notes, price_cents, reference_code from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        expect(booking[0]).toEqual({
+          contact_name: "Deleted client",
+          contact_phone: "0000000",
+          special_requests: null,
+          admin_notes: null,
+          price_cents: before[0].price_cents,
+          reference_code: before[0].reference_code,
+        });
+        const { rows: payments } = await c.query(
+          "select amount_cents, raw from public.payments where booking_id = $1",
+          [b.booking_id],
+        );
+        expect(payments).toEqual([{ amount_cents: 50000, raw: null }]);
+        const { rows: logs } = await c.query(
+          "select metadata from public.audit_logs where entity_id = $1 and action = 'booking.update'",
+          [b.booking_id],
+        );
+        expect(logs[0].metadata).toEqual({ before: { price_cents: 1 }, emailed_client: true });
+      });
+    });
+
+    it("refuses while the client has an upcoming booking, and only for the server", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        const { rows } = await c.query("select client_id from public.bookings where id = $1", [
+          b.booking_id,
+        ]);
+        expect(
+          await expectFailure(c, "select * from public.anonymise_client($1)", [rows[0].client_id]),
+        ).toMatch(/client_has_upcoming_booking/);
+        for (const role of ["anon", "authenticated"] as const) {
+          await c.query("reset role");
+          await actAs(c, role);
+          for (const fn of [
+            "public.anonymise_client(gen_random_uuid())",
+            "public.clear_past_student_ids()",
+          ]) {
+            expect(await expectFailure(c, `select * from ${fn}`)).toMatch(/permission denied/);
+          }
+        }
+      });
+    });
+
+    it("clears student ID photos only once the workshop is over", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const past = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        const future = (await adminBook(c, s.portrait, manila(151, 10))).rows[0]!;
+        await c.query("reset role");
+        await c.query(
+          "update public.bookings set start_at = now() - interval '2 days', end_at = now() - interval '1 day', blocked_until = now() - interval '1 day' where id = $1",
+          [past.booking_id],
+        );
+        await c.query(
+          `insert into public.booking_attendees (booking_id, position, full_name, category, price_cents, student_id_path, id_status)
+           values ($1, 1, 'Old Student', 'student', 100, 'old.webp', 'accepted'),
+                  ($2, 1, 'New Student', 'student', 100, 'new.webp', 'pending')`,
+          [past.booking_id, future.booking_id],
+        );
+        await actAs(c, "service_role");
+        const { rows } = await c.query("select * from public.clear_past_student_ids()");
+        // The dev DB may hold other past workshops; ours must be in, the upcoming one out.
+        const paths = rows.map((r) => r.student_id_path);
+        expect(paths).toContain("old.webp");
+        expect(paths).not.toContain("new.webp");
+        const { rows: left } = await c.query(
+          "select student_id_path from public.booking_attendees where booking_id = any ($1) order by full_name",
+          [[past.booking_id, future.booking_id]],
+        );
+        expect(left).toEqual([{ student_id_path: "new.webp" }, { student_id_path: null }]);
       });
     });
   });

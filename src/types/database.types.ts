@@ -792,6 +792,12 @@ export type Database = {
           reference_code: string
         }[]
       }
+      anonymise_client: {
+        Args: { p_client_id: string }
+        Returns: {
+          student_id_path: string
+        }[]
+      }
       apply_booking_pricing: {
         Args: {
           p_add_ons: Json
@@ -805,6 +811,13 @@ export type Database = {
         Args: { p_blocked_until: string; p_exclude?: string; p_start: string }
         Returns: undefined
       }
+      booking_holds_place: {
+        Args: {
+          p_hold_expires_at: string
+          p_status: Database["public"]["Enums"]["booking_status"]
+        }
+        Returns: boolean
+      }
       booking_length_minutes: {
         Args: {
           p_duration_minutes: number
@@ -813,16 +826,22 @@ export type Database = {
         }
         Returns: number
       }
+      clear_past_student_ids: {
+        Args: never
+        Returns: {
+          student_id_path: string
+        }[]
+      }
       create_booking: {
         Args: {
           p_add_on_ids?: string[]
+          p_attendees?: Json
           p_consent_version: string
           p_email: string
           p_full_name: string
           p_location?: string
           p_messenger?: string
           p_participants?: number
-          p_attendees?: Json
           p_pay_in_full?: boolean
           p_phone: string
           p_preferred_contact: Database["public"]["Enums"]["contact_method"]
@@ -837,13 +856,6 @@ export type Database = {
           reference_code: string
           status: Database["public"]["Enums"]["booking_status"]
         }[]
-      }
-      booking_holds_place: {
-        Args: {
-          p_hold_expires_at: string
-          p_status: Database["public"]["Enums"]["booking_status"]
-        }
-        Returns: boolean
       }
       delete_booking: {
         Args: { p_booking_id: string }
@@ -883,7 +895,10 @@ export type Database = {
         Returns: undefined
       }
       staff_add_on_minutes: { Args: { p_add_ons: Json }; Returns: number }
-      workshop_early_birds_taken: { Args: { p_service_id: string }; Returns: number }
+      workshop_early_birds_taken: {
+        Args: { p_service_id: string }
+        Returns: number
+      }
       workshop_seats_taken: { Args: { p_service_id: string }; Returns: number }
     }
     Enums: {

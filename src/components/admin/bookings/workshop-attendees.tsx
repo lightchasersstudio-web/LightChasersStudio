@@ -104,7 +104,7 @@ function AttendeeRow({ attendee: a }: { attendee: WorkshopAttendee }) {
               <img src={a.idUrl} alt="" className="h-20 w-32 object-cover" />
             </a>
           ) : (
-            <span className="text-muted-foreground">ID photo not found.</span>
+            <span className="text-muted-foreground">No ID photo (deleted or missing).</span>
           )}
           {a.idStatus && (
             <span

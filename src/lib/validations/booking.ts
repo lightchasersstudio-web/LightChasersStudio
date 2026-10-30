@@ -31,7 +31,9 @@ const ATTENDEE_CATEGORY_VALUES = ATTENDEE_CATEGORIES.map((c) => c.value) as [
 export const STUDENT_ID_PATH = /^[0-9a-f-]{36}\.(webp|jpg)$/;
 
 /** Version of the privacy notice the client agreed to (stored with their consent). */
-export const CONSENT_VERSION = "2026-10";
+export const CONSENT_VERSION = "2026-10-30";
+/** When the privacy policy (/privacy) last changed; shown on the page. */
+export const PRIVACY_UPDATED = "30 October 2026";
 
 const fullName = z.string().trim().min(2, "Enter your full name.").max(120);
 /** A number we can call or text: digits, spaces, ( ) - and a leading +, 7+ digits. */

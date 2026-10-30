@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { AnonymiseClient } from "@/components/admin/clients/anonymise-client";
 import { BookingRows } from "@/components/admin/lists/booking-rows";
 import { EmptyList } from "@/components/admin/lists/pager";
 import { PageHeader } from "@/components/admin/page-header";
@@ -29,7 +30,7 @@ export default function ClientPage({ params }: PageProps<"/admin/clients/[id]">)
 }
 
 async function Client({ params }: Pick<PageProps<"/admin/clients/[id]">, "params">) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { id } = await params;
   const client = /^[0-9a-f-]{36}$/i.test(id) ? await getClientForAdmin(id) : null;
   if (!client) notFound();
@@ -91,6 +92,9 @@ async function Client({ params }: Pick<PageProps<"/admin/clients/[id]">, "params
         <EmptyList title="No bookings" text="This client has no bookings left." />
       ) : (
         <BookingRows rows={bookings} />
+      )}
+      {admin.role === "owner" && !client.anonymised && (
+        <AnonymiseClient id={client.id} name={client.fullName} />
       )}
     </>
   );

@@ -60,6 +60,14 @@ export async function SiteFooter() {
                 Preparing for your shoot
               </Link>
             </li>
+            <li>
+              <Link
+                href="/privacy"
+                className="inline-flex min-h-10 items-center text-panel-foreground/85 hover:text-panel-foreground hover:underline"
+              >
+                Privacy policy
+              </Link>
+            </li>
           </ul>
         </nav>
 
