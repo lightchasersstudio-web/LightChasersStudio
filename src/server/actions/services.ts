@@ -10,6 +10,7 @@ import {
   serviceSchema,
   setServiceActiveSchema,
 } from "@/lib/validations/services";
+import { parseWorkshopSlides, saveWorkshopSlidesSchema } from "@/lib/validations/workshop-slides";
 import { adminAction, audit, PG, revalidate, TAGS } from "@/server/admin-action";
 import { notifyBookingUpdated } from "@/server/booking-notifications";
 import { loadBookingRecord } from "@/server/queries/booking-record";
@@ -96,7 +97,7 @@ export async function deleteService(input: unknown): Promise<ActionResult> {
       .from("services")
       .delete()
       .eq("id", id)
-      .select("name, cover_image_path")
+      .select("name, cover_image_path, workshop_slides")
       .maybeSingle();
     if (error?.code === PG.foreignKey) {
       return fail(
@@ -106,8 +107,10 @@ export async function deleteService(input: unknown): Promise<ActionResult> {
     if (error) throw error;
     if (!data) return fail("Service not found.");
 
-    if (data.cover_image_path)
-      await removeObjects(ctx.supabase, "portfolio", [data.cover_image_path]);
+    await removeObjects(ctx.supabase, "portfolio", [
+      ...(data.cover_image_path ? [data.cover_image_path] : []),
+      ...parseWorkshopSlides(data.workshop_slides).map((s) => s.path),
+    ]);
     await audit(ctx, "service.delete", "service", id, { name: data.name });
     revalidate(TAGS.services, TAGS.portfolio);
     return ok(undefined);
@@ -154,4 +157,36 @@ async function emailWorkshopMove(serviceId: string): Promise<number> {
   );
   for (const r of results) if (r.status === "rejected") console.error("[workshop move]", r.reason);
   return results.filter((r) => r.status === "fulfilled" && r.value).length;
+}
+
+/**
+ * Saves the workshop banner's slideshow (photos the browser already uploaded),
+ * then deletes the files of photos that were taken out.
+ */
+export async function saveWorkshopSlides(input: unknown): Promise<ActionResult> {
+  return adminAction(saveWorkshopSlidesSchema, input, async ({ serviceId, slides }, ctx) => {
+    const { data: before, error: readError } = await ctx.supabase
+      .from("services")
+      .select("workshop_slides")
+      .eq("id", serviceId)
+      .eq("category", "workshop")
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!before) return fail("Workshop not found.");
+
+    const { error } = await ctx.supabase
+      .from("services")
+      .update({ workshop_slides: slides })
+      .eq("id", serviceId);
+    if (error) throw error;
+
+    const kept = new Set(slides.map((s) => s.path));
+    const removed = parseWorkshopSlides(before.workshop_slides)
+      .map((s) => s.path)
+      .filter((p) => !kept.has(p));
+    await removeObjects(ctx.supabase, "portfolio", removed);
+    await audit(ctx, "service.workshop_slides", "service", serviceId, { count: slides.length });
+    revalidate(TAGS.services);
+    return ok(undefined);
+  });
 }

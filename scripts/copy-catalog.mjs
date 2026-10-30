@@ -60,6 +60,7 @@ const files = [
     .map((s) => s.cover_image_path)
     .filter(Boolean)
     .map((p) => ["portfolio", p]),
+  ...plan.services.flatMap((s) => (s.workshop_slides ?? []).map((w) => ["portfolio", w.path])),
   ...plan.portfolio_images.map((p) => ["portfolio", p.storage_path]),
   ...(settings.logo_path ? [["brand", settings.logo_path]] : []),
 ];

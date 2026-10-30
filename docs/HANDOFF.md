@@ -199,6 +199,11 @@ All owner decisions from 2026-10-28. Migrations `20261028000100` to `000600`, al
 - **Small fixes:** the staff time picker no longer offers past times; payments can't be recorded on cancelled/declined/expired bookings; hour-long timeline blocks fit; calendar month arrows show a spinner while loading; old rate-limit rows are purged daily (pg_cron); `processed_at` is set on PayMongo events.
 - **Migrations:** `20261030000100_privacy_anonymise.sql`, `20261030000200_purge_rate_limits.sql` (both applied to dev).
 
+### 2026-10-30: workshop slideshow photos (branch `workshop-slideshow`)
+
+- **Admin → Services → the workshop → Home page slideshow:** add photos (up to 12, resized in the browser, location data removed), move them up/down, remove them. Each change saves at once and shows on the home banner right away; removing a photo deletes the file. With no photos there, the banner keeps its automatic pick (cover photo, then upright portfolio photos).
+- **Data:** `services.workshop_slides` (migration `20261030000300_workshop_slides.sql`, applied to dev). `scripts/copy-catalog.mjs` copies these files too.
+
 ## Managing data
 
 - **Two databases.** The dev project (`mkpjxrhjynbjuiovloiy`) is for testing and keeps all test bookings. The production project starts **empty** at go-live; never test there.

@@ -225,11 +225,13 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
                 </Link>
               </Button>
             </div>
-            <ul className="mt-8 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-3">
+            {/* Columns, so every photo keeps its own shape (no cropping). */}
+            <ul className="mt-8 columns-2 gap-4 sm:gap-6 lg:columns-3">
               {photos.map((photo, i) => (
                 <li
                   key={photo.id}
                   className={cn(
+                    "mb-4 break-inside-avoid sm:mb-6",
                     i % 2 ? "rotate-1" : "-rotate-1",
                     "transition-transform duration-300 hover:-translate-y-1 hover:rotate-0",
                   )}
@@ -238,6 +240,7 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
                     photo={photo}
                     caption={photo.caption}
                     sizes="(min-width: 1024px) 33vw, 50vw"
+                    fit="whole"
                     className="pb-8"
                   />
                 </li>

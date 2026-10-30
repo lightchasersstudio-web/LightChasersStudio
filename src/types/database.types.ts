@@ -678,6 +678,7 @@ export type Database = {
           workshop_location: string | null
           workshop_regular_enabled: boolean
           workshop_seats: number | null
+          workshop_slides: Json
           workshop_starts_at: string | null
           workshop_student_enabled: boolean
           workshop_student_price_cents: number | null
@@ -706,6 +707,7 @@ export type Database = {
           workshop_location?: string | null
           workshop_regular_enabled?: boolean
           workshop_seats?: number | null
+          workshop_slides?: Json
           workshop_starts_at?: string | null
           workshop_student_enabled?: boolean
           workshop_student_price_cents?: number | null
@@ -734,6 +736,7 @@ export type Database = {
           workshop_location?: string | null
           workshop_regular_enabled?: boolean
           workshop_seats?: number | null
+          workshop_slides?: Json
           workshop_starts_at?: string | null
           workshop_student_enabled?: boolean
           workshop_student_price_cents?: number | null

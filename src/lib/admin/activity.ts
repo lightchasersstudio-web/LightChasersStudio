@@ -26,6 +26,7 @@ const SIMPLE: Record<string, string> = {
   "service.deactivate": "Turned a package off",
   "service.delete": "Deleted a package",
   "service.student_ids_deleted": "Deleted student ID photos",
+  "service.workshop_slides": "Changed the workshop slideshow",
   "add_on.create": "Added an add-on",
   "add_on.update": "Edited an add-on",
   "add_on.activate": "Turned an add-on on",

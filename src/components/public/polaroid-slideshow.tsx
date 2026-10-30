@@ -17,7 +17,7 @@ export type SlideshowPhoto = { src: string; blur: string | null };
 export function PolaroidSlideshow({
   photos,
   caption,
-  intervalMs = 4500,
+  intervalMs = 3500,
   sizes,
   className,
 }: {
@@ -57,7 +57,7 @@ export function PolaroidSlideshow({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 1.1, ease: "easeInOut" }}
+              transition={{ duration: 1, ease: "easeInOut" }}
             >
               <motion.div
                 className="absolute inset-0"

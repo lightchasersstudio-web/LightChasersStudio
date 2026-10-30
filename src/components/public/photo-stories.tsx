@@ -71,7 +71,7 @@ export function PhotoStories({ stories }: { stories: Story[] }) {
       <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)}>
         <DialogContent
           showCloseButton={false}
-          className="h-dvh max-h-dvh w-screen max-w-none rounded-none border-0 bg-black p-0 text-white ring-0 sm:h-[min(90dvh,52rem)] sm:w-auto sm:max-w-none sm:rounded-3xl"
+          className="h-dvh max-h-dvh w-screen max-w-none overflow-hidden rounded-none border-0 bg-black p-0 text-white ring-0 sm:h-[min(90dvh,52rem)] sm:w-[min(92vw,48rem)] sm:max-w-none sm:rounded-3xl"
         >
           {open && (
             <StoryViewer
@@ -123,7 +123,7 @@ function StoryViewer({
 
   return (
     <div
-      className="relative flex h-full flex-col sm:aspect-[9/16]"
+      className="relative flex h-full flex-col"
       onKeyDown={(e) => {
         if (e.key === "ArrowRight") next();
         if (e.key === "ArrowLeft") prev();
@@ -133,65 +133,76 @@ function StoryViewer({
         }
       }}
     >
-      {/* Progress bars */}
-      <div className="absolute inset-x-3 top-3 z-20 flex gap-1" aria-hidden>
-        {story.photos.map((p, i) => (
-          <span key={p.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
-            <span
-              className={cn(
-                "block h-full rounded-full bg-white",
-                i < position.photo && "w-full",
-                i > position.photo && "w-0",
-                i === position.photo && (autoplay ? "w-full origin-left" : "w-full"),
-              )}
-              style={
-                i === position.photo && autoplay
-                  ? {
-                      animation: `story-progress ${SECONDS_PER_PHOTO}s linear forwards`,
-                      animationPlayState: paused ? "paused" : "running",
-                    }
-                  : undefined
-              }
-              onAnimationEnd={i === position.photo && autoplay ? next : undefined}
-            />
-          </span>
-        ))}
-      </div>
+      {/* The same photo, blurred, fills the frame behind the fitted photo. */}
+      <Image
+        src={photo.src}
+        alt=""
+        aria-hidden
+        fill
+        sizes="40px"
+        className="scale-110 object-cover opacity-50 blur-2xl"
+      />
 
-      <div className="absolute inset-x-3 top-6 z-20 flex items-center justify-between gap-3 pt-2">
-        <div className="min-w-0">
-          <DialogTitle className="truncate font-sans text-sm font-bold text-white">
-            {story.label}
-          </DialogTitle>
-          <DialogDescription className="text-xs text-white/75">
-            {position.photo + 1} of {story.photos.length}
-          </DialogDescription>
+      <div className="relative z-20 space-y-2 bg-gradient-to-b from-black/60 to-transparent px-3 pt-3 pb-4">
+        {/* Progress bars */}
+        <div className="flex gap-1" aria-hidden>
+          {story.photos.map((p, i) => (
+            <span key={p.id} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
+              <span
+                className={cn(
+                  "block h-full rounded-full bg-white",
+                  i < position.photo && "w-full",
+                  i > position.photo && "w-0",
+                  i === position.photo && (autoplay ? "w-full origin-left" : "w-full"),
+                )}
+                style={
+                  i === position.photo && autoplay
+                    ? {
+                        animation: `story-progress ${SECONDS_PER_PHOTO}s linear forwards`,
+                        animationPlayState: paused ? "paused" : "running",
+                      }
+                    : undefined
+                }
+                onAnimationEnd={i === position.photo && autoplay ? next : undefined}
+              />
+            </span>
+          ))}
         </div>
-        <div className="flex gap-1">
-          {autoplay && (
-            <ViewerButton label={paused ? "Play" : "Pause"} onClick={() => setPaused((p) => !p)}>
-              {paused ? <PlayIcon className="size-5" /> : <PauseIcon className="size-5" />}
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <DialogTitle className="truncate font-sans text-sm font-bold text-white">
+              {story.label}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-white/75">
+              {position.photo + 1} of {story.photos.length}
+            </DialogDescription>
+          </div>
+          <div className="flex gap-1">
+            {autoplay && (
+              <ViewerButton label={paused ? "Play" : "Pause"} onClick={() => setPaused((p) => !p)}>
+                {paused ? <PlayIcon className="size-5" /> : <PauseIcon className="size-5" />}
+              </ViewerButton>
+            )}
+            <ViewerButton label="Close" onClick={() => onMove(null)}>
+              <XIcon className="size-5" />
             </ViewerButton>
-          )}
-          <ViewerButton label="Close" onClick={() => onMove(null)}>
-            <XIcon className="size-5" />
-          </ViewerButton>
+          </div>
         </div>
       </div>
 
-      <div className="relative flex-1">
+      {/* The whole photo, fitted (never cropped) between the header and the button. */}
+      <div className="relative min-h-0 flex-1">
         <Image
           src={photo.src}
           alt={photo.alt}
           fill
-          sizes="(min-width: 640px) 30rem, 100vw"
+          sizes="(min-width: 640px) 48rem, 100vw"
           placeholder={photo.blur ? "blur" : "empty"}
           blurDataURL={photo.blur ?? undefined}
-          className="animate-in object-cover duration-500 fade-in"
+          className="animate-in object-contain drop-shadow-2xl duration-500 fade-in"
           priority
         />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 to-transparent" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black/75 to-transparent" />
 
         {/* Tap zones: left goes back, right goes on; holding anywhere pauses. */}
         <button
@@ -214,7 +225,7 @@ function StoryViewer({
         />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20 space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div className="relative z-20 space-y-3 bg-gradient-to-t from-black/75 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {photo.caption && <p className="text-sm text-white/90">{photo.caption}</p>}
         <Button asChild className="w-full bg-white text-black hover:bg-white/90">
           <Link href={story.href} onClick={() => onMove(null)}>
