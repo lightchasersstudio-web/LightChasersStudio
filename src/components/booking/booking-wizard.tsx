@@ -111,6 +111,7 @@ export function BookingWizard({
   depositPercent,
   vatPercent,
   holdMinutes,
+  paymentMethods,
   maxAdvanceDays,
   workshop = null,
 }: {
@@ -121,6 +122,8 @@ export function BookingWizard({
   depositPercent: number;
   vatPercent: number;
   holdMinutes: number;
+  /** How clients can pay on PayMongo's page, e.g. "GCash or Maya". */
+  paymentMethods: string;
   maxAdvanceDays: number;
   /**
    * Workshop flow: one fixed-price workshop (services[0]) at the time the admin
@@ -868,8 +871,8 @@ export function BookingWizard({
                           <p className="mt-3 text-sm">
                             We hold{" "}
                             {workshop ? (people > 1 ? "your seats" : "your seat") : "this time"} for{" "}
-                            {holdMinutes} minutes while you pay securely with PayMongo (GCash, Maya
-                            or card).
+                            {holdMinutes} minutes while you pay securely with PayMongo:{" "}
+                            {paymentMethods}.
                           </p>
                         </>
                       )}

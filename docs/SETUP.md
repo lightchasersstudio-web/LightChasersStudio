@@ -75,6 +75,7 @@ Open `.env.local` in your editor and fill in the values the owner gave you:
 | `RESEND_API_KEY`, `EMAIL_FROM`                           | Email via Resend (only with an owned domain)       | Optional; Gmail is used first when set      |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Bot protection                                     | Optional in dev; **required in production** |
 | `PAYMONGO_SECRET_KEY`, `PAYMONGO_WEBHOOK_SECRET`         | Payments                                           | Optional in dev; needed to take deposits    |
+| `PAYMONGO_PAYMENT_METHODS`                               | Methods offered at checkout (default `qrph`)       | Only methods active on the PayMongo account |
 
 Without these keys the site still runs: emails are skipped (you'll see "[email] not configured" in the terminal), the security check is skipped on your computer, and online booking stops at "Online payment isn't available yet." Staff bookings in the admin work fully.
 

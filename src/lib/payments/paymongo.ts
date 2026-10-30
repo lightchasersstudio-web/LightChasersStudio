@@ -3,22 +3,22 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { getServerEnv } from "@/lib/env.server";
+import { paymentMethodsText } from "@/lib/payments/methods";
 import { paymentsMockEnabled } from "@/lib/payments/mock";
 
 // PayMongo Checkout Sessions (https://docs.paymongo.com), called with fetch.
 // A booking is only ever marked paid by the signature-verified webhook.
 
 const API = "https://api.paymongo.com/v1";
-/**
- * Shown on PayMongo's hosted checkout page. Must match the methods enabled on
- * the studio's PayMongo account (2026-10-28: GCash, Maya, card), or the
- * checkout session is refused.
- */
-const PAYMENT_METHODS = ["gcash", "paymaya", "card"];
 const SIGNATURE_MAX_AGE_SECONDS = 300;
 
 export function paymongoConfigured(): boolean {
   return paymentsMockEnabled() || Boolean(getServerEnv().PAYMONGO_SECRET_KEY);
+}
+
+/** How clients can pay, for the booking form: "QR Ph (…) or Maya". */
+export function acceptedPaymentMethods(): string {
+  return paymentMethodsText(getServerEnv().PAYMONGO_PAYMENT_METHODS);
 }
 
 export async function createCheckoutSession(input: {
@@ -57,7 +57,7 @@ export async function createCheckoutSession(input: {
               quantity: 1,
             },
           ],
-          payment_method_types: PAYMENT_METHODS,
+          payment_method_types: getServerEnv().PAYMONGO_PAYMENT_METHODS,
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           reference_number: input.referenceCode,

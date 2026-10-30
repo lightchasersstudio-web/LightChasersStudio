@@ -8,6 +8,7 @@ import { BookingWizard } from "@/components/booking/booking-wizard";
 import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
 import {
   earlyBirdOpening,
   formatEarlyBirdUntil,
@@ -159,6 +160,7 @@ async function Workshop() {
             depositPercent={settings.default_deposit_percent}
             vatPercent={settings.vat_percent}
             holdMinutes={settings.hold_minutes}
+            paymentMethods={acceptedPaymentMethods()}
             maxAdvanceDays={settings.max_advance_days}
           />
         ) : (

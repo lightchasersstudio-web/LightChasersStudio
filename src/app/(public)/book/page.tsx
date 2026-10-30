@@ -6,6 +6,7 @@ import { BookingWizard } from "@/components/booking/booking-wizard";
 import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
 import { getPublicSettings, listActiveAddOns, listActiveServices } from "@/server/queries/public";
 
 export const metadata: Metadata = {
@@ -75,6 +76,7 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
       depositPercent={settings.default_deposit_percent}
       vatPercent={settings.vat_percent}
       holdMinutes={settings.hold_minutes}
+      paymentMethods={acceptedPaymentMethods()}
       maxAdvanceDays={settings.max_advance_days}
     />
   );

@@ -39,7 +39,7 @@ const HOW_IT_WORKS = [
   },
   {
     title: "Pay a small deposit",
-    text: "Hold your slot with GCash or card. We'll confirm and get in touch.",
+    text: "Hold your slot by scanning a QR Ph code with GCash, Maya or your bank app. We'll confirm and get in touch.",
     Icon: WalletIcon,
   },
 ];

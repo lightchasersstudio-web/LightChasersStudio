@@ -25,4 +25,15 @@ describe("env schemas", () => {
     const env = serverEnvSchema.parse({ ...validPublic, SUPABASE_SERVICE_ROLE_KEY: "srk" });
     expect(env.BUSINESS_TIMEZONE).toBe("Asia/Manila");
   });
+
+  it("offers QR Ph by default and parses a list of known PayMongo methods", () => {
+    const server = { ...validPublic, SUPABASE_SERVICE_ROLE_KEY: "srk" };
+    expect(serverEnvSchema.parse(server).PAYMONGO_PAYMENT_METHODS).toEqual(["qrph"]);
+    expect(
+      serverEnvSchema.parse({ ...server, PAYMONGO_PAYMENT_METHODS: " QRPH, paymaya,,qrph " })
+        .PAYMONGO_PAYMENT_METHODS,
+    ).toEqual(["qrph", "paymaya"]);
+    expect(() => serverEnvSchema.parse({ ...server, PAYMONGO_PAYMENT_METHODS: "maya" })).toThrow();
+    expect(() => serverEnvSchema.parse({ ...server, PAYMONGO_PAYMENT_METHODS: " , " })).toThrow();
+  });
 });
