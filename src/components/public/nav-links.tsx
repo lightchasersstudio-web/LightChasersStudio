@@ -28,7 +28,8 @@ function ActiveNavLinks() {
 function Links({ pathname }: { pathname: string | null }) {
   return (
     <MotionConfig reducedMotion="user">
-      <ul className="hidden items-center gap-1 md:flex">
+      {/* A segmented track: the current page sits on a raised pill that slides between links. */}
+      <ul className="hidden items-center gap-0.5 rounded-full bg-muted/70 p-1 lg:flex dark:bg-muted/50">
         {SITE_NAV.map(({ href, label }) => {
           const active = isActive(href, pathname);
           return (
@@ -37,7 +38,7 @@ function Links({ pathname }: { pathname: string | null }) {
               {active && (
                 <motion.span
                   layoutId="site-nav-pill"
-                  className="absolute inset-0 rounded-full bg-accent"
+                  className="absolute inset-0 rounded-full bg-background shadow-sm ring-1 ring-border/60"
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                   aria-hidden
                 />
@@ -46,8 +47,8 @@ function Links({ pathname }: { pathname: string | null }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold transition-colors duration-200 hover:text-terracotta-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                  active && "text-accent-foreground",
+                  "relative inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  active && "text-foreground",
                 )}
               >
                 {label}

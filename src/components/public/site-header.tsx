@@ -1,6 +1,7 @@
+import { ArrowUpRightIcon } from "lucide-react";
 import Link from "next/link";
 
-import { BrandLogo } from "@/components/public/brand-logo";
+import { BrandLockup } from "@/components/public/brand-lockup";
 import { HeaderFrame } from "@/components/public/header-frame";
 import { MobileNav } from "@/components/public/mobile-nav";
 import { NavLinks } from "@/components/public/nav-links";
@@ -20,28 +21,31 @@ export async function SiteHeader() {
       >
         Skip to content
       </a>
-      <nav
-        aria-label="Main"
-        className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2 sm:px-6"
-      >
-        <Link
-          href="/"
-          aria-label={`${settings.business_name} home`}
-          className="mr-auto rounded-2xl focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <BrandLogo
-            logoPath={settings.logo_path}
-            name={settings.business_name}
-            size={52}
-            priority
-          />
-        </Link>
+      <nav aria-label="Main" className="flex h-15 items-center gap-2 pr-2 pl-4 sm:pl-5">
+        {/* Logo | links (centred) | actions: the outer two share the spare width. */}
+        <div className="flex flex-1">
+          <Link
+            href="/"
+            aria-label={`${settings.business_name} home`}
+            className="-m-1.5 rounded-full p-1.5 text-[15px] transition-opacity hover:opacity-80 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:text-[17px] lg:text-[19px]"
+          >
+            <BrandLockup name={settings.business_name} priority />
+          </Link>
+        </div>
         <NavLinks />
-        <ThemeToggle />
-        <Button asChild className="hidden sm:inline-flex">
-          <Link href={BOOK_HREF}>Book now</Link>
-        </Button>
-        <MobileNav businessName={settings.business_name} />
+        <div className="flex flex-1 items-center justify-end gap-1">
+          <ThemeToggle />
+          <Button asChild className="hidden gap-1.5 pr-4 sm:inline-flex">
+            <Link href={BOOK_HREF}>
+              Book now
+              <ArrowUpRightIcon
+                className="size-4 transition-transform duration-200 group-hover/button:translate-x-0.5 group-hover/button:-translate-y-0.5"
+                aria-hidden
+              />
+            </Link>
+          </Button>
+          <MobileNav businessName={settings.business_name} />
+        </div>
       </nav>
     </HeaderFrame>
   );

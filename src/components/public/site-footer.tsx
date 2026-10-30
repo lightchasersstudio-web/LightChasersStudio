@@ -1,7 +1,7 @@
 import { ArrowUpRightIcon, MailIcon, MapPinIcon, PhoneIcon } from "lucide-react";
 import Link from "next/link";
 
-import { BrandLogo } from "@/components/public/brand-logo";
+import { BrandLockup } from "@/components/public/brand-lockup";
 import { SITE_NAV } from "@/components/public/site-nav";
 import { Sparkle } from "@/components/shared/sparkle";
 import { currentYear, getPublicSettings } from "@/server/queries/public";
@@ -14,7 +14,7 @@ export async function SiteFooter() {
     <footer id="site-footer" className="mt-24 bg-panel text-panel-foreground">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
         <div className="space-y-4">
-          <BrandLogo logoPath={s.logo_path} name={s.business_name} size={72} />
+          <BrandLockup name={s.business_name} tone="light" className="text-xl" />
           <p className="flex items-center gap-2 font-script text-2xl text-panel-foreground">
             <Sparkle className="size-3.5 text-terracotta" />
             {s.tagline ?? "chasing the light"}
