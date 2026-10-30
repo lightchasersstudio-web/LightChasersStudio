@@ -2,8 +2,32 @@ import type { NextConfig } from "next";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-// Baseline headers; a full CSP (with Turnstile, PayMongo and Supabase origins) lands in Phase 7.
+const isDev = process.env.NODE_ENV === "development";
+const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl).origin : "";
+const turnstile = "https://challenges.cloudflare.com";
+
+// Static CSP (no nonces), so pages stay prerendered under cacheComponents.
+// Inline scripts are needed for Next's bootstrap and the theme script; React
+// needs eval only in dev. Supabase: Storage images, browser uploads, sign-in.
+// PayMongo is a full-page redirect, so it needs nothing here.
+const csp = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline' ${turnstile}${isDev ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' blob: data: ${supabaseOrigin}`,
+  "font-src 'self'",
+  `connect-src 'self' ${supabaseOrigin} ${supabaseOrigin.replace(/^https/, "wss")}`,
+  `frame-src 'self' ${turnstile}`,
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  ...(isDev ? [] : ["upgrade-insecure-requests"]),
+].join("; ");
+
 const securityHeaders = [
+  { key: "Content-Security-Policy", value: csp },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
