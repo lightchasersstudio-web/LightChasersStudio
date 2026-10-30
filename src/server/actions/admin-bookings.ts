@@ -140,6 +140,10 @@ export async function recordPayment(input: unknown): Promise<ActionResult> {
   return adminAction(recordPaymentSchema, input, async (v, ctx) => {
     const record = await loadBookingRecord({ id: v.bookingId });
     if (!record) return fail("Booking not found.");
+    // The form is hidden for these; refuse here too so a stale page can't add money.
+    if (["cancelled", "declined", "expired"].includes(record.status)) {
+      return fail(`This booking is ${record.status}, so payments can't be added to it.`);
+    }
     const balance = record.summary.priceCents - record.summary.paidCents;
     if (v.amountCents > balance) {
       return fail("That's more than the balance.", { amount: ["That's more than the balance."] });

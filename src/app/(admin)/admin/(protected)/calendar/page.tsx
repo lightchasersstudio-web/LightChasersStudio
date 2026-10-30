@@ -7,6 +7,7 @@ import { Suspense } from "react";
 
 import { AdminMonthGrid } from "@/components/admin/calendar/admin-month-grid";
 import { DayTimeline } from "@/components/admin/calendar/day-timeline";
+import { LinkPending } from "@/components/admin/calendar/link-pending";
 import { PageHeader } from "@/components/admin/page-header";
 import { CalendarSkeleton } from "@/components/admin/skeletons";
 import { STATUS_TONES } from "@/components/booking/status-badge";
@@ -81,7 +82,9 @@ async function Calendar({ searchParams }: Pick<PageProps<"/admin/calendar">, "se
         <div className="flex items-center gap-1">
           <Button asChild variant="ghost" size="icon">
             <Link href={href({ month: shiftMonth(month, -1) })} aria-label="Previous month">
-              <ChevronLeftIcon aria-hidden />
+              <LinkPending>
+                <ChevronLeftIcon aria-hidden />
+              </LinkPending>
             </Link>
           </Button>
           <h2 className="min-w-40 text-center font-heading text-2xl font-semibold">
@@ -89,7 +92,9 @@ async function Calendar({ searchParams }: Pick<PageProps<"/admin/calendar">, "se
           </h2>
           <Button asChild variant="ghost" size="icon">
             <Link href={href({ month: shiftMonth(month, 1) })} aria-label="Next month">
-              <ChevronRightIcon aria-hidden />
+              <LinkPending>
+                <ChevronRightIcon aria-hidden />
+              </LinkPending>
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="ml-2">

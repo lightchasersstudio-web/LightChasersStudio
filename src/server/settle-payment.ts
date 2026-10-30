@@ -43,6 +43,11 @@ export async function settlePaidEvent(
     return "error";
   }
 
+  await supabase
+    .from("payment_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("event_id", event.eventId);
+
   if (data.booking_id && ["paid", "paid_late", "needs_review"].includes(data.outcome)) {
     const record = await loadBookingRecord({ id: data.booking_id });
     if (record) await notifyBookingReceived(record);

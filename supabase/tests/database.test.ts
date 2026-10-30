@@ -805,6 +805,16 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     });
   });
 
+  it("purges old rate-limit rows daily", async () => {
+    await inRollback(async (c) => {
+      const { rows } = await c.query(
+        "select schedule, command from cron.job where jobname = 'purge-rate-limits'",
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].command).toMatch(/delete from public\.rate_limits/);
+    });
+  });
+
   it("hit_rate_limit allows N hits per window, then blocks", async () => {
     await inRollback(async (c) => {
       await actAs(c, "service_role");
