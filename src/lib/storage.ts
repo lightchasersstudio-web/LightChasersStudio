@@ -16,5 +16,6 @@ export function publicImageUrl(bucket: PublicBucket, path: string): string {
 export const STORAGE_PATH = {
   portfolio: /^(wedding|portrait|event|commercial)\/[0-9a-f-]{36}\.(webp|jpg)$/,
   serviceCover: /^services\/[0-9a-f-]{36}\.(webp|jpg)$/,
+  workshopSlide: /^workshop\/[0-9a-f-]{36}\.(webp|jpg)$/,
   logo: /^logo\/[0-9a-f-]{36}\.(webp|png|jpg)$/,
 } as const;
