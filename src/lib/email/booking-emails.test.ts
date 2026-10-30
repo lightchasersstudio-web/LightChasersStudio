@@ -31,6 +31,24 @@ describe("booking emails", () => {
     expect(email.text).toContain("Balance: ₱2,450");
   });
 
+  it("lists each workshop person, escaped, with the refund rule", () => {
+    const email = bookingConfirmedEmail(
+      {
+        ...booking,
+        people: [
+          { name: "Ana <i>Cruz</i>", category: "Early bird", priceCents: 400000 },
+          { name: "Ben Reyes", category: "Student", priceCents: 400000 },
+        ],
+      },
+      "https://studio.example",
+    );
+    expect(email.html).toContain("Ana &lt;i&gt;Cruz&lt;/i&gt; · Early bird · ₱4,000");
+    expect(email.html).toContain("Refunds:");
+    expect(email.text).toContain("Person 2: Ben Reyes · Student · ₱4,000");
+    expect(email.text).toContain("Refunds: Paid half");
+    expect(bookingConfirmedEmail(booking, "https://studio.example").html).not.toContain("Refunds:");
+  });
+
   it("shows the studio logo from the live site", () => {
     const email = bookingConfirmedEmail(booking, "https://studio.example");
     expect(email.html).toContain('src="https://studio.example/brand/logo.jpg"');

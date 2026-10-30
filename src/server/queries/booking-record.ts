@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { BookingSummary } from "@/lib/booking/booking-summary";
+import { summaryPeople, type BookingSummary } from "@/lib/booking/booking-summary";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { BookingStatus } from "@/lib/booking/status";
 
@@ -28,7 +28,7 @@ export async function loadBookingRecord(
   const query = supabase
     .from("bookings")
     .select(
-      "id, reference_code, status, start_at, end_at, has_end_time, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name), add_ons:booking_add_ons(name, price_cents), client:clients(email), payments(amount_cents, status)",
+      "id, reference_code, status, start_at, end_at, has_end_time, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name), add_ons:booking_add_ons(name, price_cents), attendees:booking_attendees(position, full_name, category, price_cents), client:clients(email), payments(amount_cents, status)",
     );
   const [{ data, error }, settings] = await Promise.all([
     "id" in where
@@ -64,6 +64,7 @@ export async function loadBookingRecord(
       studioName: settings.data.business_name,
       studioPhone: settings.data.phone,
       studioEmail: settings.data.email,
+      people: summaryPeople(data.attendees),
     },
   };
 }

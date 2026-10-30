@@ -102,6 +102,7 @@ describe("serviceSchema: workshop schedule", () => {
       workshopEnd: "17:30",
       workshopSeats: "15",
       workshopLocation: "Light Chasers Studio, Tetuan",
+      notifyWorkshopMove: true,
       earlyBirdPrice: "",
       earlyBirdUntil: "",
       earlyBirdSeats: "",

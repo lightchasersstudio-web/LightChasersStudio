@@ -17,6 +17,7 @@ import { PACKAGE_CATEGORIES, type ServiceCategory } from "@/lib/catalog";
 import { PAYMENT_METHODS, type PaymentMethod, type SalesMonth } from "@/lib/reports/sales";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
+import { ATTENDEE_CATEGORIES } from "@/lib/validations/booking";
 
 const RANGES = [
   { months: 3, label: "3 months" },
@@ -171,8 +172,43 @@ export function SalesReport({ months: all }: { months: SalesMonth[] }) {
         </section>
       </div>
 
+      <WorkshopSummary months={current} />
+
       {showTable && <MonthTable months={current} />}
     </div>
+  );
+}
+
+/** Workshop sign-ups in the period and who came, by price category; nothing without sign-ups. */
+function WorkshopSummary({ months }: { months: SalesMonth[] }) {
+  const signUps = sum(months.map((m) => m.workshop.signUps));
+  if (signUps === 0) return null;
+  const rows = ATTENDEE_CATEGORIES.map((c) => ({
+    ...c,
+    people: sum(months.map((m) => m.workshop.people[c.value]?.people ?? 0)),
+    cents: sum(months.map((m) => m.workshop.people[c.value]?.cents ?? 0)),
+  }));
+  const people = sum(rows.map((r) => r.people));
+  return (
+    <section className="rounded-3xl border bg-card p-4 sm:p-6">
+      <h2 className="text-xl font-semibold">Workshop</h2>
+      <p className="text-sm text-muted-foreground">
+        {signUps} {signUps === 1 ? "sign-up" : "sign-ups"} for {people}{" "}
+        {people === 1 ? "person" : "people"} in this period (paid, confirmed or done), by price
+        category. Prices are per person, before VAT.
+      </p>
+      <ul className="mt-5 grid gap-3 sm:grid-cols-3">
+        {rows.map((r) => (
+          <li key={r.value} className="rounded-2xl bg-muted/60 p-4">
+            <p className="text-sm font-semibold text-muted-foreground">{r.label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
+              {r.people} {r.people === 1 ? "person" : "people"}
+            </p>
+            <p className="text-sm text-muted-foreground tabular-nums">{formatPeso(r.cents)}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

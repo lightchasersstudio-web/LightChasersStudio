@@ -1,7 +1,9 @@
 import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
 
+import { WORKSHOP_REFUND_RULE } from "@/lib/booking/workshop";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
+import { ATTENDEE_CATEGORIES } from "@/lib/validations/booking";
 import { formatPeso } from "@/lib/utils/money";
 
 /** Everything the booking card, "copy as text" and emails show. */
@@ -22,7 +24,27 @@ export type BookingSummary = {
   studioName: string;
   studioPhone: string | null;
   studioEmail: string | null;
+  /** Workshop sign-ups: each person with their price category label and price. */
+  people?: { name: string; category: string; priceCents: number }[];
 };
+
+/** BookingSummary.people from booking_attendees rows, in sign-up order; undefined for a shoot. */
+export function summaryPeople(
+  rows: { position: number; full_name: string; category: string; price_cents: number }[],
+): BookingSummary["people"] {
+  if (rows.length === 0) return undefined;
+  return [...rows]
+    .sort((a, b) => a.position - b.position)
+    .map((a) => ({
+      name: a.full_name,
+      category: ATTENDEE_CATEGORIES.find((c) => c.value === a.category)?.label ?? a.category,
+      priceCents: a.price_cents,
+    }));
+}
+
+/** "Ana Cruz · Early bird · ₱4,000" */
+export const formatPerson = (p: NonNullable<BookingSummary["people"]>[number]) =>
+  `${p.name} · ${p.category} · ${formatPeso(p.priceCents)}`;
 
 /**
  * "Tue, 3 Nov 2026, 1:00 PM – 5:00 PM" in Manila time, or just the start
@@ -47,12 +69,14 @@ export function bookingSummaryText(b: BookingSummary): string {
     `Reference: ${b.reference}`,
     `Name: ${b.contactName}`,
     `Package: ${b.serviceName}`,
+    ...(b.people ?? []).map((p, i) => `Person ${i + 1}: ${formatPerson(p)}`),
     b.addOns.length > 0 && `Add-ons: ${formatAddOns(b.addOns)}`,
     `When: ${formatBookingWhen(b.startAt, b.endAt)}`,
     b.location && `Location: ${b.location}`,
     `Total: ${formatPeso(b.priceCents)}${b.vatCents > 0 ? ` (incl. ${formatPeso(b.vatCents)} VAT)` : ""}`,
     `Paid: ${formatPeso(b.paidCents)}`,
     balance > 0 ? `Balance: ${formatPeso(balance)}` : "Fully paid",
+    b.people && `Refunds: ${WORKSHOP_REFUND_RULE}`,
     [b.studioPhone, b.studioEmail].filter(Boolean).join(" · ") &&
       `Questions? ${[b.studioPhone, b.studioEmail].filter(Boolean).join(" · ")}`,
   ]

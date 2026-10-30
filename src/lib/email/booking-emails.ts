@@ -2,8 +2,10 @@ import {
   bookingSummaryText,
   formatAddOns,
   formatBookingWhen,
+  formatPerson,
   type BookingSummary,
 } from "@/lib/booking/booking-summary";
+import { WORKSHOP_REFUND_RULE } from "@/lib/booking/workshop";
 import type { Email } from "@/lib/email/send";
 import { formatPeso } from "@/lib/utils/money";
 
@@ -33,6 +35,7 @@ function layout(
   const rows: [string, string][] = [
     ["Reference", b.reference],
     ["Package", b.serviceName],
+    ...(b.people ?? []).map((p, i): [string, string] => [`Person ${i + 1}`, formatPerson(p)]),
     ...(b.addOns.length > 0 ? [["Add-ons", formatAddOns(b.addOns)!] as [string, string]] : []),
     ["When", formatBookingWhen(b.startAt, b.endAt)],
     ...(b.location ? [["Location", b.location] as [string, string]] : []),
@@ -51,6 +54,7 @@ function layout(
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BLUSH};border-radius:12px">
 ${rows.map(([k, v]) => `<tr><td style="padding:8px 14px;font-size:13px;opacity:.75">${k}</td><td style="padding:8px 14px;font-weight:bold">${esc(v)}</td></tr>`).join("")}
 </table>
+${b.people ? `<p style="margin:16px 0 0;font-size:13px;line-height:1.5"><strong>Refunds:</strong> ${esc(WORKSHOP_REFUND_RULE)}</p>` : ""}
 <p style="margin:24px 0 0"><a href="${esc(link.href)}" style="display:inline-block;background:${EVERGREEN};color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-weight:bold">${esc(link.label)}</a></p>
 ${b.studioPhone || b.studioEmail ? `<p style="margin:24px 0 0;font-size:13px;opacity:.75">Questions? ${esc([b.studioPhone, b.studioEmail].filter(Boolean).join(" · "))}</p>` : ""}
 </td></tr></table></td></tr></table></body></html>`;

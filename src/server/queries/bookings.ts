@@ -4,6 +4,7 @@ import { TZDate } from "@date-fns/tz";
 import { addDays, getDaysInMonth } from "date-fns";
 
 import { PAGE_SIZE, searchTerm, type BookingFilters } from "@/lib/admin/list-filters";
+import { summaryPeople } from "@/lib/booking/booking-summary";
 import type { BookingStatus } from "@/lib/booking/status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -175,6 +176,7 @@ export async function getBookingForAdmin(id: string) {
       studioName: settings.data.business_name,
       studioPhone: settings.data.phone,
       studioEmail: settings.data.email,
+      people: summaryPeople(attendees),
     },
   };
 }
