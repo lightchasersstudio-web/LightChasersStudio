@@ -1,6 +1,6 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-30. Phases 0–5 and the extras (PRs #8–#21) are on `main`. Branch `complete-features` (waiting for its PR) adds Phase 6 (bookings table, clients, activity), privacy (policy page, delete a client's data), the workshop loose ends, Phase 7 hardening and the known small fixes. QR Ph payments work in PayMongo test mode; Turnstile is live._
+_Last updated: 2026-10-30. Phases 0–7 are on `main`: the extras (PRs #8–#21) and branch `complete-features` (merged 2026-10-30), which added Phase 6 (bookings table, clients, activity), privacy (policy page, delete a client's data), the workshop loose ends, Phase 7 hardening and the known small fixes. QR Ph payments work in PayMongo test mode; Turnstile is live._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -11,7 +11,7 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 ## Where we left off
 
 - **Phases 0–5 are built, verified and merged into `main`** (Phase 5 = PR #7), plus booking extras, booking management, package lengths, Gmail sending, package highlights, a security upgrade, the workshop and its rework (PRs #8–#21, latest on 2026-10-28).
-- **Waiting to merge: branch `complete-features`** (2026-10-30), see [2026-10-30](#2026-10-30-finishing-branch-complete-features). Its two migrations are already on the dev database; both only add things, so `main` keeps working.
+- **Merged 2026-10-30: branch `complete-features`** (merge `f98888c`), see [2026-10-30](#2026-10-30-finishing-branch-complete-features): Phase 6 admin pages, privacy, workshop loose ends, Phase 7 hardening and small fixes. Not yet clicked through signed in on the live site (Bookings, Clients, Activity, delete data, the "workshop moved" email).
 - **Emails work** from the studio Gmail. **Bot protection (Turnstile) is on** (both keys set, checked 2026-10-30). **Payments:** QR Ph works end to end in PayMongo **test mode** on the live site (webhook verified, booking marked paid). Going live needs the live key and a live webhook; Maya, GCash and cards wait on PayMongo's approval (see [Next steps](#next-steps)).
 - **Hosting:** Vercel deploys from `main`, using the **dev** Supabase project for now. A separate production database is still Phase 8.
 - **The dev database** has every migration applied, including the branch's (latest `20261030000200_purge_rate_limits.sql`, 2026-10-30).
@@ -34,8 +34,8 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 | —     | Security: Next.js 16.4.3, dependency patches (`npm audit`: 0)               | ✅ Done                      | #17                        |
 | —     | Workshop booking (base for the other developer)                             | ✅ Done                      | #18                        |
 | —     | Workshop rework, home workshop banner, framed portfolio                     | ✅ Done                      | #19, #21                   |
-| 6     | Admin: bookings table, clients, activity log, privacy anonymise             | ✅ Built, waiting to merge   | branch `complete-features` |
-| 7     | Hardening: CSP/HSTS, error pages, sitemap/robots, Lighthouse fixes          | ✅ Built, waiting to merge   | branch `complete-features` |
+| 6     | Admin: bookings table, clients, activity log, privacy anonymise             | ✅ Done                      | branch `complete-features` |
+| 7     | Hardening: CSP/HSTS, error pages, sitemap/robots, Lighthouse fixes          | ✅ Done                      | branch `complete-features` |
 | 8     | Deploy: Vercel + production Supabase                                        | ⏳ Vercel (dev DB) running   |                            |
 
 ## What's built
@@ -184,7 +184,7 @@ All owner decisions from 2026-10-28. Migrations `20261028000100` to `000600`, al
 - **Test mode verified on the live site:** a QR Ph test payment marked booking `BK-2026-383DA0` paid through the webhook; the real PayMongo payload matched `parsePaidEvent`.
 - **Webhook gotchas we hit:** the URL must be exactly `https://light-chasers-studio.vercel.app/api/webhooks/paymongo` (a double slash redirects, and PayMongo doesn't follow redirects); and the dashboard made a **live-mode** endpoint, which test payments never call. The test-mode webhook (`hook_bRXrNNRuXEaxdbFwfouTJRam`) was created through the API with the test key; its secret is the one in Vercel's `PAYMONGO_WEBHOOK_SECRET` now. The live endpoint is kept for go-live, with its own secret.
 
-### 2026-10-30: finishing (branch `complete-features`)
+### 2026-10-30: finishing (branch `complete-features`, merged)
 
 - **Calendar freshness:** the booking calendar reloads free times when the visitor comes back to the tab. (Times that "disappear" a day or two ahead are usually the 48-hour minimum notice, not a bug.)
 - **Bookings** (`/admin/bookings`): every booking with search (name, email, phone, reference), status, package and shoot-date filters, 25 per page, filters in the URL.
@@ -214,8 +214,8 @@ All owner decisions from 2026-10-28. Migrations `20261028000100` to `000600`, al
 
 | Check                 | Command                                                                           | Last result                                                |
 | --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 162 unit tests (branch, 2026-10-30)            |
-| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ 51 passing against the dev project (branch, 2026-10-30) |
+| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 162 unit tests (2026-10-30)                    |
+| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ 51 passing against the dev project (2026-10-30)         |
 | Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                                     | ✅ passing on desktop and phone (Pixel 7), touch included  |
 | Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)                     | ✅ passing, includes public-page refresh after edits       |
 | Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`                               | ✅ wizard up to payment; staff booking, share, pay, cancel |
@@ -277,6 +277,6 @@ The workshop sign-up was checked by hand on 2026-10-28 (3 people: Regular, Early
 2. **More methods:** when PayMongo approves Maya (requested) or GCash/cards (after the business upgrade), add them to `PAYMONGO_PAYMENT_METHODS` (e.g. `qrph,paymaya,gcash,card`), redeploy, and update the FAQ and home page payment text.
 3. **Owner wording:** deposit rules and the cancellation/refund policy for the review step and emails (the workshop's rule is already in). **Review the Privacy Policy draft** (`/privacy`).
 
-**Merge `complete-features`:** open its PR on GitHub, check the Vercel preview (book with QR Ph in test mode, open Bookings / Clients / Activity, try `/sitemap.xml`), then merge.
+**Check the merged work on the live site (owner, signed in):** open Bookings, Clients and Activity; make one QR Ph test booking (the new security headers mustn't block booking or the Cloudflare check); set a new workshop date (the 29 October one has passed, so the banner and button hide themselves).
 
 **Phase 8 (go-live):** production Supabase project (`npm run db:push` to it, then `scripts/copy-catalog.mjs`), point Vercel at it, real content, sample photos removed, Supabase backups on.
