@@ -2,6 +2,7 @@ import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
 
 import type { ServiceCategory } from "@/lib/catalog";
+import type { AttendeeCategory } from "@/lib/validations/booking";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 
 // The sales report's numbers, built from bookings and payments:
@@ -33,9 +34,20 @@ export type SalesMonth = {
   byCategory: Partial<Record<ServiceCategory, { bookings: number; salesCents: number }>>;
   /** Money received this month, by how it was paid. */
   byMethod: Record<PaymentMethod, number>;
+  /** Workshop sign-ups this month (by workshop date) and their people by price category. */
+  workshop: {
+    signUps: number;
+    people: Partial<Record<AttendeeCategory, { people: number; cents: number }>>;
+  };
 };
 
-export type SaleRow = { startAt: string; priceCents: number; category: ServiceCategory | null };
+export type SaleRow = {
+  startAt: string;
+  priceCents: number;
+  category: ServiceCategory | null;
+  /** Workshop sign-ups: each person's category and price (before VAT). */
+  attendees?: { category: AttendeeCategory; priceCents: number }[];
+};
 export type PaymentRow = { paidAt: string; amountCents: number; provider: string };
 
 /** The first instant of the oldest month in the report (studio time). */
@@ -75,6 +87,7 @@ export function buildSalesMonths(
       salesCents: 0,
       byCategory: {},
       byMethod: { gcash: 0, cash: 0, online: 0 },
+      workshop: { signUps: 0, people: {} },
     };
   });
   const byKey = new Map(months.map((m) => [m.month, m]));
@@ -89,6 +102,14 @@ export function buildSalesMonths(
       const c = (m.byCategory[s.category] ??= { bookings: 0, salesCents: 0 });
       c.bookings += 1;
       c.salesCents += s.priceCents;
+    }
+    if (s.category === "workshop") {
+      m.workshop.signUps += 1;
+      for (const a of s.attendees ?? []) {
+        const w = (m.workshop.people[a.category] ??= { people: 0, cents: 0 });
+        w.people += 1;
+        w.cents += a.priceCents;
+      }
     }
   }
   for (const p of payments) {

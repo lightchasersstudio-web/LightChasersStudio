@@ -12,6 +12,7 @@ import { SectionHeading } from "@/components/public/section-heading";
 import { ServiceCard } from "@/components/public/service-card";
 import { BOOK_HREF } from "@/components/public/site-nav";
 import { WorkshopPromo } from "@/components/public/workshop-promo";
+import { HideAfter } from "@/components/shared/hide-after";
 import { Reveal, RevealItem, RevealList } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
@@ -150,12 +151,15 @@ export default async function HomePage() {
 
       {/* Workshop sign-up */}
       {workshop && (
-        <WorkshopPromo
-          workshop={workshop}
-          photos={workshopPhotos}
-          vatPercent={settings.vat_percent}
-          className="pt-12 pb-0"
-        />
+        // The page is static: hide the banner in the browser once the workshop is over.
+        <HideAfter until={workshop.workshop_ends_at}>
+          <WorkshopPromo
+            workshop={workshop}
+            photos={workshopPhotos}
+            vatPercent={settings.vat_percent}
+            className="pt-12 pb-0"
+          />
+        </HideAfter>
       )}
 
       {/* Highlight reels */}

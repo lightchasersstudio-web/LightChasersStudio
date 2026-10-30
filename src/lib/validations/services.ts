@@ -48,6 +48,8 @@ export const serviceSchema = z
     workshopEnd: z.string().trim(),
     workshopSeats: z.string().trim(),
     workshopLocation: optionalText(300),
+    // Email everyone signed up when the date, time or place changes (not stored).
+    notifyWorkshopMove: z.boolean().default(true),
     // Workshops only: discounted categories (empty price = not offered).
     earlyBirdPrice: z.string().trim(),
     earlyBirdUntil: z.string().trim(),
@@ -292,6 +294,7 @@ export function workshopFormValues(service: {
     workshopEnd: local(service.workshop_ends_at, "time"),
     workshopSeats: service.workshop_seats === null ? "" : String(service.workshop_seats),
     workshopLocation: service.workshop_location ?? "",
+    notifyWorkshopMove: true,
     earlyBirdPrice:
       service.workshop_early_bird_price_cents === null
         ? ""

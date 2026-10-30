@@ -37,6 +37,38 @@ describe("buildSalesMonths", () => {
     });
   });
 
+  it("counts workshop sign-ups and their people by price category", () => {
+    const [oct] = buildSalesMonths(
+      [
+        {
+          startAt: "2026-10-25T02:00:00.000Z",
+          priceCents: 896_000,
+          category: "workshop",
+          attendees: [
+            { category: "early_bird", priceCents: 400_000 },
+            { category: "student", priceCents: 400_000 },
+          ],
+        },
+        {
+          startAt: "2026-10-25T02:00:00.000Z",
+          priceCents: 560_000,
+          category: "workshop",
+          attendees: [{ category: "early_bird", priceCents: 400_000 }],
+        },
+      ],
+      [],
+      1,
+      now,
+    );
+    expect(oct!.workshop).toEqual({
+      signUps: 2,
+      people: {
+        early_bird: { people: 2, cents: 800_000 },
+        student: { people: 1, cents: 400_000 },
+      },
+    });
+  });
+
   it("splits money received by how it was paid", () => {
     const [oct] = buildSalesMonths(
       [],

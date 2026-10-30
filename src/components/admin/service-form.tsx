@@ -67,6 +67,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           workshopEnd: "",
           workshopSeats: "",
           workshopLocation: "",
+          notifyWorkshopMove: true,
           earlyBirdPrice: "",
           earlyBirdUntil: "",
           earlyBirdSeats: "",
@@ -250,7 +251,7 @@ export function ServiceForm({ service }: { service?: Service }) {
               <CardDescription>
                 Clients don&apos;t pick a time or place: everyone who signs up joins this date, time
                 and location. Leave the date empty until it&apos;s decided (sign-up stays closed).
-                Changing it moves everyone already signed up, so let them know.
+                Changing it moves everyone already signed up.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -276,6 +277,14 @@ export function ServiceForm({ service }: { service?: Service }) {
                   description="How many people can join. Leave empty for no limit."
                   className="sm:max-w-[calc(33%-0.5rem)]"
                 />
+                {service && (
+                  <SwitchField
+                    control={control}
+                    name="notifyWorkshopMove"
+                    label="Email everyone signed up if this changes"
+                    description="When you save a new date, time or place, each person who has signed up gets an email with the updated details."
+                  />
+                )}
               </FieldGroup>
             </CardContent>
           </Card>

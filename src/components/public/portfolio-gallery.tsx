@@ -84,6 +84,8 @@ export function PortfolioGallery({ photos }: { photos: PublicPhoto[] }) {
                     alt={photo.alt_text}
                     fill
                     sizes="(min-width: 1024px) 33vw, 50vw"
+                    // The first row is on screen at once (and the largest paint): don't lazy-load it.
+                    loading={i < 3 ? "eager" : undefined}
                     placeholder={photo.blur_data_url ? "blur" : "empty"}
                     blurDataURL={photo.blur_data_url ?? undefined}
                     className="object-cover transition-transform duration-500 group-hover:scale-[1.04] motion-reduce:transition-none"

@@ -185,7 +185,7 @@ export function ReviewsManager({ reviews: initial }: { reviews: Review[] }) {
 
 function Stars({ rating }: { rating: number }) {
   return (
-    <span className="flex gap-0.5" aria-label={`${rating} out of 5 stars`}>
+    <span className="flex gap-0.5" role="img" aria-label={`${rating} out of 5 stars`}>
       {Array.from({ length: 5 }, (_, i) => (
         <StarIcon
           key={i}

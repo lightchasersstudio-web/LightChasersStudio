@@ -505,8 +505,17 @@ export function BookingWizard({
                             />
                             <span className="text-sm">
                               I agree to {businessName} using these details to arrange my booking
-                              and contact me about it, under the Philippine Data Privacy Act of
-                              2012.
+                              and contact me about it, under the Philippine Data Privacy Act of 2012
+                              (see our{" "}
+                              <a
+                                href="/privacy"
+                                target="_blank"
+                                rel="noopener"
+                                className="font-semibold underline underline-offset-4"
+                              >
+                                privacy policy
+                              </a>
+                              ).
                             </span>
                           </label>
                           {fieldState.invalid && <FieldError errors={[fieldState.error]} />}

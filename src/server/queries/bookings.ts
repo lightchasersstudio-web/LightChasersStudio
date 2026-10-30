@@ -3,10 +3,12 @@ import "server-only";
 import { TZDate } from "@date-fns/tz";
 import { addDays, getDaysInMonth } from "date-fns";
 
+import { PAGE_SIZE, searchTerm, type BookingFilters } from "@/lib/admin/list-filters";
+import { summaryPeople } from "@/lib/booking/booking-summary";
 import type { BookingStatus } from "@/lib/booking/status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { BUSINESS_TZ } from "@/lib/utils/business-date";
+import { BUSINESS_TZ, tzDate } from "@/lib/utils/business-date";
 
 export type CalendarBooking = {
   id: string;
@@ -174,6 +176,7 @@ export async function getBookingForAdmin(id: string) {
       studioName: settings.data.business_name,
       studioPhone: settings.data.phone,
       studioEmail: settings.data.email,
+      people: summaryPeople(attendees),
     },
   };
 }
@@ -294,4 +297,110 @@ export async function listBookingHistory(bookingId: string): Promise<HistoryEntr
     createdAt: r.created_at,
     actor: (r.actor_id && names.get(r.actor_id)) || "Staff",
   }));
+}
+
+export type BookingRow = {
+  id: string;
+  reference: string;
+  status: BookingStatus;
+  startAt: string;
+  contactName: string;
+  contactPhone: string;
+  email: string | null;
+  serviceName: string;
+  totalCents: number;
+  paidCents: number;
+  needsRefundReview: boolean;
+};
+
+const ROW_FIELDS =
+  "id, reference_code, status, start_at, contact_name, contact_phone, price_cents, hold_expires_at, needs_refund_review, service:services(name), client:clients(email), payments(amount_cents, status)";
+
+type RawRow = {
+  id: string;
+  reference_code: string;
+  status: BookingStatus;
+  start_at: string;
+  contact_name: string;
+  contact_phone: string;
+  price_cents: number;
+  hold_expires_at: string | null;
+  needs_refund_review: boolean;
+  service: { name: string } | null;
+  client: { email: string | null } | null;
+  payments: { amount_cents: number; status: string }[];
+};
+
+function toRow(b: RawRow, now = Date.now()): BookingRow {
+  return {
+    id: b.id,
+    reference: b.reference_code,
+    // A lapsed hold is effectively expired even before the cron job marks it.
+    status:
+      b.status === "pending_payment" && b.hold_expires_at && Date.parse(b.hold_expires_at) <= now
+        ? "expired"
+        : b.status,
+    startAt: b.start_at,
+    contactName: b.contact_name,
+    contactPhone: b.contact_phone,
+    email: b.client?.email ?? null,
+    serviceName: b.service?.name ?? "Session",
+    totalCents: b.price_cents, // already includes VAT
+    paidCents: b.payments
+      .filter((p) => p.status === "paid")
+      .reduce((sum, p) => sum + p.amount_cents, 0),
+    needsRefundReview: b.needs_refund_review,
+  };
+}
+
+/** One page of bookings for the admin Bookings table, newest shoot first (RLS: admins only). */
+export async function listBookings(
+  filters: BookingFilters,
+): Promise<{ rows: BookingRow[]; total: number }> {
+  const supabase = await createClient();
+  let query = supabase.from("bookings").select(ROW_FIELDS, { count: "exact" });
+
+  const term = searchTerm(filters.q);
+  if (term) {
+    // Email lives on the client, so look those up first.
+    const { data: clients, error } = await supabase
+      .from("clients")
+      .select("id")
+      .ilike("email", `%${term}%`)
+      .limit(200);
+    if (error) throw error;
+    const ors = [
+      `reference_code.ilike.*${term}*`,
+      `contact_name.ilike.*${term}*`,
+      `contact_phone.ilike.*${term}*`,
+    ];
+    if (clients.length) ors.push(`client_id.in.(${clients.map((c) => c.id).join(",")})`);
+    query = query.or(ors.join(","));
+  }
+  if (filters.status) query = query.eq("status", filters.status);
+  if (filters.service) query = query.eq("service_id", filters.service);
+  if (filters.from) query = query.gte("start_at", tzDate(filters.from).toISOString());
+  if (filters.to) query = query.lt("start_at", addDays(tzDate(filters.to), 1).toISOString());
+
+  const start = (filters.page - 1) * PAGE_SIZE;
+  const { data, error, count } = await query
+    .order("start_at", { ascending: false })
+    .range(start, start + PAGE_SIZE - 1);
+  if (error) throw error;
+  const now = Date.now();
+  return { rows: (data as RawRow[]).map((b) => toRow(b, now)), total: count ?? 0 };
+}
+
+/** Every booking of one client, newest shoot first (RLS: admins only). */
+export async function listClientBookings(clientId: string): Promise<BookingRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(ROW_FIELDS)
+    .eq("client_id", clientId)
+    .order("start_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  const now = Date.now();
+  return (data as RawRow[]).map((b) => toRow(b, now));
 }

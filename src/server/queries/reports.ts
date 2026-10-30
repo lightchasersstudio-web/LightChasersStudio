@@ -36,7 +36,9 @@ export async function getSalesMonths(count = 24, now: Date = new Date()): Promis
     allRows((a, b) =>
       supabase
         .from("bookings")
-        .select("id, start_at, price_cents, service:services(category)")
+        .select(
+          "id, start_at, price_cents, service:services(category), attendees:booking_attendees(category, price_cents)",
+        )
         .in("status", [...SALE_STATUSES])
         .gte("start_at", from)
         .lt("start_at", to)
@@ -61,6 +63,7 @@ export async function getSalesMonths(count = 24, now: Date = new Date()): Promis
     startAt: b.start_at,
     priceCents: b.price_cents,
     category: b.service?.category ?? null,
+    attendees: b.attendees.map((a) => ({ category: a.category, priceCents: a.price_cents })),
   }));
   const paid: PaymentRow[] = payments.flatMap((p) =>
     p.paid_at ? [{ paidAt: p.paid_at, amountCents: p.amount_cents, provider: p.provider }] : [],

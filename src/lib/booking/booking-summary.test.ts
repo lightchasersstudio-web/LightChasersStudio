@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bookingSummaryText, type BookingSummary } from "./booking-summary";
+import { bookingSummaryText, summaryPeople, type BookingSummary } from "./booking-summary";
 
 const booking: BookingSummary = {
   reference: "BK-2026-ABC123",
@@ -40,5 +40,20 @@ describe("bookingSummaryText", () => {
     const text = bookingSummaryText({ ...booking, location: null, paidCents: 350000 });
     expect(text).not.toMatch(/Location/);
     expect(text).toContain("Fully paid");
+  });
+});
+
+describe("summaryPeople", () => {
+  it("orders people by position and labels their category", () => {
+    expect(
+      summaryPeople([
+        { position: 2, full_name: "Ben", category: "student", price_cents: 400000 },
+        { position: 1, full_name: "Ana", category: "early_bird", price_cents: 400000 },
+      ]),
+    ).toEqual([
+      { name: "Ana", category: "Early bird", priceCents: 400000 },
+      { name: "Ben", category: "Student", priceCents: 400000 },
+    ]);
+    expect(summaryPeople([])).toBeUndefined();
   });
 });
