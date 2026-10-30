@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { ArrowRightIcon, CalendarDaysIcon, ClockIcon, MapPinIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 
@@ -10,11 +11,13 @@ import { formatWorkshopWhen, workshopPrices } from "@/lib/booking/workshop";
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
+import { parseWorkshopSlides } from "@/lib/validations/workshop-slides";
 import type { PublicPhoto, PublicService } from "@/server/queries/public";
 
 /**
  * Home-page banner for the open workshop: copy and price on the left, a small
- * polaroid stack (the workshop's cover photo, else two gallery photos) on the right.
+ * polaroid stack on the right: the slideshow photos picked in the admin, else the
+ * workshop's cover photo and gallery photos.
  */
 export function WorkshopPromo({
   workshop,
@@ -27,23 +30,29 @@ export function WorkshopPromo({
   vatPercent: number;
   className?: string;
 }) {
-  // The slideshow: the workshop's own cover photo first (if any), then gallery
-  // photos; the polaroid behind shows one more.
-  const slides = [
-    ...(workshop.cover_image_path
-      ? [{ src: publicImageUrl("portfolio", workshop.cover_image_path), blur: null }]
-      : []),
-    ...photos.map((p) => ({
-      src: publicImageUrl("portfolio", p.storage_path),
-      blur: p.blur_data_url,
-    })),
-  ];
-  const back = photos.at(-1);
-  // The lowest per-person price (early bird / student), shown as "from".
-  // The lowest per-person price on offer ("from" when categories differ); none
-  // when every category is switched off.
-  const offered = Object.values(workshopPrices(workshop)).filter((c): c is number => c !== null);
-  const fromCents = offered.length ? Math.min(...offered) : null;
+  // The slideshow: the photos the admin picked for it, else the workshop's own
+  // cover photo first (if any), then gallery photos. The polaroid behind shows one more.
+  const chosen = parseWorkshopSlides(workshop.workshop_slides).map((s) => ({
+    src: publicImageUrl("portfolio", s.path),
+    blur: s.blur,
+  }));
+  const slides = chosen.length
+    ? chosen
+    : [
+        ...(workshop.cover_image_path
+          ? [{ src: publicImageUrl("portfolio", workshop.cover_image_path), blur: null }]
+          : []),
+        ...photos.map((p) => ({
+          src: publicImageUrl("portfolio", p.storage_path),
+          blur: p.blur_data_url,
+        })),
+      ];
+  const back = chosen.length ? chosen.at(-1) : photos.at(-1);
+  // The workshop's main (Regular) price, even while Regular is switched off
+  // (owner's choice 2026-10-30); hidden when every category is off (paused).
+  const priceCents = Object.values(workshopPrices(workshop)).some((c) => c !== null)
+    ? workshop.price_cents
+    : null;
   // The admin sets the date; until then the banner teases it.
   const when =
     workshop.workshop_starts_at && workshop.workshop_ends_at
@@ -104,15 +113,14 @@ export function WorkshopPromo({
                 <ArrowRightIcon aria-hidden />
               </Link>
             </Button>
-            {fromCents !== null && (
+            {priceCents !== null && (
               <p>
-                {offered.some((c) => c > fromCents) && (
-                  <span className="mr-1.5 text-sm text-primary-foreground/80">from</span>
-                )}
-                <span className="font-heading text-2xl font-semibold">{formatPeso(fromCents)}</span>
-                <span className="ml-1.5 text-sm text-primary-foreground/80">
-                  per person{vatPercent > 0 && " + VAT"}
+                <span className="font-heading text-2xl font-semibold">
+                  {formatPeso(priceCents)}
                 </span>
+                {vatPercent > 0 && (
+                  <span className="ml-1.5 text-sm text-primary-foreground/80">+ VAT</span>
+                )}
               </p>
             )}
           </div>
@@ -127,7 +135,9 @@ export function WorkshopPromo({
           <div className="relative">
             {/* A second polaroid peeking out behind, for a little stack. */}
             <div className="absolute inset-0 translate-x-3 -translate-y-2 rotate-6 sm:translate-x-6 sm:-translate-y-3">
-              {back ? (
+              {back && "src" in back ? (
+                <BackPolaroid src={back.src} blur={back.blur} />
+              ) : back ? (
                 <PhotoPolaroid photo={back} sizes="20rem" className="pb-12" />
               ) : (
                 <PlaceholderPolaroid index={1} className="pb-12" />
@@ -148,5 +158,24 @@ export function WorkshopPromo({
         </Link>
       </Reveal>
     </section>
+  );
+}
+
+/** The decorative polaroid peeking out behind the slideshow. */
+function BackPolaroid({ src, blur }: { src: string; blur: string | null }) {
+  return (
+    <figure aria-hidden className="polaroid pb-12">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-[2px] bg-muted">
+        <Image
+          src={src}
+          alt=""
+          fill
+          sizes="20rem"
+          placeholder={blur ? "blur" : "empty"}
+          blurDataURL={blur ?? undefined}
+          className="object-cover"
+        />
+      </div>
+    </figure>
   );
 }
