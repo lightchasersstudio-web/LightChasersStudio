@@ -44,6 +44,8 @@ export function ServiceForm({ service }: { service?: Service }) {
           price: centsToPesoInput(service.price_cents),
           depositMode: service.deposit_cents === null ? "default" : "fixed",
           deposit: service.deposit_cents === null ? "" : centsToPesoInput(service.deposit_cents),
+          rescheduleFee:
+            service.reschedule_fee_cents > 0 ? centsToPesoInput(service.reschedule_fee_cents) : "",
           inclusions: (service.inclusions as string[]).join("\n"),
           coverImagePath: service.cover_image_path,
           contract: service.contract ?? "",
@@ -61,6 +63,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           price: "",
           depositMode: "default",
           deposit: "",
+          rescheduleFee: "",
           inclusions: "",
           coverImagePath: null,
           contract: "",
@@ -269,6 +272,16 @@ export function ServiceForm({ service }: { service?: Service }) {
                   />
                 )}
               </div>
+              <TextField
+                control={control}
+                name="rescheduleFee"
+                label="Rescheduling fee"
+                prefix="₱"
+                inputMode="decimal"
+                placeholder="0"
+                className="sm:max-w-[calc(50%-0.625rem)]"
+                description="Before VAT. Added to the client's balance when you move their booking to a new date or time, and shown to clients when they book. Leave empty or 0 for free rescheduling."
+              />
             </FieldGroup>
           </CardContent>
         </Card>

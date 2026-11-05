@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { formatSummaryWhen } from "@/lib/booking/booking-summary";
+import { rescheduleFeeNotice } from "@/lib/booking/reschedule-fee";
 import { signatureMatches } from "@/lib/booking/signature";
 import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
 import { bookingTotals } from "@/lib/booking/pricing";
@@ -107,6 +108,8 @@ export type WizardService = Pick<
   /** The package's contract (null = none) and its fingerprint (see lib/booking/contract). */
   contract: string | null;
   contractHash: string | null;
+  /** Added (before VAT) if the booking is moved later; 0 = free. */
+  reschedule_fee_cents: number;
 };
 
 export function BookingWizard({
@@ -921,6 +924,12 @@ export function BookingWizard({
                             </div>
                           )}
                           {workshop && <p className="mt-3 text-sm">{WORKSHOP_REFUND_RULE}</p>}
+                          {rescheduleFeeNotice(service.reschedule_fee_cents, vatPercent) && (
+                            <p className="mt-3 text-sm">
+                              Need to move your date later?{" "}
+                              {rescheduleFeeNotice(service.reschedule_fee_cents, vatPercent)}
+                            </p>
+                          )}
                           <p className="mt-3 text-sm">
                             We hold{" "}
                             {workshop ? (people > 1 ? "your seats" : "your seat") : "this time"} for{" "}

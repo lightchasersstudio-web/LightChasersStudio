@@ -5,7 +5,7 @@ import { WORKSHOP_MAX_DAYS, workshopDays } from "@/lib/booking/workshop";
 import { PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
-import { centsToPesoInput } from "@/lib/utils/money";
+import { centsToPesoInput, pesosToCents } from "@/lib/utils/money";
 import { optionalText, pesoString } from "@/lib/validations/shared";
 
 export const serviceSchema = z
@@ -26,6 +26,20 @@ export const serviceSchema = z
     lengthHours: z.string().trim(),
     price: pesoString,
     depositMode: z.enum(["default", "fixed"]),
+    // Added to a booking (before VAT) when it's moved to a new date or time; "" or 0 = free.
+    rescheduleFee: z
+      .string()
+      .trim()
+      .default("")
+      .transform((v, ctx) => {
+        if (v === "") return 0;
+        const cents = pesosToCents(v);
+        if (cents === null) {
+          ctx.addIssue({ code: "custom", message: "Enter an amount like 500, or 0 for free." });
+          return z.NEVER;
+        }
+        return cents;
+      }),
     deposit: z.string(),
     inclusions: z
       .string()
@@ -132,6 +146,7 @@ export const serviceSchema = z
       duration_minutes: durationMinutes,
       price_cents: v.price,
       deposit_cents: depositCents,
+      reschedule_fee_cents: v.rescheduleFee,
       inclusions: v.inclusions,
       cover_image_path: v.coverImagePath,
       contract: v.contract,

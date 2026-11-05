@@ -15,6 +15,8 @@ export type BookingRecord = {
   depositCents: number;
   needsRefundReview: boolean;
   summary: BookingSummary;
+  /** The package's rescheduling fee (before VAT; 0 = free) and the VAT % this booking pays. */
+  reschedule: { feeCents: number; vatPercent: number };
   /** The package contract the client agreed to when booking online (null = none). */
   contract: { text: string; acceptedAt: string; signedName: string | null } | null;
 };
@@ -30,13 +32,13 @@ export async function loadBookingRecord(
   const query = supabase
     .from("bookings")
     .select(
-      "id, reference_code, status, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contract_signed_name, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name, category, workshop_days), add_ons:booking_add_ons(name, price_cents), attendees:booking_attendees(position, full_name, category, price_cents), client:clients(email), payments(amount_cents, status)",
+      "id, reference_code, status, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contract_signed_name, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name, category, workshop_days, reschedule_fee_cents), add_ons:booking_add_ons(name, price_cents), attendees:booking_attendees(position, full_name, category, price_cents), client:clients(email), payments(amount_cents, status)",
     );
   const [{ data, error }, settings] = await Promise.all([
     "id" in where
       ? query.eq("id", where.id).maybeSingle()
       : query.eq("reference_code", where.reference).maybeSingle(),
-    supabase.from("business_settings").select("business_name, phone, email").single(),
+    supabase.from("business_settings").select("business_name, phone, email, vat_percent").single(),
   ]);
   if (error) throw error;
   if (settings.error) throw settings.error;
@@ -52,6 +54,10 @@ export async function loadBookingRecord(
     holdExpiresAt: data.hold_expires_at,
     depositCents: data.deposit_cents,
     needsRefundReview: data.needs_refund_review,
+    reschedule: {
+      feeCents: data.service?.reschedule_fee_cents ?? 0,
+      vatPercent: data.vat_cents > 0 ? settings.data.vat_percent : 0,
+    },
     contract:
       data.contract_text && data.contract_accepted_at
         ? {

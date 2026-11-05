@@ -87,12 +87,14 @@ async function EditBooking({ params }: Pick<PageProps<"/admin/bookings/[id]/edit
           chargeVat: b.vat_cents > 0,
           emailClient: Boolean(b.email),
           allowOutsideHours: false,
+          addRescheduleFee: true,
         }}
         packages={services.map((s) => ({
           id: s.id,
           name: s.name,
           priceCents: s.price_cents,
           active: s.is_active,
+          rescheduleFeeCents: s.reschedule_fee_cents,
         }))}
         addOnCatalog={addOns.map((a) => ({
           id: a.id,

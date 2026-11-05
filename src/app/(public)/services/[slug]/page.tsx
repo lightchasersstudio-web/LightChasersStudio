@@ -1,4 +1,11 @@
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, WalletIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CalendarClockIcon,
+  CheckIcon,
+  ClockIcon,
+  WalletIcon,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -15,6 +22,7 @@ import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { bookingTotals } from "@/lib/booking/pricing";
+import { rescheduleFeeNotice } from "@/lib/booking/reschedule-fee";
 import { categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
@@ -158,6 +166,14 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
                 <span>
                   A <strong>{formatPeso(depositCents)}</strong> deposit holds your date when you
                   book.
+                </span>
+              </p>
+            )}
+            {rescheduleFeeNotice(service.reschedule_fee_cents, settings.vat_percent) && (
+              <p className="mt-3 flex items-start gap-2 rounded-2xl border p-4 text-sm text-muted-foreground">
+                <CalendarClockIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <span>
+                  {rescheduleFeeNotice(service.reschedule_fee_cents, settings.vat_percent)}
                 </span>
               </p>
             )}

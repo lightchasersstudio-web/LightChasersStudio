@@ -128,6 +128,7 @@ export function BookingSelfService({
         {asking && !openRequest && (
           <RescheduleForm
             credentials={credentials}
+            notice={booking.rescheduleNotice}
             onSent={(request) => {
               setOpenRequest(request);
               setAsking(false);
@@ -191,9 +192,12 @@ function MessageUs({ reference, contact }: { reference: string; contact: StudioC
 
 function RescheduleForm({
   credentials,
+  notice,
   onSent,
 }: {
   credentials: Credentials;
+  /** The rescheduling fee notice (null = free). */
+  notice: string | null;
   onSent: (request: { createdAt: string; preferred: string | null }) => void;
 }) {
   const form = useForm<RescheduleRequestInput, unknown, z.output<typeof rescheduleRequestSchema>>({
@@ -218,6 +222,11 @@ function RescheduleForm({
         Tell us what works better. We&apos;ll check our calendar and get back to you; your booking
         stays as it is until we confirm a new time.
       </p>
+      {notice && (
+        <p className="rounded-2xl bg-blush px-4 py-3 text-sm font-semibold text-foreground">
+          {notice}
+        </p>
+      )}
       <FieldGroup>
         <TextField
           control={form.control}

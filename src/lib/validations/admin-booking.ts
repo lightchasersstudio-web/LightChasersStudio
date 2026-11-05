@@ -136,12 +136,15 @@ export const adminBookingEditSchema = z
     chargeVat: z.boolean(),
     emailClient: z.boolean(),
     allowOutsideHours: z.boolean(),
+    // When the date or time changes: add the package's rescheduling fee to the booking.
+    addRescheduleFee: z.boolean().default(false),
   })
   .refine((v) => v.preferredContact !== "messenger" || Boolean(v.messenger), {
     path: ["messenger"],
     message: "Add their Facebook name or link.",
   })
   .transform((v) => ({
+    addRescheduleFee: v.addRescheduleFee,
     bookingId: v.bookingId,
     serviceId: v.serviceId,
     startAt: businessDateTimeToIso(v.date, v.time),

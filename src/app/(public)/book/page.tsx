@@ -70,6 +70,7 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
           deposit_cents,
           duration_minutes,
           contract,
+          reschedule_fee_cents,
         }) => ({
           id,
           slug,
@@ -79,6 +80,7 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
           price_cents,
           deposit_cents,
           duration_minutes,
+          reschedule_fee_cents,
           ...contractForWizard(contract),
         }),
       )}

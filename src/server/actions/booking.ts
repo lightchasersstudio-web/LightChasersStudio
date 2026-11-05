@@ -2,6 +2,7 @@
 
 import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
 import { contractHash, packageContract } from "@/lib/booking/contract";
+import { rescheduleFeeNotice } from "@/lib/booking/reschedule-fee";
 import { cleanSignature, signatureMatches } from "@/lib/booking/signature";
 import type { BookingSummary } from "@/lib/booking/booking-summary";
 import { bookingTotals } from "@/lib/booking/pricing";
@@ -295,6 +296,8 @@ export type ClientBookingView = {
   /** A reschedule request the studio hasn't handled yet. */
   openRequest: { createdAt: string; preferred: string | null } | null;
   contract: { text: string; acceptedAt: string; signedName: string | null } | null;
+  /** "Rescheduling costs ₱500 + 12% VAT, added to your balance." (null = free). */
+  rescheduleNotice: string | null;
 };
 
 type OwnBooking = NonNullable<Awaited<ReturnType<typeof loadBookingRecord>>>;
@@ -332,6 +335,7 @@ async function clientView(record: OwnBooking): Promise<ClientBookingView> {
     canRequestChange: active && !openRequest,
     openRequest,
     contract: record.contract,
+    rescheduleNotice: rescheduleFeeNotice(record.reschedule.feeCents, record.reschedule.vatPercent),
   };
 }
 
