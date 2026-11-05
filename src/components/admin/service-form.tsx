@@ -1,10 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Controller, useForm, useWatch } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
 
 import { handleResult } from "@/components/admin/form-utils";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { WORKSHOP_MAX_DAYS } from "@/lib/booking/workshop";
 import { PACKAGE_CATEGORIES } from "@/lib/catalog";
 import { centsToPesoInput } from "@/lib/utils/money";
 import {
@@ -67,6 +68,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           workshopDate: "",
           workshopStart: "",
           workshopEnd: "",
+          workshopExtraDays: [],
           workshopSeats: "",
           workshopLocation: "",
           notifyWorkshopMove: true,
@@ -80,6 +82,7 @@ export function ServiceForm({ service }: { service?: Service }) {
         },
   });
   const { control } = form;
+  const extraDays = useFieldArray({ control, name: "workshopExtraDays" });
   useUnsavedChangesWarning(form.formState.isDirty);
   const [depositMode, hasSetLength, category, price, earlyBirdEnabled, studentEnabled] = useWatch({
     control,
@@ -275,18 +278,87 @@ export function ServiceForm({ service }: { service?: Service }) {
             <CardHeader>
               <CardTitle>Workshop schedule</CardTitle>
               <CardDescription>
-                Clients don&apos;t pick a time or place: everyone who signs up joins this date, time
-                and location. Leave the date empty until it&apos;s decided (sign-up stays closed).
+                Clients don&apos;t pick a time or place: everyone who signs up joins these days,
+                times and location. A workshop can run on up to {WORKSHOP_MAX_DAYS} days, each with
+                its own times. Leave the date empty until it&apos;s decided (sign-up stays closed).
                 Changing it moves everyone already signed up.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <FieldGroup>
-                <div className="grid gap-5 sm:grid-cols-3">
-                  <TextField control={control} name="workshopDate" label="Date" type="date" />
-                  <TextField control={control} name="workshopStart" label="Starts" type="time" />
-                  <TextField control={control} name="workshopEnd" label="Ends" type="time" />
-                </div>
+                <fieldset className="space-y-3">
+                  <legend className="mb-2 text-sm font-semibold">
+                    {extraDays.fields.length > 0 ? "Day 1" : "Date and time"}
+                  </legend>
+                  <div className="grid gap-5 sm:grid-cols-3">
+                    <TextField control={control} name="workshopDate" label="Date" type="date" />
+                    <TextField control={control} name="workshopStart" label="Starts" type="time" />
+                    <TextField control={control} name="workshopEnd" label="Ends" type="time" />
+                  </div>
+                </fieldset>
+                {extraDays.fields.map((day, i) => (
+                  <fieldset
+                    key={day.id}
+                    aria-label={`Day ${i + 2}`}
+                    className="space-y-3 border-t pt-5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold" aria-hidden>
+                        Day {i + 2}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => extraDays.remove(i)}
+                        aria-label={`Remove day ${i + 2}`}
+                      >
+                        <Trash2Icon aria-hidden />
+                        Remove
+                      </Button>
+                    </div>
+                    <div className="grid gap-5 sm:grid-cols-3">
+                      <TextField
+                        control={control}
+                        name={`workshopExtraDays.${i}.date`}
+                        label="Date"
+                        type="date"
+                      />
+                      <TextField
+                        control={control}
+                        name={`workshopExtraDays.${i}.start`}
+                        label="Starts"
+                        type="time"
+                      />
+                      <TextField
+                        control={control}
+                        name={`workshopExtraDays.${i}.end`}
+                        label="Ends"
+                        type="time"
+                      />
+                    </div>
+                  </fieldset>
+                ))}
+                {extraDays.fields.length < WORKSHOP_MAX_DAYS - 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="self-start"
+                    onClick={() => {
+                      // Start from the previous day's times: most workshops keep the same hours.
+                      const v = form.getValues();
+                      const prev = v.workshopExtraDays?.at(-1);
+                      extraDays.append({
+                        date: "",
+                        start: prev?.start ?? v.workshopStart ?? "",
+                        end: prev?.end ?? v.workshopEnd ?? "",
+                      });
+                    }}
+                  >
+                    <PlusIcon aria-hidden />
+                    Add day {extraDays.fields.length + 2}
+                  </Button>
+                )}
                 <TextField
                   control={control}
                   name="workshopLocation"

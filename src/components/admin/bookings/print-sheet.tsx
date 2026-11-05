@@ -2,7 +2,7 @@ import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
 import Image from "next/image";
 
-import { formatBookingWhen } from "@/lib/booking/booking-summary";
+import { formatSummaryWhen } from "@/lib/booking/booking-summary";
 import { STATUS_LABELS } from "@/lib/booking/status";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
@@ -61,7 +61,7 @@ export function PrintSheet({
           {s.addOns.length > 0 && (
             <Row label="Add-ons" value={s.addOns.map((a) => a.name).join(", ")} />
           )}
-          <Row label="When" value={formatBookingWhen(b.start_at, s.endAt)} />
+          <Row label="When" value={formatSummaryWhen(s)} />
           <Row label="Location" value={b.location} />
           <Row label="People" value={String(b.participants)} />
         </Section>

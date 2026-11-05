@@ -1,7 +1,7 @@
 import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
 
-import { formatBookingWhen, type BookingSummary } from "@/lib/booking/booking-summary";
+import { formatSummaryWhen, type BookingSummary } from "@/lib/booking/booking-summary";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatPeso } from "@/lib/utils/money";
 
@@ -13,7 +13,7 @@ export type ReplyTemplate = { id: string; label: string; text: string };
  */
 export function replyTemplates(b: BookingSummary, lookupUrl: string): ReplyTemplate[] {
   const first = b.contactName.trim().split(/\s+/)[0] ?? b.contactName;
-  const when = formatBookingWhen(b.startAt, b.endAt);
+  const when = formatSummaryWhen(b);
   const day = format(new TZDate(b.startAt, BUSINESS_TZ), "EEEE, d MMMM");
   const time = format(new TZDate(b.startAt, BUSINESS_TZ), "h:mm a");
   const balance = Math.max(b.priceCents - b.paidCents, 0);

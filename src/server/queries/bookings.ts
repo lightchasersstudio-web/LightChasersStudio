@@ -4,7 +4,7 @@ import { TZDate } from "@date-fns/tz";
 import { addDays, getDaysInMonth } from "date-fns";
 
 import { PAGE_SIZE, searchTerm, type BookingFilters } from "@/lib/admin/list-filters";
-import { summaryPeople } from "@/lib/booking/booking-summary";
+import { summaryDays, summaryPeople } from "@/lib/booking/booking-summary";
 import type { BookingStatus } from "@/lib/booking/status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -119,7 +119,7 @@ export async function getBookingForAdmin(id: string) {
     supabase
       .from("bookings")
       .select(
-        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category), add_ons:booking_add_ons(add_on_id, name, price_cents), attendees:booking_attendees(id, position, full_name, phone, address, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at), requests:booking_requests(id, preferred, message, status, created_at, resolved_at)",
+        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category, workshop_days), add_ons:booking_add_ons(add_on_id, name, price_cents), attendees:booking_attendees(id, position, full_name, phone, address, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at), requests:booking_requests(id, preferred, message, status, created_at, resolved_at)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -177,6 +177,7 @@ export async function getBookingForAdmin(id: string) {
       studioPhone: settings.data.phone,
       studioEmail: settings.data.email,
       people: summaryPeople(attendees),
+      days: summaryDays(data.service),
     },
   };
 }

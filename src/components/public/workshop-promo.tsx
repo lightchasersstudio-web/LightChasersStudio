@@ -7,7 +7,7 @@ import { PolaroidSlideshow } from "@/components/public/polaroid-slideshow";
 import { Reveal } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
-import { formatWorkshopWhen, workshopPrices } from "@/lib/booking/workshop";
+import { formatWorkshopDays, workshopDays, workshopPrices } from "@/lib/booking/workshop";
 import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
@@ -54,13 +54,19 @@ export function WorkshopPromo({
     ? workshop.price_cents
     : null;
   // The admin sets the date; until then the banner teases it.
-  const when =
-    workshop.workshop_starts_at && workshop.workshop_ends_at
-      ? formatWorkshopWhen(workshop.workshop_starts_at, workshop.workshop_ends_at)
-      : null;
+  const days = formatWorkshopDays(workshopDays(workshop));
+  const when = days[0] ?? null;
   const points = [
-    { text: when?.date ?? "Date to be announced soon", Icon: CalendarDaysIcon },
-    ...(when ? [{ text: when.time, Icon: ClockIcon }] : []),
+    ...(days.length > 1
+      ? // Multi-day: one line per day, "Day 1 · Saturday, 14 November 2026, 1:00 PM – 5:00 PM".
+        days.map((d, i) => ({
+          text: `Day ${i + 1} · ${d.date}, ${d.time}`,
+          Icon: CalendarDaysIcon,
+        }))
+      : [
+          { text: when?.date ?? "Date to be announced soon", Icon: CalendarDaysIcon },
+          ...(when ? [{ text: when.time, Icon: ClockIcon }] : []),
+        ]),
     ...(workshop.workshop_location ? [{ text: workshop.workshop_location, Icon: MapPinIcon }] : []),
     { text: "Pay half or the full price to save your seat", Icon: WalletIcon },
   ];

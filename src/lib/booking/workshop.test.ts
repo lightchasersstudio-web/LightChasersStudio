@@ -9,6 +9,7 @@ import {
   workshopOpening,
   workshopPrices,
   workshopRefundCents,
+  workshopDays,
 } from "./workshop";
 
 describe("workshopRefundCents", () => {
@@ -156,5 +157,28 @@ describe("workshop categories", () => {
 
   it("formats the last day", () => {
     expect(formatEarlyBirdUntil("2027-01-31")).toBe("31 January 2027");
+  });
+});
+
+describe("workshopDays", () => {
+  it("reads the stored days in order, or falls back to the single start and end", () => {
+    expect(
+      workshopDays({
+        workshop_days: [
+          { starts_at: "2026-11-15T01:00:00.000Z", ends_at: "2026-11-15T04:00:00.000Z" },
+          { starts_at: "2026-11-14T05:00:00.000Z", ends_at: "2026-11-14T09:30:00.000Z" },
+        ],
+        workshop_starts_at: "2026-11-14T05:00:00.000Z",
+        workshop_ends_at: "2026-11-15T04:00:00.000Z",
+      }).map((d) => d.startsAt),
+    ).toEqual(["2026-11-14T05:00:00.000Z", "2026-11-15T01:00:00.000Z"]);
+    expect(
+      workshopDays({
+        workshop_days: [],
+        workshop_starts_at: "2026-11-14T05:00:00.000Z",
+        workshop_ends_at: "2026-11-14T09:30:00.000Z",
+      }),
+    ).toEqual([{ startsAt: "2026-11-14T05:00:00.000Z", endsAt: "2026-11-14T09:30:00.000Z" }]);
+    expect(workshopDays({ workshop_starts_at: null, workshop_ends_at: null })).toEqual([]);
   });
 });

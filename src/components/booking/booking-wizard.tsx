@@ -21,7 +21,7 @@ import { StudentIdUpload } from "@/components/booking/student-id-upload";
 import { Turnstile } from "@/components/booking/turnstile";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
-import { formatBookingWhen } from "@/lib/booking/booking-summary";
+import { formatSummaryWhen } from "@/lib/booking/booking-summary";
 import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
 import { bookingTotals } from "@/lib/booking/pricing";
 import {
@@ -136,6 +136,8 @@ export function BookingWizard({
   workshop?: {
     startAt: string;
     endAt: string;
+    /** Each day of a multi-day workshop, in order. */
+    days?: { startAt: string; endAt: string }[];
     location: string | null;
     /** Seats still free, or null for no limit. */
     seatsLeft: number | null;
@@ -829,7 +831,7 @@ export function BookingWizard({
                       )}
                       <ReviewRow
                         label="When"
-                        value={formatBookingWhen(startAt, endAt)}
+                        value={formatSummaryWhen({ startAt, endAt, days: workshop?.days })}
                         onEdit={workshop ? undefined : () => goTo(at("when"))}
                       />
                       <ReviewRow
@@ -935,6 +937,7 @@ export function BookingWizard({
           addOns={chosenAddOns}
           startAt={startAt || null}
           endAt={endAt}
+          days={workshop?.days}
           vat={vat}
           vatPercent={vatPercent}
           total={total}

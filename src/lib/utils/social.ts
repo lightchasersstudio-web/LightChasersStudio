@@ -22,3 +22,42 @@ export function messengerUrl(facebookUrl: string | null): string | null {
     return null;
   }
 }
+
+/** A Google Maps search for the studio's address (opens the app on phones). */
+export const googleMapsUrl = (place: string) =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
+
+/** "https://www.facebook.com/lightchasers/" → "facebook.com/lightchasers" */
+export const displayUrl = (url: string) =>
+  url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+
+/**
+ * A Google Maps link: google.com/maps…, maps.google.com, or the short Share links
+ * (maps.app.goo.gl, goo.gl/maps, g.page).
+ */
+export function isGoogleMapsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    return (
+      ((host === "google.com" || host.endsWith(".google.com")) &&
+        (host.startsWith("maps.") || url.pathname.startsWith("/maps"))) ||
+      host === "maps.app.goo.gl" ||
+      (host === "goo.gl" && url.pathname.startsWith("/maps")) ||
+      host === "g.page"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Where "open the map" goes: the studio's own pin if set, else a search for the studio. */
+export function studioMapsUrl(s: {
+  maps_url: string | null;
+  business_name: string;
+  address: string | null;
+  city: string;
+}): string {
+  return s.maps_url ?? googleMapsUrl(`${s.business_name}, ${s.address ?? s.city}`);
+}

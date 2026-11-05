@@ -3,7 +3,7 @@ import Image from "next/image";
 
 import { StatusBadge } from "@/components/booking/status-badge";
 import { Sparkle } from "@/components/shared/sparkle";
-import { formatBookingWhen, type BookingSummary } from "@/lib/booking/booking-summary";
+import { formatSummaryWhen, type BookingSummary } from "@/lib/booking/booking-summary";
 import type { BookingStatus } from "@/lib/booking/status";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
@@ -59,7 +59,7 @@ export function BookingCard({
           )}
           <li className="flex gap-2.5">
             <CalendarIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
-            <span>{formatBookingWhen(b.startAt, b.endAt)}</span>
+            <span>{formatSummaryWhen(b)}</span>
           </li>
           {b.location && (
             <li className="flex gap-2.5">

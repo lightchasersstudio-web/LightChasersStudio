@@ -4,7 +4,7 @@ import { CalendarIcon, CameraIcon, ChevronDownIcon, CirclePlusIcon } from "lucid
 
 import type { WizardService } from "@/components/booking/booking-wizard";
 import { Sparkle } from "@/components/shared/sparkle";
-import { formatBookingWhen } from "@/lib/booking/booking-summary";
+import { formatSummaryWhen } from "@/lib/booking/booking-summary";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
@@ -15,6 +15,8 @@ type Props = {
   addOns: PublicAddOn[];
   startAt: string | null;
   endAt: string | null;
+  /** Each day of a multi-day workshop. */
+  days?: { startAt: string; endAt: string }[];
   vat: number;
   vatPercent: number;
   total: number;
@@ -83,6 +85,7 @@ function Rows({
   addOns,
   startAt,
   endAt,
+  days,
   vat,
   vatPercent,
   total,
@@ -138,7 +141,7 @@ function Rows({
         <li className="flex gap-2.5">
           <CalendarIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
           <span className={cn("min-w-0 flex-1", !startAt && "text-muted-foreground")}>
-            {startAt ? formatBookingWhen(startAt, endAt) : "Date and time not picked yet"}
+            {startAt ? formatSummaryWhen({ startAt, endAt, days }) : "Date and time not picked yet"}
           </span>
           {startAt && whenStep !== null && change(whenStep, "date and time")}
         </li>

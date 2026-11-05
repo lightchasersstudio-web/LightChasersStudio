@@ -56,6 +56,7 @@ export function StudioProfileForm({ settings }: { settings: BusinessSettings }) 
       email: settings.email ?? "",
       phone: settings.phone ?? "",
       address: settings.address ?? "",
+      mapsUrl: settings.maps_url ?? "",
       city: settings.city,
       facebookUrl: settings.facebook_url ?? "",
       instagramUrl: settings.instagram_url ?? "",
@@ -131,6 +132,15 @@ export function StudioProfileForm({ settings }: { settings: BusinessSettings }) 
               <TextField control={control} name="address" label="Studio address" maxLength={300} />
               <TextField control={control} name="city" label="City" maxLength={80} />
             </div>
+            <TextField
+              control={control}
+              name="mapsUrl"
+              label="Google Maps link"
+              type="url"
+              placeholder="https://maps.app.goo.gl/…"
+              maxLength={500}
+              description="So the address opens your exact spot: in Google Maps, find your studio's pin, tap Share, copy the link and paste it here. Empty = Google searches for the address."
+            />
             <div className="grid gap-5 lg:grid-cols-3">
               <TextField
                 control={control}

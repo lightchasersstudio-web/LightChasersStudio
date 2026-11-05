@@ -109,6 +109,7 @@ describe("serviceSchema: workshop schedule", () => {
       workshopDate: "2026-11-14",
       workshopStart: "13:00",
       workshopEnd: "17:30",
+      workshopExtraDays: [],
       workshopSeats: "15",
       workshopLocation: "Light Chasers Studio, Tetuan",
       notifyWorkshopMove: true,
@@ -120,6 +121,55 @@ describe("serviceSchema: workshop schedule", () => {
       earlyBirdEnabled: false,
       studentEnabled: false,
     });
+  });
+
+  it("stores up to 3 days, each with its own times, and round-trips them", () => {
+    const row = serviceSchema.parse({
+      ...workshop,
+      workshopExtraDays: [
+        { date: "2026-11-15", start: "09:00", end: "12:00" },
+        { date: "2026-11-21", start: "13:00", end: "17:00" },
+      ],
+    });
+    expect(row).toMatchObject({
+      workshop_starts_at: "2026-11-14T05:00:00.000Z",
+      workshop_ends_at: "2026-11-21T09:00:00.000Z",
+      workshop_days: [
+        { starts_at: "2026-11-14T05:00:00.000Z", ends_at: "2026-11-14T09:30:00.000Z" },
+        { starts_at: "2026-11-15T01:00:00.000Z", ends_at: "2026-11-15T04:00:00.000Z" },
+        { starts_at: "2026-11-21T05:00:00.000Z", ends_at: "2026-11-21T09:00:00.000Z" },
+      ],
+    });
+    expect(workshopFormValues(row).workshopExtraDays).toEqual([
+      { date: "2026-11-15", start: "09:00", end: "12:00" },
+      { date: "2026-11-21", start: "13:00", end: "17:00" },
+    ]);
+  });
+
+  it("refuses more than 3 days, days out of order, and extra days without day 1", () => {
+    const day = (date: string) => ({ date, start: "09:00", end: "12:00" });
+    const paths = (input: object) => {
+      const r = serviceSchema.safeParse({ ...workshop, ...input });
+      return r.success ? [] : r.error.issues.map((i) => i.path.join("."));
+    };
+    expect(
+      paths({ workshopExtraDays: [day("2026-11-15"), day("2026-11-16"), day("2026-11-17")] }),
+    ).toEqual(["workshopExtraDays"]);
+    expect(paths({ workshopExtraDays: [day("2026-11-14")] })).toEqual(["workshopExtraDays.0.date"]);
+    expect(paths({ workshopExtraDays: [day("2026-11-16"), day("2026-11-15")] })).toEqual([
+      "workshopExtraDays.1.date",
+    ]);
+    expect(
+      paths({
+        workshopDate: "",
+        workshopStart: "",
+        workshopEnd: "",
+        workshopExtraDays: [day("2026-11-15")],
+      }),
+    ).toEqual(["workshopDate"]);
+    expect(
+      paths({ workshopExtraDays: [{ date: "2026-11-15", start: "12:00", end: "09:00" }] }),
+    ).toEqual(["workshopExtraDays.0.end"]);
   });
 
   it("allows no date yet and no seat limit", () => {
