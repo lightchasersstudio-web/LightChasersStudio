@@ -6,6 +6,7 @@ import { BookingWizard } from "@/components/booking/booking-wizard";
 import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { contractForWizard } from "@/lib/booking/contract";
 import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
 import { getPublicSettings, listActiveAddOns, listActiveServices } from "@/server/queries/public";
 
@@ -59,7 +60,7 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
     <BookingWizard
       key={initial?.id ?? "none"}
       services={services.map(
-        ({ id, slug, name, category, summary, price_cents, deposit_cents, duration_minutes }) => ({
+        ({
           id,
           slug,
           name,
@@ -68,6 +69,17 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
           price_cents,
           deposit_cents,
           duration_minutes,
+          contract,
+        }) => ({
+          id,
+          slug,
+          name,
+          category,
+          summary,
+          price_cents,
+          deposit_cents,
+          duration_minutes,
+          ...contractForWizard(contract),
         }),
       )}
       addOns={addOns}

@@ -45,6 +45,15 @@ describe("serviceSchema", () => {
     });
   });
 
+  it("keeps the package contract as typed, and empty as none", () => {
+    expect(serviceSchema.parse({ ...service, contract: "  " }).contract).toBeNull();
+    const terms = "1. Booking\nThe deposit holds your date.\n\n2. Delivery";
+    expect(serviceSchema.parse({ ...service, contract: terms }).contract).toBe(terms);
+    expect(serviceSchema.safeParse({ ...service, contract: "x".repeat(30001) }).success).toBe(
+      false,
+    );
+  });
+
   it("accepts a fixed deposit up to the price", () => {
     const row = serviceSchema.parse({ ...service, depositMode: "fixed", deposit: "5000" });
     expect(row.deposit_cents).toBe(500_000);

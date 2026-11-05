@@ -9,8 +9,18 @@ import { cn } from "@/lib/utils";
 
 const KEY = "lcs:last-booking";
 
+/**
+ * The booking just made, kept in this tab only (sessionStorage): the calendar
+ * entry, plus the hold end and email so /book/cancelled can count down and
+ * retry the payment in one tap.
+ */
+export type RememberedBooking = CalendarEvent & {
+  holdExpiresAt?: string | null;
+  email?: string;
+};
+
 /** Saved by the wizard just before leaving for payment, so /book/done can offer "Add to calendar". */
-export function rememberBooking(event: CalendarEvent) {
+export function rememberBooking(event: RememberedBooking) {
   try {
     sessionStorage.setItem(KEY, JSON.stringify(event));
   } catch {
@@ -18,9 +28,9 @@ export function rememberBooking(event: CalendarEvent) {
   }
 }
 
-function recall(reference: string): CalendarEvent | null {
+function recall(reference: string): RememberedBooking | null {
   try {
-    const saved = JSON.parse(sessionStorage.getItem(KEY) ?? "null") as CalendarEvent | null;
+    const saved = JSON.parse(sessionStorage.getItem(KEY) ?? "null") as RememberedBooking | null;
     return saved?.reference === reference ? saved : null;
   } catch {
     return null;
@@ -29,8 +39,8 @@ function recall(reference: string): CalendarEvent | null {
 
 const noop = () => () => {};
 
-/** "Add to calendar" for the booking just made in this tab (nothing if it isn't known). */
-export function AddToCalendarFromSession({ reference }: { reference: string }) {
+/** The booking just made in this tab (null if it isn't known, e.g. opened on another device). */
+export function useRememberedBooking(reference: string): RememberedBooking | null {
   // Read once on the client; the server render has no sessionStorage.
   const raw = useSyncExternalStore(
     noop,
@@ -43,12 +53,21 @@ export function AddToCalendarFromSession({ reference }: { reference: string }) {
     },
     () => null,
   );
-  const event = raw ? recall(reference) : null;
-  return event ? <AddToCalendar event={event} className="mt-6" /> : null;
+  return raw ? recall(reference) : null;
 }
 
-export function AddToCalendar({ event, className }: { event: CalendarEvent; className?: string }) {
+export function AddToCalendar({
+  event,
+  className,
+  onAdded,
+}: {
+  event: CalendarEvent;
+  className?: string;
+  /** Called when either button is used (the entry carries the booking reference). */
+  onAdded?: () => void;
+}) {
   function download() {
+    onAdded?.();
     const url = URL.createObjectURL(new Blob([icsFile(event)], { type: "text/calendar" }));
     const a = document.createElement("a");
     a.href = url;
@@ -60,7 +79,12 @@ export function AddToCalendar({ event, className }: { event: CalendarEvent; clas
   return (
     <div className={cn("flex flex-wrap justify-center gap-2", className)}>
       <Button asChild variant="outline">
-        <a href={googleCalendarUrl(event)} target="_blank" rel="noopener noreferrer">
+        <a
+          href={googleCalendarUrl(event)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onAdded}
+        >
           <CalendarPlusIcon aria-hidden />
           Add to Google Calendar
           <span className="sr-only"> (opens in a new tab)</span>

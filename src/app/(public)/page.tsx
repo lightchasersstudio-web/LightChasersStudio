@@ -1,6 +1,7 @@
 import { ArrowRightIcon, CalendarCheckIcon, CameraIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 
+import { BookingFinder } from "@/components/booking/booking-finder";
 import { BookCta } from "@/components/public/book-cta";
 import { BrandLogo } from "@/components/public/brand-logo";
 import { CATEGORY_ICONS } from "@/components/public/category-icons";
@@ -124,8 +125,19 @@ export default async function HomePage() {
             <h1 className="mt-2 text-5xl leading-[1.05] font-semibold sm:text-6xl lg:text-7xl">
               {settings.business_name}
             </h1>
-            <p className="mt-5 max-w-lg text-lg text-muted-foreground sm:text-xl">
-              {settings.tagline ? `${settings.tagline} ` : ""}
+            {/* The tagline is the owner's own words (Settings), so it gets its own line
+                rather than being run into the sentence below. */}
+            {settings.tagline && (
+              <p className="mt-5 max-w-lg font-heading text-xl font-medium text-primary sm:text-2xl">
+                {settings.tagline}
+              </p>
+            )}
+            <p
+              className={cn(
+                "max-w-lg text-lg text-muted-foreground sm:text-xl",
+                settings.tagline ? "mt-2" : "mt-5",
+              )}
+            >
               Weddings &amp; prenups, portraits &amp; family, events and product shoots.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -147,6 +159,14 @@ export default async function HomePage() {
             <HeroDeck photos={heroPhotos} />
           </div>
         </div>
+      </section>
+
+      {/* Find a booking (reference, or email → references sent to that inbox) */}
+      <section
+        aria-label="Find your booking"
+        className="relative z-10 mx-auto -mt-10 max-w-3xl px-4 sm:px-6"
+      >
+        <BookingFinder />
       </section>
 
       {/* Workshop sign-up */}

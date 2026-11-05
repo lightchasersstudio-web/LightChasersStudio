@@ -101,7 +101,11 @@ export type WizardService = Pick<
   | "price_cents"
   | "deposit_cents"
   | "duration_minutes"
->;
+> & {
+  /** The package's contract (null = none) and its fingerprint (see lib/booking/contract). */
+  contract: string | null;
+  contractHash: string | null;
+};
 
 export function BookingWizard({
   services,
@@ -164,6 +168,8 @@ export function BookingWizard({
     participants: "1",
     specialRequests: "",
     turnstileToken: "",
+    contractAccepted: false,
+    contractHash: "",
     website: "",
     ...(workshop && { payInFull: false, refundRuleAccepted: false }),
   });
@@ -232,6 +238,10 @@ export function BookingWizard({
       "attendees",
     ],
   });
+  // Agreeing to one package's contract never carries over to another package.
+  useEffect(() => {
+    form.setValue("contractAccepted", false);
+  }, [serviceId, form]);
   // Workshops are priced per person, by category; packages per booking.
   const people = workshop ? peopleCount(participants) : 1;
   const people_ = Array.from(
@@ -360,6 +370,20 @@ export function BookingWizard({
   }
 
   function onSubmit() {
+    if (service?.contract) {
+      if (!form.getValues("contractAccepted")) {
+        form.setError(
+          "contractAccepted",
+          { message: "Please read the contract and tick to agree before booking." },
+          { shouldFocus: true },
+        );
+        return;
+      }
+      form.setValue("contractHash", service.contractHash ?? "");
+    } else {
+      form.setValue("contractAccepted", false);
+      form.setValue("contractHash", "");
+    }
     startSubmit(async () => {
       // Send the raw form strings: the server re-validates with the same schema.
       const result = await submitBooking(form.getValues());
@@ -372,6 +396,8 @@ export function BookingWizard({
             startAt,
             endAt,
             location: (workshop ? workshop.location : location) || null,
+            holdExpiresAt: result.data.holdExpiresAt,
+            email: form.getValues("email"),
           });
         }
         window.location.assign(result.data.redirectUrl);
@@ -470,6 +496,8 @@ export function BookingWizard({
                         type="tel"
                         inputMode="tel"
                         autoComplete="tel"
+                        placeholder="0917 123 4567"
+                        maxLength={32}
                       />
                     </div>
                     <SelectField
@@ -886,6 +914,13 @@ export function BookingWizard({
                         </>
                       )}
                     </div>
+                    {service.contract && (
+                      <PackageContract
+                        form={form}
+                        packageName={service.name}
+                        contract={service.contract}
+                      />
+                    )}
                     <Turnstile key={turnstileKey} onToken={onToken} />
                   </div>
                 )}
@@ -1278,6 +1313,7 @@ function AttendeeCard({
           type="tel"
           inputMode="tel"
           autoComplete={index === 0 ? "tel" : "off"}
+          placeholder="0917 123 4567"
           maxLength={32}
         />
         <TextField
@@ -1353,5 +1389,67 @@ function AttendeeCard({
         />
       )}
     </fieldset>
+  );
+}
+
+/**
+ * The package's contract on the Review & pay step: the full wording in a
+ * scrollable box and a required "I agree" tick (checked again on the server).
+ */
+function PackageContract({
+  form,
+  packageName,
+  contract,
+}: {
+  form: UseFormReturn<Values, unknown, Output>;
+  packageName: string;
+  contract: string;
+}) {
+  const id = "package-contract";
+  return (
+    <section aria-labelledby={`${id}-title`} className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id={`${id}-title`} className="text-lg font-semibold">
+          {packageName} contract
+        </h3>
+        <span className="text-xs text-muted-foreground">Scroll to read it all</span>
+      </div>
+      <div
+        id={id}
+        tabIndex={0}
+        role="document"
+        aria-label={`${packageName} contract`}
+        className="max-h-80 overflow-y-auto rounded-2xl border bg-card p-4 text-sm leading-relaxed whitespace-pre-line focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:p-5"
+      >
+        {contract}
+      </div>
+      <Controller
+        control={form.control}
+        name="contractAccepted"
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-card p-4 has-[:checked]:border-primary has-[:checked]:bg-accent/50">
+              <input
+                type="checkbox"
+                checked={Boolean(field.value)}
+                onChange={(e) => {
+                  field.onChange(e.target.checked);
+                  if (e.target.checked) form.clearErrors("contractAccepted");
+                }}
+                onBlur={field.onBlur}
+                ref={field.ref}
+                aria-invalid={fieldState.invalid}
+                aria-describedby={id}
+                className="mt-0.5 size-5 shrink-0 accent-primary"
+              />
+              <span className="text-sm">
+                I have read and agree to the <strong>{packageName}</strong> contract above.
+              </span>
+            </label>
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
+    </section>
   );
 }

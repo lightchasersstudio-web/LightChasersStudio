@@ -383,3 +383,25 @@ export async function reviewStudentId(input: unknown): Promise<ActionResult> {
     return ok(undefined);
   });
 }
+
+/** A client's reschedule request (from /booking) has been dealt with. */
+export async function resolveBookingRequest(input: unknown): Promise<ActionResult> {
+  return adminAction(bookingIdSchema, input, async ({ id }, ctx) => {
+    const { data, error } = await ctx.supabase
+      .from("booking_requests")
+      .update({
+        status: "resolved",
+        resolved_at: new Date().toISOString(),
+        resolved_by: ctx.admin.userId,
+      })
+      .eq("id", id)
+      .eq("status", "open")
+      .select("booking_id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return fail("This request was already handled.");
+    await audit(ctx, "booking.request_resolved", "booking", data.booking_id);
+    revalidate(TAGS.bookings);
+    return ok(undefined);
+  });
+}

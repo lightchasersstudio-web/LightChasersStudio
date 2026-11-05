@@ -9,7 +9,7 @@ import { MockCheckoutForm } from "@/components/booking/mock-checkout-form";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatPeso } from "@/lib/utils/money";
-import { getMockCheckout } from "@/server/queries/mock-checkout";
+import { getMockCheckout, mockReturnUrls } from "@/server/queries/mock-checkout";
 
 export const metadata: Metadata = { title: "Test checkout", robots: { index: false } };
 
@@ -41,13 +41,15 @@ async function Checkout({ searchParams }: Pick<PageProps<"/book/mock-checkout">,
   const checkoutId = typeof cs === "string" ? cs : "";
   const checkout = await getMockCheckout({ reference, checkoutId });
   if (!checkout) notFound();
+  const urls = mockReturnUrls(reference, checkout.purpose);
+  const what = checkout.purpose === "balance" ? "Balance" : "Deposit";
 
   if (checkout.paid) {
     return (
       <div className="space-y-4 text-center">
-        <p className="text-lg font-semibold">This deposit is already paid.</p>
+        <p className="text-lg font-semibold">This payment is already done.</p>
         <Button asChild>
-          <Link href={`/book/done?ref=${reference}`}>Continue</Link>
+          <Link href={urls.done}>Continue</Link>
         </Button>
       </div>
     );
@@ -65,7 +67,9 @@ async function Checkout({ searchParams }: Pick<PageProps<"/book/mock-checkout">,
         </div>
       </div>
       <div className="rounded-2xl bg-accent p-4 text-accent-foreground">
-        <p className="text-sm">Deposit · {checkout.serviceName}</p>
+        <p className="text-sm">
+          {what} · {checkout.serviceName}
+        </p>
         <p className="font-heading text-3xl font-semibold">{formatPeso(checkout.amountCents)}</p>
         <p className="mt-1 text-xs opacity-80">For {checkout.contactName}</p>
       </div>
@@ -73,6 +77,7 @@ async function Checkout({ searchParams }: Pick<PageProps<"/book/mock-checkout">,
         reference={reference}
         checkoutId={checkoutId}
         amountCents={checkout.amountCents}
+        cancelHref={urls.cancel}
       />
     </div>
   );

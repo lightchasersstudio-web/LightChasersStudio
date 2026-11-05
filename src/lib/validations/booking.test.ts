@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { clientDetailsSchema, publicBookingSchema, shootDetailsSchema } from "./booking";
+import {
+  clientDetailsSchema,
+  publicBookingSchema,
+  rescheduleRequestSchema,
+  shootDetailsSchema,
+} from "./booking";
 
 const details = {
   fullName: "  Ana Cruz ",
@@ -38,8 +43,9 @@ describe("clientDetailsSchema", () => {
     expect(r.error!.issues[0]!.path).toEqual(["messenger"]);
   });
 
-  it("rejects a phone number without enough digits", () => {
+  it("rejects an incomplete mobile number", () => {
     expect(clientDetailsSchema.safeParse({ ...details, phone: "12-34" }).success).toBe(false);
+    expect(clientDetailsSchema.safeParse({ ...details, phone: "0917 123" }).success).toBe(false);
   });
 });
 
@@ -143,6 +149,26 @@ describe("publicBookingSchema", () => {
 
     it("ignores the people limit on packages", () => {
       expect(paths({ ...input, participants: "12" })).toEqual([]);
+    });
+  });
+});
+
+describe("rescheduleRequestSchema", () => {
+  it("needs a message and keeps an empty preference as null", () => {
+    const base = { reference: "bk-2026-1a2b3c", email: "Ana@Example.com" };
+    expect(
+      rescheduleRequestSchema.safeParse({ ...base, preferred: "", message: "hi" }).success,
+    ).toBe(false);
+    const ok = rescheduleRequestSchema.parse({
+      ...base,
+      preferred: "  ",
+      message: " Can we move to Saturday? ",
+    });
+    expect(ok).toEqual({
+      reference: "BK-2026-1A2B3C",
+      email: "ana@example.com",
+      preferred: null,
+      message: "Can we move to Saturday?",
     });
   });
 });

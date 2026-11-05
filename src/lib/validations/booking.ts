@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { REFERENCE_RE } from "@/lib/booking/reference";
+import { isCompleteMobile, MOBILE_ERROR } from "@/lib/validations/phone";
 import { intString, optionalText } from "@/lib/validations/shared";
 
 /** Ways a client can ask to be contacted (no Viber, by the owner's choice). */
@@ -36,11 +38,8 @@ export const CONSENT_VERSION = "2026-10-30";
 export const PRIVACY_UPDATED = "30 October 2026";
 
 const fullName = z.string().trim().min(2, "Enter your full name.").max(120);
-/** A number we can call or text: digits, spaces, ( ) - and a leading +, 7+ digits. */
-const isPhone = (v: string) => /^[+\d][\d\s()-]*$/.test(v) && v.replace(/\D/g, "").length >= 7;
-const phone = z.string().trim().max(32).refine(isPhone, {
-  message: "Enter a phone number we can reach you on.",
-});
+/** A complete mobile number (see isCompleteMobile): partial numbers can't book. */
+const phone = z.string().trim().max(32).refine(isCompleteMobile, { message: MOBILE_ERROR });
 const messenger = optionalText(300);
 
 /** Messenger as the preferred contact needs a name or profile link to reach them. */
@@ -80,6 +79,10 @@ export const publicBookingSchema = z
     addOnIds: z.array(z.uuid()).max(20),
     startAt: z.iso.datetime({ offset: true, message: "Pick a date and time." }),
     turnstileToken: z.string().max(4096),
+    // The package contract (Review & pay): ticked, plus the fingerprint of the
+    // wording shown. The server checks both when the package has a contract.
+    contractAccepted: z.boolean().optional(),
+    contractHash: z.string().max(64).optional(),
     // Honeypot: hidden from people, filled in by bots.
     website: z.string().max(0),
     // Workshops only: pay the full price (else half), after accepting the refund rule.
@@ -125,10 +128,10 @@ export const publicBookingSchema = z
           path: ["attendees", i, "name"],
         });
       }
-      if (!isPhone(person?.phone ?? "")) {
+      if (!isCompleteMobile(person?.phone ?? "")) {
         ctx.addIssue({
           code: "custom",
-          message: "Enter their mobile number.",
+          message: "Enter their complete mobile number, like 0917 123 4567.",
           path: ["attendees", i, "phone"],
         });
       }
@@ -155,7 +158,23 @@ export const lookupSchema = z.object({
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^BK-\d{4}-[0-9A-F]{6}$/, "Enter the reference from your email, like BK-2026-1A2B3C."),
+    .regex(REFERENCE_RE, "Enter the reference from your email, like BK-2026-1A2B3C."),
   email: z.email("Enter the email you booked with.").trim().toLowerCase(),
 });
 export type LookupInput = z.input<typeof lookupSchema>;
+
+/** "Email me my bookings": the references are sent to this address, never shown. */
+export const remindSchema = z.object({
+  email: z.email("Enter the email you booked with.").trim().toLowerCase(),
+});
+
+/** "Ask to reschedule" on /booking (reference + email prove it's their booking). */
+export const rescheduleRequestSchema = lookupSchema.extend({
+  preferred: optionalText(300),
+  message: z
+    .string()
+    .trim()
+    .min(5, "Tell us a little about what you need.")
+    .max(1000, "Keep this under 1000 characters."),
+});
+export type RescheduleRequestInput = z.input<typeof rescheduleRequestSchema>;

@@ -8,6 +8,7 @@ import { BookingWizard } from "@/components/booking/booking-wizard";
 import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { contractForWizard } from "@/lib/booking/contract";
 import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
 import {
   earlyBirdOpening,
@@ -152,6 +153,7 @@ async function Workshop() {
                 price_cents: workshop.price_cents,
                 deposit_cents: workshop.deposit_cents,
                 duration_minutes: workshop.duration_minutes,
+                ...contractForWizard(workshop.contract),
               },
             ]}
             addOns={[]}

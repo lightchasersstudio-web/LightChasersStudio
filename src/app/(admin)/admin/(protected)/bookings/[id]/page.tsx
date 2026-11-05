@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { BookingRequests } from "@/components/admin/bookings/booking-requests";
 import { BookingVat } from "@/components/admin/bookings/booking-vat";
 import { ContactActions } from "@/components/admin/bookings/contact-actions";
 import { DeleteBooking } from "@/components/admin/bookings/delete-booking";
@@ -17,6 +18,7 @@ import { ReplyTemplates } from "@/components/admin/bookings/reply-templates";
 import { RefundReviewBanner, StatusActions } from "@/components/admin/bookings/status-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { DetailSkeleton } from "@/components/admin/skeletons";
+import { AgreedContract } from "@/components/booking/agreed-contract";
 import { StatusBadge } from "@/components/booking/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAddOns, formatBookingWhen } from "@/lib/booking/booking-summary";
@@ -86,6 +88,7 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
         <div className="grid gap-8 lg:grid-cols-[1fr_24rem]">
           <div className="space-y-8">
             {b.needs_refund_review && <RefundReviewBanner id={b.id} />}
+            <BookingRequests bookingId={b.id} requests={b.requests} editable={editable} />
 
             {active && (
               <section aria-labelledby="actions" className="space-y-3">
@@ -222,6 +225,14 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                 <RecordPaymentForm bookingId={b.id} />
               )}
             </section>
+
+            {b.contract_text && b.contract_accepted_at && (
+              <AgreedContract
+                text={b.contract_text}
+                acceptedAt={b.contract_accepted_at}
+                title={`${b.summary.serviceName} contract`}
+              />
+            )}
 
             <section aria-labelledby="notes" className="rounded-3xl border bg-card p-5">
               <h2 id="notes" className="sr-only">

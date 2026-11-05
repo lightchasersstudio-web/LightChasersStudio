@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { BookingSummary } from "@/lib/booking/booking-summary";
 
-import { bookingConfirmedEmail, bookingUpdatedEmail, newBookingAlertEmail } from "./booking-emails";
+import {
+  balancePaidAlertEmail,
+  bookingConfirmedEmail,
+  bookingListEmail,
+  bookingUpdatedEmail,
+  newBookingAlertEmail,
+  paymentReceivedEmail,
+  rescheduleRequestAlertEmail,
+  shootReminderEmail,
+} from "./booking-emails";
 
 const booking: BookingSummary = {
   reference: "BK-2026-ABC123",
@@ -66,5 +75,70 @@ describe("booking emails", () => {
     expect(email.subject).toBe("Your booking BK-2026-ABC123 was updated");
     expect(email.text).toContain("Tue, 3 Nov 2026, 1:00 PM");
     expect(email.text).toContain("https://studio.example/booking?ref=BK-2026-ABC123");
+  });
+
+  it("tells clients to keep their reference, but not the studio alert", () => {
+    expect(bookingConfirmedEmail(booking, "https://studio.example").text).toContain(
+      "Keep this email: your reference BK-2026-ABC123",
+    );
+    expect(
+      newBookingAlertEmail(booking, "https://studio.example", "b-1", false).html,
+    ).not.toContain("Keep this email");
+  });
+
+  it("lists every booking for the email with a link to each", () => {
+    const email = bookingListEmail(
+      [
+        {
+          reference: "BK-2026-ABC123",
+          serviceName: "Family <Portrait>",
+          startAt: booking.startAt,
+          endAt: null,
+          statusLabel: "Confirmed",
+        },
+        {
+          reference: "BK-2025-FFF000",
+          serviceName: "Prenup",
+          startAt: "2025-02-01T02:00:00.000Z",
+          endAt: null,
+          statusLabel: "Completed",
+        },
+      ],
+      { name: "Light Chasers Studio", phone: null, email: null },
+      "https://studio.example",
+    );
+    expect(email.subject).toBe("Your Light Chasers Studio booking references");
+    expect(email.html).toContain("Family &lt;Portrait&gt;");
+    expect(email.text).toContain("https://studio.example/booking?ref=BK-2026-ABC123");
+    expect(email.text).toContain("https://studio.example/booking?ref=BK-2025-FFF000");
+  });
+
+  it("reminds the client the day before, with the balance only when one is due", () => {
+    const email = shootReminderEmail(booking, "https://studio.example");
+    expect(email.subject).toBe("See you tomorrow! Family Portrait Session · BK-2026-ABC123");
+    expect(email.text).toContain("https://studio.example/prepare");
+    expect(email.text).toContain("Balance still to pay: ₱2,450");
+    const paid = shootReminderEmail({ ...booking, paidCents: 350000 }, "https://studio.example");
+    expect(paid.text).not.toContain("Balance still to pay");
+  });
+
+  it("sends the studio the client's reschedule request, escaped", () => {
+    const email = rescheduleRequestAlertEmail(booking, "https://studio.example", "b-1", {
+      preferred: "Any <Saturday>",
+      message: "Can we move it?",
+    });
+    expect(email.subject).toBe("Reschedule request: BK-2026-ABC123");
+    expect(email.html).toContain("Any &lt;Saturday&gt;");
+    expect(email.text).toContain("Message: Can we move it?");
+    expect(email.text).toContain("https://studio.example/admin/bookings/b-1");
+  });
+
+  it("confirms a balance payment to both sides", () => {
+    expect(paymentReceivedEmail(booking, "https://studio.example").subject).toBe(
+      "Payment received for BK-2026-ABC123",
+    );
+    expect(balancePaidAlertEmail(booking, "https://studio.example", "b-1").subject).toBe(
+      "Balance paid online: BK-2026-ABC123",
+    );
   });
 });
