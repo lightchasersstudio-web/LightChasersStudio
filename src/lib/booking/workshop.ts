@@ -134,3 +134,34 @@ export function formatEarlyBirdUntil(date: string): string {
   );
   return `${d} ${month} ${y}`;
 }
+
+/** Most days a workshop can run on (owner decision 2026-11-05). */
+export const WORKSHOP_MAX_DAYS = 3;
+
+export type WorkshopDay = { startsAt: string; endsAt: string };
+
+/**
+ * services.workshop_days → the workshop's days in order. Falls back to the one
+ * day from workshop_starts_at/ends_at (older rows), or [] when not scheduled.
+ */
+export function workshopDays(workshop: {
+  workshop_days?: unknown;
+  workshop_starts_at: string | null;
+  workshop_ends_at: string | null;
+}): WorkshopDay[] {
+  const raw = Array.isArray(workshop.workshop_days) ? workshop.workshop_days : [];
+  const days = raw
+    .map((d) => d as { starts_at?: unknown; ends_at?: unknown })
+    .filter((d) => typeof d.starts_at === "string" && typeof d.ends_at === "string")
+    .map((d) => ({ startsAt: d.starts_at as string, endsAt: d.ends_at as string }))
+    .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))
+    .slice(0, WORKSHOP_MAX_DAYS);
+  if (days.length > 0) return days;
+  return workshop.workshop_starts_at && workshop.workshop_ends_at
+    ? [{ startsAt: workshop.workshop_starts_at, endsAt: workshop.workshop_ends_at }]
+    : [];
+}
+
+/** Each day as "Saturday, 14 November 2026" + "1:00 PM – 5:30 PM" (Manila time). */
+export const formatWorkshopDays = (days: WorkshopDay[]) =>
+  days.map((d) => formatWorkshopWhen(d.startsAt, d.endsAt));

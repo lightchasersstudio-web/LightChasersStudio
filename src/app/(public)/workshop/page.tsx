@@ -13,7 +13,8 @@ import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
 import {
   earlyBirdOpening,
   formatEarlyBirdUntil,
-  formatWorkshopWhen,
+  formatWorkshopDays,
+  workshopDays,
   workshopOpening,
   workshopPrices,
 } from "@/lib/booking/workshop";
@@ -88,22 +89,35 @@ async function Workshop() {
   const opening = workshopOpening(workshop, seatsTaken);
   const prices = workshopPrices(workshop);
   const earlyBird = earlyBirdOpening(workshop, earlyBirdsTaken);
-  const when =
-    workshop.workshop_starts_at && workshop.workshop_ends_at
-      ? formatWorkshopWhen(workshop.workshop_starts_at, workshop.workshop_ends_at)
-      : null;
+  const schedule = workshopDays(workshop);
+  const days = formatWorkshopDays(schedule);
+  const when = days[0] ?? null;
 
   return (
     <>
       <div className="mt-8 flex flex-wrap gap-x-8 gap-y-3 rounded-3xl border bg-background p-5 shadow-sm sm:p-6">
         <p className="w-full font-heading text-xl font-semibold">{workshop.name}</p>
-        <Detail Icon={CalendarDaysIcon} label="Date">
-          {when?.date ?? "To be announced"}
-        </Detail>
-        {when && (
-          <Detail Icon={ClockIcon} label="Time">
-            {when.time}
+        {days.length > 1 ? (
+          <Detail Icon={CalendarDaysIcon} label={`${days.length} days`}>
+            <span className="block space-y-1">
+              {days.map((d, i) => (
+                <span key={i} className="block">
+                  <span className="font-semibold">Day {i + 1}:</span> {d.date}, {d.time}
+                </span>
+              ))}
+            </span>
           </Detail>
+        ) : (
+          <>
+            <Detail Icon={CalendarDaysIcon} label="Date">
+              {when?.date ?? "To be announced"}
+            </Detail>
+            {when && (
+              <Detail Icon={ClockIcon} label="Time">
+                {when.time}
+              </Detail>
+            )}
+          </>
         )}
         {workshop.workshop_location && (
           <Detail Icon={MapPinIcon} label="Where">
@@ -138,6 +152,7 @@ async function Workshop() {
             workshop={{
               startAt: workshop.workshop_starts_at,
               endAt: workshop.workshop_ends_at,
+              days: schedule.map((d) => ({ startAt: d.startsAt, endAt: d.endsAt })),
               location: workshop.workshop_location,
               seatsLeft: opening.seatsLeft,
               prices,

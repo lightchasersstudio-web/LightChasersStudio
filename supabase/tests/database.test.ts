@@ -1509,6 +1509,45 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("a multi-day workshop only blocks its own days' hours", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        // Day 1 and day 3 (the day in between is free for shoots).
+        const workshop = await addWorkshop(c, { start: manila(160, 13), end: manila(162, 17) });
+        await c.query("update public.services set workshop_days = $2::jsonb where id = $1", [
+          workshop,
+          JSON.stringify([
+            { starts_at: manila(160, 13).toISOString(), ends_at: manila(160, 17).toISOString() },
+            { starts_at: manila(162, 13).toISOString(), ends_at: manila(162, 17).toISOString() },
+          ]),
+        ]);
+
+        await actAs(c, "anon");
+        const { rows: busy } = await c.query<{ start_at: Date; blocked_until: Date }>(
+          "select * from public.get_busy_ranges($1, $2)",
+          [manila(159, 0).toISOString(), manila(164, 0).toISOString()],
+        );
+        expect(busy.map((r) => [utc(r.start_at), utc(r.blocked_until)])).toEqual([
+          [utc(manila(160, 13)), utc(manila(160, 17))],
+          [utc(manila(162, 13)), utc(manila(162, 17))],
+        ]);
+
+        await actAs(c, "service_role");
+        // The day in between books normally; a workshop day's hours don't.
+        const between = await book(c, s.portrait, manila(161, 14), "between@example.com");
+        expect(between.rows[0]!.booking_id).toBeTruthy();
+        expect(
+          await expectFailure(c, CREATE, [
+            "X Y",
+            "day3@example.com",
+            "09171234567",
+            s.portrait,
+            manila(162, 14).toISOString(),
+          ]),
+        ).toMatch(/slot_unavailable/);
+      });
+    });
+
     it("prices the workshop per person; half or full is of that total", async () => {
       await inRollback(async (c) => {
         await setupFixtures(c); // VAT 0

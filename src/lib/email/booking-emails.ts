@@ -3,6 +3,7 @@ import {
   formatAddOns,
   formatBookingWhen,
   formatPerson,
+  formatSummaryWhen,
   type BookingSummary,
 } from "@/lib/booking/booking-summary";
 import { WORKSHOP_REFUND_RULE } from "@/lib/booking/workshop";
@@ -39,7 +40,7 @@ function layout(
     ["Package", b.serviceName],
     ...(b.people ?? []).map((p, i): [string, string] => [`Person ${i + 1}`, formatPerson(p)]),
     ...(b.addOns.length > 0 ? [["Add-ons", formatAddOns(b.addOns)!] as [string, string]] : []),
-    ["When", formatBookingWhen(b.startAt, b.endAt)],
+    ["When", formatSummaryWhen(b)],
     ...(b.location ? [["Location", b.location] as [string, string]] : []),
     ...(b.vatCents > 0 ? [["VAT included", formatPeso(b.vatCents)] as [string, string]] : []),
     ["Total", formatPeso(b.priceCents)],

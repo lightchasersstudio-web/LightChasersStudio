@@ -24,6 +24,8 @@ export type BookingSummary = {
   studioName: string;
   studioPhone: string | null;
   studioEmail: string | null;
+  /** Multi-day workshops: each day (only set when there's more than one). */
+  days?: { startAt: string; endAt: string }[];
   /** Workshop sign-ups: each person with their price category label and price. */
   people?: { name: string; category: string; priceCents: number }[];
 };
@@ -51,8 +53,35 @@ export const formatPerson = (p: NonNullable<BookingSummary["people"]>[number]) =
  * ("Tue, 3 Nov 2026, 1:00 PM") when the booking has no end time.
  */
 export function formatBookingWhen(startAt: string, endAt: string | null): string {
-  const start = format(new TZDate(startAt, BUSINESS_TZ), "EEE, d MMM yyyy, h:mm a");
-  return endAt ? `${start} – ${format(new TZDate(endAt, BUSINESS_TZ), "h:mm a")}` : start;
+  const start = new TZDate(startAt, BUSINESS_TZ);
+  const startText = format(start, "EEE, d MMM yyyy, h:mm a");
+  if (!endAt) return startText;
+  const end = new TZDate(endAt, BUSINESS_TZ);
+  // Ending on another day (e.g. a multi-day workshop's span): name that day too.
+  const sameDay = format(start, "yyyy-MM-dd") === format(end, "yyyy-MM-dd");
+  return `${startText} – ${format(end, sameDay ? "h:mm a" : "EEE, d MMM yyyy, h:mm a")}`;
+}
+
+/** When a booking happens: each day for a multi-day workshop, else start – end. */
+export function formatSummaryWhen(b: Pick<BookingSummary, "startAt" | "endAt" | "days">): string {
+  if (b.days && b.days.length > 1) {
+    return b.days
+      .map((d, i) => `Day ${i + 1}: ${formatBookingWhen(d.startAt, d.endAt)}`)
+      .join("; ");
+  }
+  return formatBookingWhen(b.startAt, b.endAt);
+}
+
+/** BookingSummary.days for a workshop booking: its days when there are 2 or more. */
+export function summaryDays(
+  service: { category: string; workshop_days: unknown } | null | undefined,
+): BookingSummary["days"] {
+  if (service?.category !== "workshop" || !Array.isArray(service.workshop_days)) return undefined;
+  const days = (service.workshop_days as { starts_at: string; ends_at: string }[]).map((d) => ({
+    startAt: d.starts_at,
+    endAt: d.ends_at,
+  }));
+  return days.length > 1 ? days : undefined;
 }
 
 /** "Extra photographer (₱2,000), Videographer (₱5,000)", or null when there are none. */
@@ -71,7 +100,7 @@ export function bookingSummaryText(b: BookingSummary): string {
     `Package: ${b.serviceName}`,
     ...(b.people ?? []).map((p, i) => `Person ${i + 1}: ${formatPerson(p)}`),
     b.addOns.length > 0 && `Add-ons: ${formatAddOns(b.addOns)}`,
-    `When: ${formatBookingWhen(b.startAt, b.endAt)}`,
+    `When: ${formatSummaryWhen(b)}`,
     b.location && `Location: ${b.location}`,
     `Total: ${formatPeso(b.priceCents)}${b.vatCents > 0 ? ` (incl. ${formatPeso(b.vatCents)} VAT)` : ""}`,
     `Paid: ${formatPeso(b.paidCents)}`,

@@ -1,32 +1,43 @@
-import { ArrowUpRightIcon, MailIcon, MapPinIcon, PhoneIcon } from "lucide-react";
+import { ArrowUpRightIcon, MapPinIcon, PhoneIcon } from "lucide-react";
 import Link from "next/link";
 
 import { BrandLockup } from "@/components/public/brand-lockup";
-import { SITE_NAV } from "@/components/public/site-nav";
+import { FacebookIcon } from "@/components/shared/facebook-icon";
 import { Sparkle } from "@/components/shared/sparkle";
+import { displayUrl, studioMapsUrl } from "@/lib/utils/social";
 import { currentYear, getPublicSettings } from "@/server/queries/public";
 
+const NEW_TAB = { target: "_blank", rel: "noopener noreferrer" } as const;
+
+/**
+ * Brand on the left; the studio's address (opens Google Maps), Facebook page and
+ * number on the right. Email and the full list of ways to reach us live on /contact.
+ */
 export async function SiteFooter() {
   const [s, year] = await Promise.all([getPublicSettings(), currentYear()]);
-  const socials = socialLinks(s);
+  const place = s.address ?? s.city;
+  const otherSocials = socialLinks(s).filter((l) => l.label !== "Facebook");
+  const linkClass =
+    "group inline-flex min-h-11 items-start gap-3 text-panel-foreground/90 hover:text-panel-foreground";
+  const iconClass =
+    "grid size-9 shrink-0 place-items-center rounded-full bg-panel-foreground/10 transition-colors group-hover:bg-panel-foreground/20";
 
   return (
     <footer id="site-footer" className="mt-24 bg-panel text-panel-foreground">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.2fr_1fr]">
         <div className="space-y-4">
           <BrandLockup name={s.business_name} tone="light" className="text-xl" />
           <p className="flex items-center gap-2 font-script text-2xl text-panel-foreground">
             <Sparkle className="size-3.5 text-terracotta" />
             {s.tagline ?? "chasing the light"}
           </p>
-          {socials.length > 0 && (
+          {otherSocials.length > 0 && (
             <ul className="flex flex-wrap gap-2">
-              {socials.map(({ label, href }) => (
+              {otherSocials.map(({ label, href }) => (
                 <li key={label}>
                   <a
                     href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    {...NEW_TAB}
                     className="inline-flex min-h-11 items-center gap-1 rounded-full border border-panel-foreground/25 px-4 text-sm font-semibold transition-colors hover:bg-panel-foreground/10"
                   >
                     {label}
@@ -39,73 +50,58 @@ export async function SiteFooter() {
           )}
         </div>
 
-        <nav aria-label="Footer">
-          <h2 className="font-heading text-lg font-semibold">Explore</h2>
-          <ul className="mt-3 space-y-1">
-            {SITE_NAV.map(({ href, label }) => (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className="inline-flex min-h-10 items-center text-panel-foreground/85 hover:text-panel-foreground hover:underline"
-                >
-                  {label}
-                </Link>
-              </li>
-            ))}
+        <address className="not-italic">
+          <ul className="space-y-3">
             <li>
-              <Link
-                href="/prepare"
-                className="inline-flex min-h-10 items-center text-panel-foreground/85 hover:text-panel-foreground hover:underline"
-              >
-                Preparing for your shoot
-              </Link>
+              <a href={studioMapsUrl(s)} {...NEW_TAB} className={linkClass}>
+                <span className={iconClass}>
+                  <MapPinIcon className="size-4" aria-hidden />
+                </span>
+                <span className="pt-1.5">
+                  <span className="underline-offset-4 group-hover:underline">{place}</span>
+                  <span className="sr-only"> (opens Google Maps in a new tab)</span>
+                </span>
+              </a>
             </li>
-            <li>
-              <Link
-                href="/privacy"
-                className="inline-flex min-h-10 items-center text-panel-foreground/85 hover:text-panel-foreground hover:underline"
-              >
-                Privacy policy
-              </Link>
-            </li>
-          </ul>
-        </nav>
-
-        <div>
-          <h2 className="font-heading text-lg font-semibold">Say hello</h2>
-          <ul className="mt-3 space-y-3 text-panel-foreground/85">
-            {s.email && (
+            {s.facebook_url && (
               <li>
-                <a
-                  href={`mailto:${s.email}`}
-                  className="inline-flex items-center gap-2 break-all hover:text-panel-foreground hover:underline"
-                >
-                  <MailIcon className="size-4 shrink-0" aria-hidden />
-                  {s.email}
+                <a href={s.facebook_url} {...NEW_TAB} className={linkClass}>
+                  <span className={iconClass}>
+                    <FacebookIcon className="size-4" />
+                  </span>
+                  <span className="pt-1.5 break-all underline-offset-4 group-hover:underline">
+                    {displayUrl(s.facebook_url)}
+                    <span className="sr-only"> (our Facebook page, opens in a new tab)</span>
+                  </span>
                 </a>
               </li>
             )}
             {s.phone && (
               <li>
-                <a
-                  href={`tel:${s.phone.replace(/[^\d+]/g, "")}`}
-                  className="inline-flex items-center gap-2 hover:text-panel-foreground hover:underline"
-                >
-                  <PhoneIcon className="size-4 shrink-0" aria-hidden />
-                  {s.phone}
+                <a href={`tel:${s.phone.replace(/[^\d+]/g, "")}`} className={linkClass}>
+                  <span className={iconClass}>
+                    <PhoneIcon className="size-4" aria-hidden />
+                  </span>
+                  <span className="pt-1.5 underline-offset-4 group-hover:underline">
+                    <span className="sr-only">Call </span>
+                    {s.phone}
+                  </span>
                 </a>
               </li>
             )}
-            <li className="flex items-start gap-2">
-              <MapPinIcon className="mt-1 size-4 shrink-0" aria-hidden />
-              {s.address ?? s.city}
-            </li>
           </ul>
-        </div>
+        </address>
       </div>
       <div className="border-t border-panel-foreground/15">
         <p className="mx-auto max-w-6xl px-4 py-5 text-center text-sm text-panel-foreground/85 sm:px-6">
-          © {year} {s.business_name} · {s.city}, Philippines
+          © {year} {s.business_name} · {s.city}, Philippines ·{" "}
+          {/* The booking form's privacy consent points here, so it stays reachable. */}
+          <Link
+            href="/privacy"
+            className="underline-offset-4 hover:text-panel-foreground hover:underline"
+          >
+            Privacy policy
+          </Link>
         </p>
       </div>
     </footer>

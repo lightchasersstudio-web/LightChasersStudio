@@ -414,6 +414,7 @@ export type Database = {
           id: boolean
           instagram_url: string | null
           logo_path: string | null
+          maps_url: string | null
           max_advance_days: number
           max_concurrent_bookings: number
           min_notice_hours: number
@@ -439,6 +440,7 @@ export type Database = {
           id?: boolean
           instagram_url?: string | null
           logo_path?: string | null
+          maps_url?: string | null
           max_advance_days?: number
           max_concurrent_bookings?: number
           min_notice_hours?: number
@@ -464,6 +466,7 @@ export type Database = {
           id?: boolean
           instagram_url?: string | null
           logo_path?: string | null
+          maps_url?: string | null
           max_advance_days?: number
           max_concurrent_bookings?: number
           min_notice_hours?: number
@@ -727,6 +730,7 @@ export type Database = {
           sort_order: number
           summary: string | null
           updated_at: string
+          workshop_days: Json
           workshop_early_bird_enabled: boolean
           workshop_early_bird_price_cents: number | null
           workshop_early_bird_seats: number | null
@@ -757,6 +761,7 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_days?: Json
           workshop_early_bird_enabled?: boolean
           workshop_early_bird_price_cents?: number | null
           workshop_early_bird_seats?: number | null
@@ -787,6 +792,7 @@ export type Database = {
           sort_order?: number
           summary?: string | null
           updated_at?: string
+          workshop_days?: Json
           workshop_early_bird_enabled?: boolean
           workshop_early_bird_price_cents?: number | null
           workshop_early_bird_seats?: number | null

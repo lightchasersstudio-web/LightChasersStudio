@@ -11,6 +11,7 @@ import {
   setServiceActiveSchema,
 } from "@/lib/validations/services";
 import { parseWorkshopSlides, saveWorkshopSlidesSchema } from "@/lib/validations/workshop-slides";
+import { workshopDays } from "@/lib/booking/workshop";
 import { adminAction, audit, PG, revalidate, TAGS } from "@/server/admin-action";
 import { notifyBookingUpdated } from "@/server/booking-notifications";
 import { loadBookingRecord } from "@/server/queries/booking-record";
@@ -46,7 +47,9 @@ export async function updateService(id: string, input: unknown): Promise<ActionR
 
     const { data: before } = await ctx.supabase
       .from("services")
-      .select("cover_image_path, workshop_starts_at, workshop_ends_at, workshop_location")
+      .select(
+        "cover_image_path, workshop_starts_at, workshop_ends_at, workshop_location, workshop_days",
+      )
       .eq("id", id)
       .maybeSingle();
     if (!before) return fail("Service not found.");
@@ -61,11 +64,22 @@ export async function updateService(id: string, input: unknown): Promise<ActionR
     // A trigger has moved the workshop's sign-ups; tell them if the admin wants that.
     const same = (a: string | null, b: string | null) =>
       a === b || (a !== null && b !== null && Date.parse(a) === Date.parse(b));
+    // Any day added, removed or moved (e.g. only day 2 changed) counts as a move.
+    const sameDays = (old: typeof before, days: { starts_at: string; ends_at: string }[]) => {
+      const was = workshopDays(old);
+      return (
+        was.length === days.length &&
+        was.every(
+          (d, i) => same(d.startsAt, days[i]!.starts_at) && same(d.endsAt, days[i]!.ends_at),
+        )
+      );
+    };
     const moved =
       row.category === "workshop" &&
       row.workshop_starts_at !== null &&
       (!same(before.workshop_starts_at, row.workshop_starts_at) ||
         !same(before.workshop_ends_at, row.workshop_ends_at) ||
+        !sameDays(before, row.workshop_days) ||
         before.workshop_location !== row.workshop_location);
     const emailed =
       moved && notifySchema.parse(input).notifyWorkshopMove ? await emailWorkshopMove(id) : 0;

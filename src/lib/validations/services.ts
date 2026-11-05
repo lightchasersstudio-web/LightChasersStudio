@@ -1,6 +1,7 @@
 import { TZDate } from "@date-fns/tz";
 import { z } from "zod";
 
+import { WORKSHOP_MAX_DAYS, workshopDays } from "@/lib/booking/workshop";
 import { PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
@@ -55,6 +56,13 @@ export const serviceSchema = z
     workshopEnd: z.string().trim(),
     workshopSeats: z.string().trim(),
     workshopLocation: optionalText(300),
+    // Days 2 and 3 of a multi-day workshop (day 1 is workshopDate/Start/End).
+    workshopExtraDays: z
+      .array(
+        z.object({ date: z.string().trim(), start: z.string().trim(), end: z.string().trim() }),
+      )
+      .max(WORKSHOP_MAX_DAYS - 1, `A workshop runs on up to ${WORKSHOP_MAX_DAYS} days.`)
+      .default([]),
     // Email everyone signed up when the date, time or place changes (not stored).
     notifyWorkshopMove: z.boolean().default(true),
     // Workshops only: discounted categories (empty price = not offered).
@@ -213,12 +221,15 @@ type WorkshopSchedule = {
   workshop_ends_at: string | null;
   workshop_seats: number | null;
   workshop_location: string | null;
+  /** Every day, in order (first day's start = workshop_starts_at, last day's end = workshop_ends_at). */
+  workshop_days: { starts_at: string; ends_at: string }[];
 };
 const NO_SCHEDULE: WorkshopSchedule = {
   workshop_starts_at: null,
   workshop_ends_at: null,
   workshop_seats: null,
   workshop_location: null,
+  workshop_days: [],
 };
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -230,11 +241,12 @@ function workshopSchedule(
     workshopEnd: string;
     workshopSeats: string;
     workshopLocation: string | null;
+    workshopExtraDays: { date: string; start: string; end: string }[];
   },
   ctx: z.RefinementCtx,
 ): WorkshopSchedule | null {
-  const issue = (path: string, message: string) => {
-    ctx.addIssue({ code: "custom", path: [path], message });
+  const issue = (path: string | (string | number)[], message: string) => {
+    ctx.addIssue({ code: "custom", path: Array.isArray(path) ? path : [path], message });
     return null;
   };
   let seats: number | null = null;
@@ -252,6 +264,9 @@ function workshopSchedule(
     seats = Number(v.workshopSeats);
   }
   if (!v.workshopDate && !v.workshopStart && !v.workshopEnd) {
+    if (v.workshopExtraDays.length > 0) {
+      return issue("workshopDate", "Set day 1 first, or remove the other days.");
+    }
     return { ...NO_SCHEDULE, workshop_seats: seats, workshop_location: v.workshopLocation };
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v.workshopDate))
@@ -261,16 +276,35 @@ function workshopSchedule(
   if (v.workshopEnd <= v.workshopStart) {
     return issue("workshopEnd", "The end time must be after the start time.");
   }
-  const at = (time: string) => {
-    const [y, m, d] = v.workshopDate.split("-").map(Number) as [number, number, number];
+  const at = (date: string, time: string) => {
+    const [y, m, d] = date.split("-").map(Number) as [number, number, number];
     const [h, min] = time.split(":").map(Number) as [number, number];
     return new Date(new TZDate(y, m - 1, d, h, min, BUSINESS_TZ).getTime()).toISOString();
   };
+  const days = [
+    { starts_at: at(v.workshopDate, v.workshopStart), ends_at: at(v.workshopDate, v.workshopEnd) },
+  ];
+  let previousDate = v.workshopDate;
+  for (const [i, day] of v.workshopExtraDays.entries()) {
+    const path = (field: string) => ["workshopExtraDays", i, field];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day.date))
+      return issue(path("date"), `Pick day ${i + 2}'s date.`);
+    if (day.date <= previousDate) {
+      return issue(path("date"), `Day ${i + 2} must be after day ${i + 1}.`);
+    }
+    if (!TIME.test(day.start)) return issue(path("start"), "Pick the start time.");
+    if (!TIME.test(day.end)) return issue(path("end"), "Pick the end time.");
+    if (day.end <= day.start)
+      return issue(path("end"), "The end time must be after the start time.");
+    days.push({ starts_at: at(day.date, day.start), ends_at: at(day.date, day.end) });
+    previousDate = day.date;
+  }
   return {
-    workshop_starts_at: at(v.workshopStart),
-    workshop_ends_at: at(v.workshopEnd),
+    workshop_starts_at: days[0]!.starts_at,
+    workshop_ends_at: days.at(-1)!.ends_at,
     workshop_seats: seats,
     workshop_location: v.workshopLocation,
+    workshop_days: days,
   };
 }
 
@@ -278,6 +312,7 @@ function workshopSchedule(
 export function workshopFormValues(service: {
   workshop_starts_at: string | null;
   workshop_ends_at: string | null;
+  workshop_days?: unknown;
   workshop_seats: number | null;
   workshop_location: string | null;
   workshop_early_bird_price_cents: number | null;
@@ -296,10 +331,16 @@ export function workshopFormValues(service: {
       ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
       : `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+  const [first, ...rest] = workshopDays(service);
   return {
-    workshopDate: local(service.workshop_starts_at, "date"),
-    workshopStart: local(service.workshop_starts_at, "time"),
-    workshopEnd: local(service.workshop_ends_at, "time"),
+    workshopDate: local(first?.startsAt ?? null, "date"),
+    workshopStart: local(first?.startsAt ?? null, "time"),
+    workshopEnd: local(first?.endsAt ?? null, "time"),
+    workshopExtraDays: rest.map((d) => ({
+      date: local(d.startsAt, "date"),
+      start: local(d.startsAt, "time"),
+      end: local(d.endsAt, "time"),
+    })),
     workshopSeats: service.workshop_seats === null ? "" : String(service.workshop_seats),
     workshopLocation: service.workshop_location ?? "",
     notifyWorkshopMove: true,

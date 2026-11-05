@@ -21,7 +21,7 @@ import { DetailSkeleton } from "@/components/admin/skeletons";
 import { AgreedContract } from "@/components/booking/agreed-contract";
 import { StatusBadge } from "@/components/booking/status-badge";
 import { Button } from "@/components/ui/button";
-import { formatAddOns, formatBookingWhen } from "@/lib/booking/booking-summary";
+import { formatAddOns, formatSummaryWhen } from "@/lib/booking/booking-summary";
 import { describeHistoryEntry } from "@/lib/booking/history";
 import { replyTemplates } from "@/lib/booking/reply-templates";
 import { workshopRefundCents } from "@/lib/booking/workshop";
@@ -69,7 +69,7 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
         <PageHeader
           eyebrow={b.source === "admin" ? "booked by staff" : "booked online"}
           title={b.contact_name}
-          description={`${b.serviceName} · ${formatBookingWhen(b.start_at, b.summary.endAt)}`}
+          description={`${b.serviceName} · ${formatSummaryWhen(b.summary)}`}
           actions={
             <>
               <StatusBadge status={b.status} className="px-3 py-1 text-sm" />
