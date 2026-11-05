@@ -25,7 +25,14 @@ import { adminBookingSchema, type AdminBookingInput } from "@/lib/validations/ad
 import { CONTACT_METHODS } from "@/lib/validations/booking";
 import { createAdminBooking } from "@/server/actions/admin-bookings";
 
-export type PackageChoice = { id: string; name: string; priceCents: number; active: boolean };
+export type PackageChoice = {
+  id: string;
+  name: string;
+  priceCents: number;
+  active: boolean;
+  /** Added (before VAT) when an existing booking is moved; 0 = free. */
+  rescheduleFeeCents?: number;
+};
 
 const DEPOSITS = [
   { value: "gcash", label: "Paid by GCash" },

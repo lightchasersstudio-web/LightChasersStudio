@@ -768,6 +768,7 @@ export type Database = {
           is_active: boolean
           name: string
           price_cents: number
+          reschedule_fee_cents: number
           slug: string
           sort_order: number
           summary: string | null
@@ -799,6 +800,7 @@ export type Database = {
           is_active?: boolean
           name: string
           price_cents: number
+          reschedule_fee_cents?: number
           slug: string
           sort_order?: number
           summary?: string | null
@@ -830,6 +832,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           price_cents?: number
+          reschedule_fee_cents?: number
           slug?: string
           sort_order?: number
           summary?: string | null

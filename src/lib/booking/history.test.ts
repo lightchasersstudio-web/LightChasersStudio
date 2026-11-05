@@ -36,3 +36,21 @@ describe("describeHistoryEntry", () => {
     expect(describeHistoryEntry("booking.something_new", {})).toBe("booking.something_new");
   });
 });
+
+describe("rescheduling fee in the history", () => {
+  it("says the fee was added when a booking was moved", () => {
+    expect(
+      describeHistoryEntry("booking.update", {
+        before: { start_at: "2026-11-03T05:00:00.000Z", price_cents: 392000, add_ons: [] },
+        after: {
+          start_at: "2026-11-10T05:00:00.000Z",
+          price_cents: 448000,
+          add_ons: [{ name: "Rescheduling fee", price_cents: 50000 }],
+        },
+        reschedule_fee_cents: 50000,
+      }),
+    ).toBe(
+      "Edited the booking: moved to Tue, 10 Nov 2026, 1:00 PM, total ₱3,920 → ₱4,480, rescheduling fee ₱500 added",
+    );
+  });
+});

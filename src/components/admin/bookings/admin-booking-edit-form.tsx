@@ -20,7 +20,7 @@ import { handleResult } from "@/components/admin/form-utils";
 import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
-import { centsToPesoInput } from "@/lib/utils/money";
+import { centsToPesoInput, formatPeso } from "@/lib/utils/money";
 import {
   adminBookingEditSchema,
   type AdminBookingEditInput,
@@ -53,10 +53,18 @@ export function AdminBookingEditForm({
     defaultValues: initial,
   });
   useUnsavedChangesWarning(form.formState.isDirty);
-  const [serviceId, price, addOns, chargeVat] = useWatch({
+  const [serviceId, price, addOns, chargeVat, date, time, addRescheduleFee] = useWatch({
     control: form.control,
-    name: ["serviceId", "price", "addOns", "chargeVat"],
+    name: ["serviceId", "price", "addOns", "chargeVat", "date", "time", "addRescheduleFee"],
   });
+  // Moving the booking to a new date or time adds the package's rescheduling fee
+  // (the server adds it as a "Rescheduling fee" line; staff can untick to waive it).
+  const moved = date !== initial.date || time !== initial.time;
+  const feeCents = packages.find((p) => p.id === serviceId)?.rescheduleFeeCents ?? 0;
+  const feeLine =
+    moved && feeCents > 0 && addRescheduleFee
+      ? [{ addOnId: "", name: "Rescheduling fee", price: centsToPesoInput(feeCents) }]
+      : [];
 
   // Switching package starts from its listed price; the booking's own price stays until then.
   const firstRun = useRef(true);
@@ -116,7 +124,7 @@ export function AdminBookingEditForm({
         )}
         <BookingTotals
           packagePrice={price}
-          addOns={addOns}
+          addOns={[...addOns, ...feeLine]}
           vatPercent={vatPercent}
           chargeVat={chargeVat}
           paidCents={paidCents}
@@ -130,6 +138,13 @@ export function AdminBookingEditForm({
           initialDate={initial.date}
           excludeBookingId={initial.bookingId}
         />
+        {moved && feeCents > 0 && (
+          <Checkbox control={form.control} name="addRescheduleFee">
+            Add the rescheduling fee ({formatPeso(feeCents)}
+            {chargeVat && vatPercent > 0 ? ` + ${vatPercent}% VAT` : ""}) to the client&apos;s
+            balance
+          </Checkbox>
+        )}
       </Section>
 
       <Section title="Client">
@@ -220,7 +235,7 @@ function Checkbox({
   children,
 }: {
   control: Control<AdminBookingEditInput, unknown, EditOutput>;
-  name: "chargeVat" | "emailClient";
+  name: "chargeVat" | "emailClient" | "addRescheduleFee";
   children: React.ReactNode;
 }) {
   return (

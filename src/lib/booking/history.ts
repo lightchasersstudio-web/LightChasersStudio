@@ -45,7 +45,11 @@ export function describeHistoryEntry(action: string, metadata: Meta): string {
     }
     const names = (list: unknown) =>
       JSON.stringify(((list ?? []) as Meta[]).map((a) => [a.name, a.price_cents]));
-    if (names(after.add_ons) !== names(before.add_ons)) parts.push("add-ons changed");
+    if (typeof metadata.reschedule_fee_cents === "number") {
+      parts.push(`rescheduling fee ${formatPeso(metadata.reschedule_fee_cents)} added`);
+    } else if (names(after.add_ons) !== names(before.add_ons)) {
+      parts.push("add-ons changed");
+    }
     if (parts.length === 0) parts.push("details updated");
     if (metadata.emailed_client) parts.push("client emailed");
     return `Edited the booking: ${parts.join(", ")}`;

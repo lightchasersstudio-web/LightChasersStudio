@@ -31,6 +31,9 @@ import {
 } from "@/server/queries/availability-slots";
 import { loadBookingRecord } from "@/server/queries/booking-record";
 
+/** The booking line added when a booking is moved (see services.reschedule_fee_cents). */
+const RESCHEDULE_FEE_NAME = "Rescheduling fee";
+
 const monthSlotsSchema = z.object({
   serviceId: z.uuid(),
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
@@ -261,13 +264,34 @@ export async function updateAdminBooking(input: unknown): Promise<ActionResult<{
     if (beforeError) throw beforeError;
     if (!before) return fail("Booking not found.");
 
+    // Moved to a new date or time: add the package's rescheduling fee as a line
+    // on the booking (unless staff waived it), so it counts towards the balance.
+    const moved = Date.parse(before.start_at) !== Date.parse(v.startAt);
+    let addOns = v.addOns;
+    let rescheduleFeeCents = 0;
+    if (moved && v.addRescheduleFee) {
+      const { data: service, error: feeError } = await ctx.supabase
+        .from("services")
+        .select("reschedule_fee_cents")
+        .eq("id", v.serviceId)
+        .maybeSingle();
+      if (feeError) throw feeError;
+      rescheduleFeeCents = service?.reschedule_fee_cents ?? 0;
+      if (rescheduleFeeCents > 0) {
+        addOns = [
+          ...addOns,
+          { add_on_id: null, name: RESCHEDULE_FEE_NAME, price_cents: rescheduleFeeCents },
+        ];
+      }
+    }
+
     const { error } = await createAdminClient()
       .rpc("admin_update_booking", {
         p_booking_id: v.bookingId,
         p_service_id: v.serviceId,
         p_start_at: v.startAt,
         p_package_cents: v.packageCents,
-        p_add_ons: v.addOns,
+        p_add_ons: addOns,
         p_charge_vat: v.chargeVat,
         p_allow_outside_hours: v.allowOutsideHours,
         p_location: v.location ?? "",
@@ -312,8 +336,9 @@ export async function updateAdminBooking(input: unknown): Promise<ActionResult<{
         start_at: v.startAt,
         service_id: v.serviceId,
         price_cents: record?.summary.priceCents ?? null,
-        add_ons: v.addOns,
+        add_ons: addOns,
       },
+      ...(rescheduleFeeCents > 0 ? { reschedule_fee_cents: rescheduleFeeCents } : {}),
       emailed_client: v.emailClient && Boolean(record?.email),
     });
     if (record && v.emailClient) await notifyBookingUpdated(record);

@@ -168,6 +168,7 @@ async function Workshop() {
                 price_cents: workshop.price_cents,
                 deposit_cents: workshop.deposit_cents,
                 duration_minutes: workshop.duration_minutes,
+                reschedule_fee_cents: workshop.reschedule_fee_cents,
                 ...contractForWizard(workshop.contract),
               },
             ]}
