@@ -24,6 +24,8 @@ export function acceptedPaymentMethods(): string {
 export async function createCheckoutSession(input: {
   referenceCode: string;
   amountCents: number;
+  /** "Deposit", "Balance" or "Payment" (paid in full): the receipt says "<kind> for booking BK-…". */
+  kind?: "Deposit" | "Balance" | "Payment";
   description: string;
   successUrl: string;
   cancelUrl: string;
@@ -61,7 +63,7 @@ export async function createCheckoutSession(input: {
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           reference_number: input.referenceCode,
-          description: `Deposit for booking ${input.referenceCode}`,
+          description: `${input.kind ?? "Deposit"} for booking ${input.referenceCode}`,
           send_email_receipt: Boolean(input.email),
           billing: input.name
             ? { name: input.name, email: input.email, phone: input.phone }

@@ -222,10 +222,18 @@ async function startCheckout(
       .select("price_cents, service:services(name)")
       .eq("id", bookingId)
       .single();
+    // What the client is paying for, on the checkout page and PayMongo's receipt.
+    const kind =
+      purpose === "balance"
+        ? "Balance"
+        : amountCents >= (booking?.price_cents ?? Infinity)
+          ? "Payment"
+          : "Deposit";
     const session = await createCheckoutSession({
       referenceCode: reference,
       amountCents,
-      description: `${purpose === "balance" ? "Balance" : amountCents >= (booking?.price_cents ?? Infinity) ? "Payment" : "Deposit"} · ${booking?.service?.name ?? "Photo session"} (${reference})`,
+      kind,
+      description: `${kind} · ${booking?.service?.name ?? "Photo session"} (${reference})`,
       // A balance is paid from /booking, so the client goes back there.
       successUrl:
         purpose === "balance"
