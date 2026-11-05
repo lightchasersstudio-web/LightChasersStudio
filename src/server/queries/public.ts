@@ -189,6 +189,26 @@ export async function listPublishedReviews(): Promise<PublicReview[]> {
   return data;
 }
 
+export type PublicFaq = Pick<
+  Tables<"faqs">,
+  "id" | "topic" | "question" | "answer" | "link_href" | "link_label" | "sort_order"
+>;
+
+/** Published questions for /faq, in the admin's order (Admin → FAQ). */
+export async function listPublishedFaqs(): Promise<PublicFaq[]> {
+  "use cache";
+  cacheTag(TAGS.faq);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("faqs")
+    .select("id, topic, question, answer, link_href, link_label, sort_order")
+    .eq("is_published", true)
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
 export type PublicAddOn = Pick<
   Tables<"add_ons">,
   "id" | "name" | "description" | "price_cents" | "extra_minutes" | "service_ids"

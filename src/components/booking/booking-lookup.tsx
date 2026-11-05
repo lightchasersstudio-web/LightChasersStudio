@@ -98,6 +98,7 @@ export function BookingLookup({
           <AgreedContract
             text={booking.contract.text}
             acceptedAt={booking.contract.acceptedAt}
+            signedName={booking.contract.signedName}
             title="The contract you agreed to"
           />
         )}

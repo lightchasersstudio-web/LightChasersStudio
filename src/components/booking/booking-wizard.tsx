@@ -20,8 +20,10 @@ import { SlotPicker } from "@/components/booking/slot-picker";
 import { StudentIdUpload } from "@/components/booking/student-id-upload";
 import { Turnstile } from "@/components/booking/turnstile";
 import { Button } from "@/components/ui/button";
-import { Field, FieldError, FieldGroup } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { formatSummaryWhen } from "@/lib/booking/booking-summary";
+import { signatureMatches } from "@/lib/booking/signature";
 import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
 import { bookingTotals } from "@/lib/booking/pricing";
 import {
@@ -172,6 +174,7 @@ export function BookingWizard({
     turnstileToken: "",
     contractAccepted: false,
     contractHash: "",
+    contractSignature: "",
     website: "",
     ...(workshop && { payInFull: false, refundRuleAccepted: false }),
   });
@@ -240,9 +243,10 @@ export function BookingWizard({
       "attendees",
     ],
   });
-  // Agreeing to one package's contract never carries over to another package.
+  // Agreeing to (and signing) one package's contract never carries over to another package.
   useEffect(() => {
     form.setValue("contractAccepted", false);
+    form.setValue("contractSignature", "");
   }, [serviceId, form]);
   // Workshops are priced per person, by category; packages per booking.
   const people = workshop ? peopleCount(participants) : 1;
@@ -373,6 +377,16 @@ export function BookingWizard({
 
   function onSubmit() {
     if (service?.contract) {
+      if (!signatureMatches(form.getValues("contractSignature"), form.getValues("fullName"))) {
+        form.setError(
+          "contractSignature",
+          {
+            message: `Type your full name exactly as on your details: ${form.getValues("fullName").trim()}.`,
+          },
+          { shouldFocus: true },
+        );
+        return;
+      }
       if (!form.getValues("contractAccepted")) {
         form.setError(
           "contractAccepted",
@@ -921,6 +935,7 @@ export function BookingWizard({
                         form={form}
                         packageName={service.name}
                         contract={service.contract}
+                        fullName={form.getValues("fullName")}
                       />
                     )}
                     <Turnstile key={turnstileKey} onToken={onToken} />
@@ -1403,10 +1418,13 @@ function PackageContract({
   form,
   packageName,
   contract,
+  fullName,
 }: {
   form: UseFormReturn<Values, unknown, Output>;
   packageName: string;
   contract: string;
+  /** Their name from the Details step: the signature must match it. */
+  fullName: string;
 }) {
   const id = "package-contract";
   return (
@@ -1426,6 +1444,35 @@ function PackageContract({
       >
         {contract}
       </div>
+      <Controller
+        control={form.control}
+        name="contractSignature"
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <FieldLabel htmlFor="contract-signature">Sign by typing your full name</FieldLabel>
+            <Input
+              {...field}
+              value={field.value ?? ""}
+              id="contract-signature"
+              autoComplete="name"
+              maxLength={120}
+              placeholder={fullName.trim() || "Your full name"}
+              aria-invalid={fieldState.invalid}
+              aria-describedby="contract-signature-hint"
+              onChange={(e) => {
+                field.onChange(e.target.value);
+                if (fieldState.invalid) form.clearErrors("contractSignature");
+              }}
+              className="h-12 font-script text-2xl"
+            />
+            <p id="contract-signature-hint" className="text-xs text-muted-foreground">
+              Your typed name is your signature on this contract. It must match the name on your
+              details{fullName.trim() ? ` (${fullName.trim()})` : ""}.
+            </p>
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
       <Controller
         control={form.control}
         name="contractAccepted"

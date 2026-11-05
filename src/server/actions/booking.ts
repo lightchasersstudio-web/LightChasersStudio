@@ -2,6 +2,7 @@
 
 import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
 import { contractHash, packageContract } from "@/lib/booking/contract";
+import { cleanSignature, signatureMatches } from "@/lib/booking/signature";
 import type { BookingSummary } from "@/lib/booking/booking-summary";
 import { bookingTotals } from "@/lib/booking/pricing";
 import { attendeesCents, workshopPrices } from "@/lib/booking/workshop";
@@ -98,6 +99,10 @@ export async function submitBooking(
     if (termsError) throw termsError;
     const contract = packageContract(terms?.contract);
     if (contract) {
+      if (!signatureMatches(v.contractSignature, v.fullName)) {
+        const message = `Type your full name exactly as on your details (${v.fullName}) to sign the contract.`;
+        return fail(message, { contractSignature: [message] });
+      }
       if (v.contractAccepted !== true) {
         const message = "Please read the contract and tick to agree before booking.";
         return fail(message, { contractAccepted: [message] });
@@ -167,7 +172,11 @@ export async function submitBooking(
     if (contract) {
       const { error: saveError } = await supabase
         .from("bookings")
-        .update({ contract_text: contract, contract_accepted_at: new Date().toISOString() })
+        .update({
+          contract_text: contract,
+          contract_accepted_at: new Date().toISOString(),
+          contract_signed_name: cleanSignature(v.contractSignature!),
+        })
         .eq("id", data.booking_id);
       if (saveError) console.error("[submitBooking] save contract", saveError);
     }
@@ -277,7 +286,7 @@ export type ClientBookingView = {
   canRequestChange: boolean;
   /** A reschedule request the studio hasn't handled yet. */
   openRequest: { createdAt: string; preferred: string | null } | null;
-  contract: { text: string; acceptedAt: string } | null;
+  contract: { text: string; acceptedAt: string; signedName: string | null } | null;
 };
 
 type OwnBooking = NonNullable<Awaited<ReturnType<typeof loadBookingRecord>>>;

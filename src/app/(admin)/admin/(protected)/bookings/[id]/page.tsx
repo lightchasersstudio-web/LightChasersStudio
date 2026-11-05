@@ -230,6 +230,7 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
               <AgreedContract
                 text={b.contract_text}
                 acceptedAt={b.contract_accepted_at}
+                signedName={b.contract_signed_name}
                 title={`${b.summary.serviceName} contract`}
               />
             )}
