@@ -41,6 +41,13 @@ export const serviceSchema = z
           .max(30, "Up to 30 inclusions."),
       ),
     coverImagePath: z.string().regex(STORAGE_PATH.serviceCover).nullable(),
+    // Shown on the booking Review & pay step; clients must agree to book (empty = none).
+    contract: z
+      .string()
+      .trim()
+      .max(30000, "Keep the contract under 30,000 characters.")
+      .optional()
+      .transform((v) => v || null),
     isActive: z.boolean(),
     // Workshops only: when it runs (Manila time) and how many people can join.
     workshopDate: z.string().trim(),
@@ -119,6 +126,7 @@ export const serviceSchema = z
       deposit_cents: depositCents,
       inclusions: v.inclusions,
       cover_image_path: v.coverImagePath,
+      contract: v.contract,
       is_active: v.isActive,
       ...workshop,
       ...pricing,

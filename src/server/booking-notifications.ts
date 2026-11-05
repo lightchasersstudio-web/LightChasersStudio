@@ -1,11 +1,15 @@
 import "server-only";
 
 import {
+  balancePaidAlertEmail,
   bookingClosedEmail,
   bookingConfirmedEmail,
   bookingReceivedEmail,
   bookingUpdatedEmail,
   newBookingAlertEmail,
+  paymentReceivedEmail,
+  rescheduleRequestAlertEmail,
+  shootReminderEmail,
 } from "@/lib/email/booking-emails";
 import { sendEmail } from "@/lib/email/send";
 import { getPublicEnv } from "@/lib/env";
@@ -50,4 +54,36 @@ export async function resendLatestEmail(b: BookingRecord) {
   if (b.status === "confirmed" || b.status === "completed") return notifyBookingConfirmed(b);
   if (b.status === "declined" || b.status === "cancelled") return notifyBookingClosed(b, b.status);
   if (b.email) await sendEmail({ to: b.email, ...bookingReceivedEmail(b.summary, siteUrl()) });
+}
+
+/** The client paid the rest online: thank them, tell the studio. */
+export async function notifyBalancePaid(b: BookingRecord) {
+  const jobs: Promise<void>[] = [];
+  if (b.email) jobs.push(sendEmail({ to: b.email, ...paymentReceivedEmail(b.summary, siteUrl()) }));
+  if (b.summary.studioEmail) {
+    jobs.push(
+      sendEmail({
+        to: b.summary.studioEmail,
+        ...balancePaidAlertEmail(b.summary, siteUrl(), b.id),
+      }),
+    );
+  }
+  await Promise.all(jobs);
+}
+
+/** A client asked for a new date: tell the studio (the request is also on the admin page). */
+export async function notifyRescheduleRequest(
+  b: BookingRecord,
+  request: { preferred: string | null; message: string },
+) {
+  if (!b.summary.studioEmail) return;
+  await sendEmail({
+    to: b.summary.studioEmail,
+    ...rescheduleRequestAlertEmail(b.summary, siteUrl(), b.id, request),
+  });
+}
+
+/** "See you tomorrow!" (the daily reminders job). */
+export async function sendShootReminder(b: BookingRecord) {
+  if (b.email) await sendEmail({ to: b.email, ...shootReminderEmail(b.summary, siteUrl()) });
 }

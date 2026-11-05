@@ -32,3 +32,14 @@ export const manilaDate = (iso: string) => format(new TZDate(iso, BUSINESS_TZ), 
 
 /** "9:30 AM" studio time for an ISO timestamp. */
 export const manilaTime = (iso: string) => format(new TZDate(iso, BUSINESS_TZ), "h:mm a");
+
+/** The whole of tomorrow in studio time, as [start, end) ISO timestamps. */
+export function businessTomorrowRange(now: Date = new Date()): { from: string; to: string } {
+  const today = tzDate(businessToday(now));
+  const start = new TZDate(today.getFullYear(), today.getMonth(), today.getDate() + 1, BUSINESS_TZ);
+  const end = new TZDate(today.getFullYear(), today.getMonth(), today.getDate() + 2, BUSINESS_TZ);
+  return {
+    from: new Date(start.getTime()).toISOString(),
+    to: new Date(end.getTime()).toISOString(),
+  };
+}

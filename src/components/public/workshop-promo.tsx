@@ -66,6 +66,7 @@ export function WorkshopPromo({
   ];
   return (
     <section
+      data-workshop-promo
       aria-labelledby="workshop-promo"
       className={cn("mx-auto max-w-6xl px-4 pb-20 sm:px-6", className)}
     >

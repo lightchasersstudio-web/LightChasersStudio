@@ -16,6 +16,8 @@ export const serverEnvSchema = publicEnvSchema.extend({
   TURNSTILE_SECRET_KEY: z.string().optional(),
   PAYMONGO_SECRET_KEY: z.string().optional(),
   PAYMONGO_WEBHOOK_SECRET: z.string().optional(),
+  // Vercel sends it as "Authorization: Bearer …" to the cron routes (vercel.json).
+  CRON_SECRET: z.string().min(16).optional(),
   // Comma list of methods activated on the PayMongo account, e.g. "qrph,paymaya,gcash".
   PAYMONGO_PAYMENT_METHODS: z
     .string()

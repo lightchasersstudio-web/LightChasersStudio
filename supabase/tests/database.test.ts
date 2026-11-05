@@ -177,7 +177,14 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         expect(services.rows.map((r) => r.slug).sort()).toEqual(
           ["test-free-consult", "test-portrait", "test-wedding"].sort(),
         );
-        for (const table of ["clients", "bookings", "payments", "audit_logs", "admin_profiles"]) {
+        for (const table of [
+          "clients",
+          "bookings",
+          "payments",
+          "audit_logs",
+          "admin_profiles",
+          "booking_requests",
+        ]) {
           const { rows } = await c.query(`select * from public.${table}`);
           expect(rows, table).toHaveLength(0);
         }
@@ -743,6 +750,66 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           { status: "cancelled", needs_refund_review: true },
           { status: "pending", needs_refund_review: true },
         ]);
+      });
+    });
+
+    it("records a balance paid from the booking page without flagging it", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        await actAs(c, "service_role");
+        const b = (await book(c, s.portrait, manila(10, 10))).rows[0]!;
+        await c.query(PAID, [b.reference_code, "cs_dep", "pay_dep", 105000]);
+        const { rows: price } = await c.query(
+          "select price_cents from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        const balance = price[0].price_cents - 105000;
+        // The server creates the balance checkout as a pending "balance" payment first.
+        await c.query(
+          `insert into public.payments (booking_id, provider, provider_checkout_id, amount_cents, status, purpose)
+           values ($1, 'paymongo', 'cs_bal', $2, 'pending', 'balance')`,
+          [b.booking_id, balance],
+        );
+        const paid = await c.query(PAID, [b.reference_code, "cs_bal", "pay_bal", balance]);
+        expect(paid.rows[0].outcome).toBe("balance_paid");
+
+        // Paying the balance a second time is more than the price: flag it.
+        await c.query(
+          `insert into public.payments (booking_id, provider, provider_checkout_id, amount_cents, status, purpose)
+           values ($1, 'paymongo', 'cs_bal2', $2, 'pending', 'balance')`,
+          [b.booking_id, balance],
+        );
+        const again = await c.query(PAID, [b.reference_code, "cs_bal2", "pay_bal2", balance]);
+        expect(again.rows[0].outcome).toBe("needs_review");
+        const { rows } = await c.query(
+          "select status, needs_refund_review from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        expect(rows[0]).toEqual({ status: "pending", needs_refund_review: true });
+      });
+    });
+
+    it("clears the reminder mark when the booking's time moves", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        await actAs(c, "service_role");
+        const b = (await book(c, s.portrait, manila(10, 10))).rows[0]!;
+        await c.query("update public.bookings set reminder_sent_at = now() where id = $1", [
+          b.booking_id,
+        ]);
+        await c.query("update public.bookings set location = 'Park' where id = $1", [b.booking_id]);
+        const kept = await c.query("select reminder_sent_at from public.bookings where id = $1", [
+          b.booking_id,
+        ]);
+        expect(kept.rows[0].reminder_sent_at).not.toBeNull();
+        await c.query(
+          "update public.bookings set start_at = start_at + interval '1 day', end_at = end_at + interval '1 day', blocked_until = blocked_until + interval '1 day' where id = $1",
+          [b.booking_id],
+        );
+        const moved = await c.query("select reminder_sent_at from public.bookings where id = $1", [
+          b.booking_id,
+        ]);
+        expect(moved.rows[0].reminder_sent_at).toBeNull();
       });
     });
 

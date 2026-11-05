@@ -15,6 +15,7 @@ const SIMPLE: Record<string, string> = {
   "booking.notes": "Updated the private notes",
   "booking.email_resent": "Resent the client email",
   "booking.refund_reviewed": "Marked the late payment as reviewed",
+  "booking.request_resolved": "Marked the client's reschedule request as handled",
   "booking.vat_add": "Added VAT",
   "booking.vat_remove": "Removed VAT",
 };

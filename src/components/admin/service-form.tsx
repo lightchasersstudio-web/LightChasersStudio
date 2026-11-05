@@ -45,6 +45,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           deposit: service.deposit_cents === null ? "" : centsToPesoInput(service.deposit_cents),
           inclusions: (service.inclusions as string[]).join("\n"),
           coverImagePath: service.cover_image_path,
+          contract: service.contract ?? "",
           isActive: service.is_active,
           ...workshopFormValues(service),
         }
@@ -61,6 +62,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           deposit: "",
           inclusions: "",
           coverImagePath: null,
+          contract: "",
           isActive: true,
           workshopDate: "",
           workshopStart: "",
@@ -183,6 +185,30 @@ export function ServiceForm({ service }: { service?: Service }) {
                 rows={5}
               />
             </FieldGroup>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Contract</CardTitle>
+            <CardDescription>
+              Shown to clients on the Review &amp; pay step when they book this package. They must
+              tick &ldquo;I agree&rdquo; before paying, and the booking keeps the exact wording they
+              agreed to. Leave empty for no contract.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TextAreaField
+              control={control}
+              name="contract"
+              label="Contract terms"
+              description="Plain text. Clients see it exactly as typed here, line breaks included."
+              rows={14}
+              maxLength={30000}
+              placeholder={
+                "1. Booking and deposit\nYour date is held once the deposit is paid…\n\n2. Cancellations\n…"
+              }
+            />
           </CardContent>
         </Card>
 

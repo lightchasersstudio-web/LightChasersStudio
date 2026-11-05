@@ -247,11 +247,57 @@ export type Database = {
           },
         ]
       }
+      booking_requests: {
+        Row: {
+          booking_id: string
+          created_at: string
+          id: string
+          kind: string
+          message: string
+          preferred: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          id?: string
+          kind?: string
+          message: string
+          preferred?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          message?: string
+          preferred?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_requests_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           admin_notes: string | null
           blocked_until: string
           client_id: string
+          contract_accepted_at: string | null
+          contract_text: string | null
           contact_name: string
           contact_phone: string
           created_at: string
@@ -267,6 +313,7 @@ export type Database = {
           preferred_contact: Database["public"]["Enums"]["contact_method"]
           price_cents: number
           reference_code: string
+          reminder_sent_at: string | null
           service_id: string
           source: string
           special_requests: string | null
@@ -279,6 +326,8 @@ export type Database = {
           admin_notes?: string | null
           blocked_until: string
           client_id: string
+          contract_accepted_at?: string | null
+          contract_text?: string | null
           contact_name: string
           contact_phone: string
           created_at?: string
@@ -294,6 +343,7 @@ export type Database = {
           preferred_contact: Database["public"]["Enums"]["contact_method"]
           price_cents: number
           reference_code: string
+          reminder_sent_at?: string | null
           service_id: string
           source?: string
           special_requests?: string | null
@@ -306,6 +356,8 @@ export type Database = {
           admin_notes?: string | null
           blocked_until?: string
           client_id?: string
+          contract_accepted_at?: string | null
+          contract_text?: string | null
           contact_name?: string
           contact_phone?: string
           created_at?: string
@@ -321,6 +373,7 @@ export type Database = {
           preferred_contact?: Database["public"]["Enums"]["contact_method"]
           price_cents?: number
           reference_code?: string
+          reminder_sent_at?: string | null
           service_id?: string
           source?: string
           special_requests?: string | null
@@ -495,6 +548,7 @@ export type Database = {
           provider: string
           provider_checkout_id: string | null
           provider_payment_id: string | null
+          purpose: string
           raw: Json | null
           recorded_by: string | null
           reference: string | null
@@ -511,6 +565,7 @@ export type Database = {
           provider?: string
           provider_checkout_id?: string | null
           provider_payment_id?: string | null
+          purpose?: string
           raw?: Json | null
           recorded_by?: string | null
           reference?: string | null
@@ -527,6 +582,7 @@ export type Database = {
           provider?: string
           provider_checkout_id?: string | null
           provider_payment_id?: string | null
+          purpose?: string
           raw?: Json | null
           recorded_by?: string | null
           reference?: string | null
@@ -656,6 +712,7 @@ export type Database = {
       services: {
         Row: {
           category: Database["public"]["Enums"]["service_category"]
+          contract: string | null
           cover_image_path: string | null
           created_at: string
           deposit_cents: number | null
@@ -685,6 +742,7 @@ export type Database = {
         }
         Insert: {
           category: Database["public"]["Enums"]["service_category"]
+          contract?: string | null
           cover_image_path?: string | null
           created_at?: string
           deposit_cents?: number | null
@@ -714,6 +772,7 @@ export type Database = {
         }
         Update: {
           category?: Database["public"]["Enums"]["service_category"]
+          contract?: string | null
           cover_image_path?: string | null
           created_at?: string
           deposit_cents?: number | null

@@ -21,10 +21,12 @@ export function MockCheckoutForm({
   reference,
   checkoutId,
   amountCents,
+  cancelHref,
 }: {
   reference: string;
   checkoutId: string;
   amountCents: number;
+  cancelHref: string;
 }) {
   const [method, setMethod] = useState<string>("gcash");
   const [paying, startPaying] = useTransition();
@@ -73,7 +75,7 @@ export function MockCheckoutForm({
         Pay {formatPeso(amountCents)} (test)
       </Button>
       <Button asChild variant="ghost" className="w-full">
-        <Link href={`/book/cancelled?ref=${reference}`}>Cancel and go back</Link>
+        <Link href={cancelHref}>Cancel and go back</Link>
       </Button>
     </div>
   );
