@@ -6,7 +6,9 @@ import { BookingWizard } from "@/components/booking/booking-wizard";
 import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getPublicSettings, listActiveServices } from "@/server/queries/public";
+import { contractForWizard } from "@/lib/booking/contract";
+import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
+import { getPublicSettings, listActiveAddOns, listActiveServices } from "@/server/queries/public";
 
 export const metadata: Metadata = {
   title: "Book now",
@@ -16,7 +18,7 @@ export const metadata: Metadata = {
 export default function BookPage({ searchParams }: PageProps<"/book">) {
   return (
     <section className="bg-studio">
-      <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 md:py-16">
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16">
         <SectionHeading
           as="h1"
           eyebrow="let's make memories"
@@ -35,9 +37,10 @@ export default function BookPage({ searchParams }: PageProps<"/book">) {
 }
 
 async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">) {
-  const [{ service: slug }, services, settings] = await Promise.all([
+  const [{ service: slug }, services, addOns, settings] = await Promise.all([
     searchParams,
     listActiveServices(),
+    listActiveAddOns(),
     getPublicSettings(),
   ]);
   if (services.length === 0) {
@@ -57,7 +60,7 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
     <BookingWizard
       key={initial?.id ?? "none"}
       services={services.map(
-        ({ id, slug, name, category, summary, price_cents, deposit_cents, duration_minutes }) => ({
+        ({
           id,
           slug,
           name,
@@ -66,12 +69,26 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
           price_cents,
           deposit_cents,
           duration_minutes,
+          contract,
+        }) => ({
+          id,
+          slug,
+          name,
+          category,
+          summary,
+          price_cents,
+          deposit_cents,
+          duration_minutes,
+          ...contractForWizard(contract),
         }),
       )}
+      addOns={addOns}
       initialServiceId={initial?.id ?? null}
       businessName={settings.business_name}
       depositPercent={settings.default_deposit_percent}
+      vatPercent={settings.vat_percent}
       holdMinutes={settings.hold_minutes}
+      paymentMethods={acceptedPaymentMethods()}
       maxAdvanceDays={settings.max_advance_days}
     />
   );

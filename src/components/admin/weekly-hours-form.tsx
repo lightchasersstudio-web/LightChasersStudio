@@ -7,6 +7,7 @@ import { Controller, useFieldArray, useForm, useWatch, type UseFormReturn } from
 import type { z } from "zod";
 
 import { handleResult } from "@/components/admin/form-utils";
+import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -32,6 +33,7 @@ export function WeeklyHoursForm({ rules }: { rules: AvailabilityRule[] }) {
       }),
     },
   });
+  useUnsavedChangesWarning(form.formState.isDirty);
 
   async function onSubmit() {
     const values = form.getValues();

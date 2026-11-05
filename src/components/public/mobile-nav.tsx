@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useState } from "react";
 
+import { BrandLockup } from "@/components/public/brand-lockup";
 import { isActive } from "@/components/public/nav-links";
 import { BOOK_HREF, SITE_NAV } from "@/components/public/site-nav";
 import { Sparkle } from "@/components/shared/sparkle";
@@ -25,13 +26,15 @@ export function MobileNav({ businessName }: { businessName: string }) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+        <Button variant="ghost" size="icon" className="size-11 lg:hidden" aria-label="Open menu">
           <MenuIcon className="size-6" aria-hidden />
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-[min(20rem,85vw)] bg-background">
         <SheetHeader>
-          <SheetTitle className="font-heading text-2xl">{businessName}</SheetTitle>
+          <SheetTitle className="text-[17px]">
+            <BrandLockup name={businessName} />
+          </SheetTitle>
           <SheetDescription className="flex items-center gap-1.5 font-script text-lg text-terracotta-ink">
             <Sparkle className="size-3 text-terracotta" />
             let&apos;s make memories

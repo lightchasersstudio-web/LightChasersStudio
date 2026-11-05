@@ -7,6 +7,7 @@ import { BUSINESS_TZ } from "@/lib/utils/business-date";
 // create_booking()/admin_create_booking(); the database stays the final word.
 
 export type SlotRules = {
+  /** Time each booking holds before the buffer (see bookingLengthMinutes). */
   durationMinutes: number;
   bufferMinutes: number;
   slotIntervalMinutes: number;
@@ -45,7 +46,10 @@ export function monthSlots({
 }): DaySlots[] {
   const [year, monthIndex] = month.split("-").map(Number) as [number, number];
   const first = new TZDate(year, monthIndex - 1, 1, BUSINESS_TZ);
-  const earliest = rules.ignoreWindow ? -Infinity : addHours(now, rules.minNoticeHours).getTime();
+  // Staff skip the notice period, but never get offered a time that has already passed.
+  const earliest = rules.ignoreWindow
+    ? now.getTime()
+    : addHours(now, rules.minNoticeHours).getTime();
   const latest = rules.ignoreWindow ? Infinity : addDays(now, rules.maxAdvanceDays).getTime();
 
   return Array.from({ length: getDaysInMonth(first) }, (_, i) => {

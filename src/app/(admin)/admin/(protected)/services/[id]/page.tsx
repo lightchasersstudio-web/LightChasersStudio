@@ -3,10 +3,13 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
 
+import { ClearStudentIds } from "@/components/admin/clear-student-ids";
 import { PageHeader } from "@/components/admin/page-header";
 import { ServiceForm } from "@/components/admin/service-form";
 import { FormSkeleton } from "@/components/admin/skeletons";
+import { WorkshopSlidesManager } from "@/components/admin/workshop-slides-manager";
 import { Skeleton } from "@/components/ui/skeleton";
+import { parseWorkshopSlides } from "@/lib/validations/workshop-slides";
 import { requireAdmin } from "@/server/auth";
 import { getServiceForAdmin } from "@/server/queries/services";
 
@@ -39,6 +42,16 @@ async function EditService({ params }: Pick<PageProps<"/admin/services/[id]">, "
       <PageHeader eyebrow="editing" title={service.name} />
       {/* key: reset the form when navigating between services */}
       <ServiceForm key={service.id} service={service} />
+      {service.category === "workshop" && (
+        <>
+          <WorkshopSlidesManager
+            key={`slides-${service.id}`}
+            serviceId={service.id}
+            slides={parseWorkshopSlides(service.workshop_slides)}
+          />
+          <ClearStudentIds />
+        </>
+      )}
     </>
   );
 }

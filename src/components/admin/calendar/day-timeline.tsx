@@ -128,6 +128,8 @@ export function DayTimeline({
             const p = placements.get(b.id)!;
             const s = minuteOf(b.startAt) ?? from;
             const e = minuteOf(b.endAt) ?? to;
+            // Up to an hour tall there's room for two lines, not three.
+            const short = top(e) - top(s) < 64;
             return (
               <li
                 key={b.id}
@@ -147,17 +149,21 @@ export function DayTimeline({
                     STATUS_TONES[b.status],
                   )}
                 >
-                  <span className="flex items-center gap-1 font-bold">
+                  <span className="flex min-w-0 items-center gap-1 font-bold">
                     {b.needsRefundReview && (
                       <AlertTriangleIcon
-                        className="size-3 text-destructive"
+                        className="size-3 shrink-0 text-destructive"
                         aria-label="Needs review"
                       />
                     )}
-                    {format(new TZDate(b.startAt, BUSINESS_TZ), "h:mm a")} · {b.contactName}
+                    <span className="truncate">
+                      {format(new TZDate(b.startAt, BUSINESS_TZ), "h:mm a")} · {b.contactName}
+                    </span>
                   </span>
                   <span className="truncate">{b.serviceName}</span>
-                  <span className="truncate opacity-80">{STATUS_LABELS[b.status]}</span>
+                  <span className={cn("truncate opacity-80", short && "sr-only")}>
+                    {STATUS_LABELS[b.status]}
+                  </span>
                 </Link>
               </li>
             );

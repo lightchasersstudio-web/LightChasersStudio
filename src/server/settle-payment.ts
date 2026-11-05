@@ -2,7 +2,7 @@ import "server-only";
 
 import type { PaidEvent } from "@/lib/payments/paymongo";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { notifyBookingReceived } from "@/server/booking-notifications";
+import { notifyBalancePaid, notifyBookingReceived } from "@/server/booking-notifications";
 import { loadBookingRecord } from "@/server/queries/booking-record";
 import type { Json } from "@/types/database.types";
 
@@ -43,9 +43,18 @@ export async function settlePaidEvent(
     return "error";
   }
 
+  await supabase
+    .from("payment_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("event_id", event.eventId);
+
   if (data.booking_id && ["paid", "paid_late", "needs_review"].includes(data.outcome)) {
     const record = await loadBookingRecord({ id: data.booking_id });
     if (record) await notifyBookingReceived(record);
+  }
+  if (data.booking_id && data.outcome === "balance_paid") {
+    const record = await loadBookingRecord({ id: data.booking_id });
+    if (record) await notifyBalancePaid(record);
   }
   if (data.outcome === "unknown_booking") {
     console.error("[settle payment] payment for unknown booking", event.reference);

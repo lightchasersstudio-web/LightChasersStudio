@@ -15,33 +15,56 @@ values
   ('Wedding Day Coverage', 'wedding-day-coverage', 'wedding',
    'Full-day coverage from preparations to reception.',
    'Two photographers documenting your wedding day from getting ready through the ceremony and reception.',
-   600, 4500000, 1000000,
+   null, 4500000, 1000000,
    '["2 photographers", "Up to 10 hours coverage", "500+ edited photos", "Online gallery", "Same-day edit slideshow"]', 10),
   ('Prenup Session', 'prenup-session', 'wedding',
    'A relaxed couple session at the location of your choice.',
    'Up to two outfit changes and one location within Zamboanga City.',
-   180, 1200000, null,
+   null, 1200000, null,
    '["1 photographer", "Up to 3 hours", "80+ edited photos", "Online gallery"]', 20),
   ('Family Portrait Session', 'family-portrait-session', 'portrait',
    'Studio or outdoor portraits for families of up to 8.',
    'A one-hour session for families, couples or individuals, in studio or outdoors.',
-   60, 350000, null,
+   null, 350000, null,
    '["1 hour session", "30 edited photos", "Online gallery"]', 30),
   ('Maternity & Newborn', 'maternity-newborn', 'portrait',
    'Gentle, unhurried sessions for growing families.',
    'Maternity or newborn session with props and wraps provided.',
-   120, 500000, null,
+   null, 500000, null,
    '["Up to 2 hours", "40 edited photos", "Props and wraps provided"]', 40),
   ('Event Coverage', 'event-coverage', 'event',
    'Birthdays, debuts, christenings and corporate events.',
    'Photo coverage of your event, priced for up to four hours.',
-   240, 1500000, null,
+   null, 1500000, null,
    '["1 photographer", "Up to 4 hours", "200+ edited photos", "Online gallery"]', 50),
   ('Product Photography', 'product-photography', 'commercial',
    'Clean, consistent product images for your shop or menu.',
    'Studio product photography on white or styled backgrounds, up to 15 products.',
-   180, 800000, null,
-   '["Up to 15 products", "White or styled background", "Web-ready files"]', 60);
+   null, 800000, null,
+   '["Up to 15 products", "White or styled background", "Web-ready files"]', 60),
+  -- The only package with a set length; extensions are add-ons below.
+  ('Photobooth', 'photobooth', 'event',
+   'A fun photobooth with instant prints for your party.',
+   'Four hours of photobooth with props, a custom print layout and unlimited shots.',
+   240, 1000000, null,
+   '["4 hours", "Unlimited instant prints", "Props and backdrop", "Custom print layout"]', 70);
+
+-- Add-on rules (the add-ons themselves come from the migrations): no extra
+-- photographer/videographer for the photobooth, product, maternity or family
+-- packages, and photobooth extensions only for the photobooth.
+update public.add_ons
+set service_ids = (select array_agg(s.id order by s.sort_order) from public.services s
+                   where s.slug not in ('photobooth', 'product-photography', 'maternity-newborn', 'family-portrait-session'))
+where name in ('Extra photographer', 'Videographer');
+
+insert into public.add_ons (name, description, price_cents, extra_minutes, service_ids, is_active, sort_order)
+select v.name, v.description, v.price_cents, v.extra_minutes, array[s.id], true, v.sort_order
+from public.services s
+cross join (values
+  ('Photobooth extension: +1 hour', 'Keep the photobooth running one more hour.', 100000, 60, 10),
+  ('Photobooth extension: +2 hours', 'Keep the photobooth running two more hours.', 200000, 120, 11)
+) as v(name, description, price_cents, extra_minutes, sort_order)
+where s.slug = 'photobooth';
 
 -- Open every day 08:00–19:00 (0 = Sunday).
 insert into public.availability_rules (day_of_week, start_time, end_time)

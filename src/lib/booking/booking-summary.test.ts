@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { bookingSummaryText, type BookingSummary } from "./booking-summary";
+import {
+  bookingSummaryText,
+  formatBookingWhen,
+  formatSummaryWhen,
+  summaryDays,
+  summaryPeople,
+  type BookingSummary,
+} from "./booking-summary";
 
 const booking: BookingSummary = {
   reference: "BK-2026-ABC123",
   serviceName: "Family Portrait Session",
+  addOns: [],
   startAt: "2026-11-03T05:00:00.000Z", // 1:00 PM in Manila
   endAt: "2026-11-03T06:00:00.000Z",
   location: "Studio",
   priceCents: 350000,
+  vatCents: 0,
   paidCents: 105000,
   contactName: "Ana Cruz",
   studioName: "Light Chasers Studio",
@@ -29,9 +38,58 @@ describe("bookingSummaryText", () => {
     expect(text).not.toContain("null");
   });
 
+  it("shows only the start time when the booking has no end time", () => {
+    const text = bookingSummaryText({ ...booking, endAt: null });
+    expect(text).toContain("When: Tue, 3 Nov 2026, 1:00 PM\n");
+  });
+
   it("leaves out an empty location and says when it's fully paid", () => {
     const text = bookingSummaryText({ ...booking, location: null, paidCents: 350000 });
     expect(text).not.toMatch(/Location/);
     expect(text).toContain("Fully paid");
+  });
+});
+
+describe("summaryPeople", () => {
+  it("orders people by position and labels their category", () => {
+    expect(
+      summaryPeople([
+        { position: 2, full_name: "Ben", category: "student", price_cents: 400000 },
+        { position: 1, full_name: "Ana", category: "early_bird", price_cents: 400000 },
+      ]),
+    ).toEqual([
+      { name: "Ana", category: "Early bird", priceCents: 400000 },
+      { name: "Ben", category: "Student", priceCents: 400000 },
+    ]);
+    expect(summaryPeople([])).toBeUndefined();
+  });
+});
+
+describe("multi-day times", () => {
+  it("names the end day when a span ends on another day", () => {
+    expect(formatBookingWhen("2026-11-14T05:00:00.000Z", "2026-11-14T09:30:00.000Z")).toBe(
+      "Sat, 14 Nov 2026, 1:00 PM – 5:30 PM",
+    );
+    expect(formatBookingWhen("2026-11-14T05:00:00.000Z", "2026-11-15T04:00:00.000Z")).toBe(
+      "Sat, 14 Nov 2026, 1:00 PM – Sun, 15 Nov 2026, 12:00 PM",
+    );
+  });
+
+  it("lists each workshop day", () => {
+    const days = summaryDays({
+      category: "workshop",
+      workshop_days: [
+        { starts_at: "2026-11-14T05:00:00.000Z", ends_at: "2026-11-14T09:30:00.000Z" },
+        { starts_at: "2026-11-15T01:00:00.000Z", ends_at: "2026-11-15T04:00:00.000Z" },
+      ],
+    });
+    expect(formatSummaryWhen({ startAt: "2026-11-14T05:00:00.000Z", endAt: null, days })).toBe(
+      "Day 1: Sat, 14 Nov 2026, 1:00 PM – 5:30 PM; Day 2: Sun, 15 Nov 2026, 9:00 AM – 12:00 PM",
+    );
+    // One day (or a shoot) reads as before.
+    expect(
+      summaryDays({ category: "workshop", workshop_days: [{ starts_at: "x", ends_at: "y" }] }),
+    ).toBeUndefined();
+    expect(summaryDays({ category: "portrait", workshop_days: [] })).toBeUndefined();
   });
 });

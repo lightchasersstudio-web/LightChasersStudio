@@ -1,6 +1,6 @@
 "use client";
 
-import { CopyIcon, Loader2Icon, SendIcon } from "lucide-react";
+import { CopyIcon, Loader2Icon, PrinterIcon, SendIcon } from "lucide-react";
 import { useTransition } from "react";
 import { toast } from "sonner";
 
@@ -11,7 +11,7 @@ import { bookingSummaryText, type BookingSummary } from "@/lib/booking/booking-s
 import type { BookingStatus } from "@/lib/booking/status";
 import { resendBookingEmail } from "@/server/actions/admin-bookings";
 
-/** The booking card to screenshot, plus copy-as-text and resend-email. */
+/** The booking card to screenshot, plus copy-as-text, print and resend-email. */
 export function ShareBooking({
   bookingId,
   summary,
@@ -41,6 +41,10 @@ export function ShareBooking({
         <Button type="button" variant="outline" onClick={copy}>
           <CopyIcon aria-hidden />
           Copy as text
+        </Button>
+        <Button type="button" variant="outline" onClick={() => window.print()}>
+          <PrinterIcon aria-hidden />
+          Print sheet
         </Button>
         {hasEmail && (
           <Button

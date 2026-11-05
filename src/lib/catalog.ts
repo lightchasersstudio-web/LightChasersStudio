@@ -19,8 +19,18 @@ export const SERVICE_CATEGORY_VALUES = SERVICE_CATEGORIES.map((c) => c.value) as
   ...ServiceCategory[],
 ];
 
+/** Every package category, incl. the workshop (booked from its own button, never listed publicly). */
+export const PACKAGE_CATEGORIES: typeof SERVICE_CATEGORIES = [
+  ...SERVICE_CATEGORIES,
+  { value: "workshop", label: "Workshop" },
+];
+export const PACKAGE_CATEGORY_VALUES = PACKAGE_CATEGORIES.map((c) => c.value) as [
+  ServiceCategory,
+  ...ServiceCategory[],
+];
+
 export function categoryLabel(value: ServiceCategory): string {
-  return SERVICE_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+  return PACKAGE_CATEGORIES.find((c) => c.value === value)?.label ?? value;
 }
 
 export const WEEKDAYS = [

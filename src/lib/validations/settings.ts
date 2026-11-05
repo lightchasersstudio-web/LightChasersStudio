@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { STORAGE_PATH } from "@/lib/storage";
+import { isGoogleMapsUrl } from "@/lib/utils/social";
 import { intString, optionalText, optionalUrl } from "@/lib/validations/shared";
 
 export const studioProfileSchema = z
@@ -17,6 +18,17 @@ export const studioProfileSchema = z
     phone: optionalText(32),
     address: optionalText(300),
     city: z.string().trim().min(1, "Enter the city.").max(80),
+    // The Share link of the studio's pin; empty = search for the address.
+    mapsUrl: z
+      .string()
+      .trim()
+      .max(500, "Keep this under 500 characters.")
+      .refine(
+        (v) => v === "" || isGoogleMapsUrl(v),
+        "Paste the link from Google Maps → Share, e.g. https://maps.app.goo.gl/…",
+      )
+      .default("")
+      .transform((v) => v || null),
     facebookUrl: optionalUrl,
     instagramUrl: optionalUrl,
     tiktokUrl: optionalUrl,
@@ -29,6 +41,7 @@ export const studioProfileSchema = z
     phone: v.phone,
     address: v.address,
     city: v.city,
+    maps_url: v.mapsUrl,
     facebook_url: v.facebookUrl,
     instagram_url: v.instagramUrl,
     tiktok_url: v.tiktokUrl,
@@ -43,6 +56,7 @@ export const bookingRulesSchema = z
     slotIntervalMinutes: z.enum(["15", "30", "60"]).transform(Number),
     bufferMinutes: intString(0, 480),
     defaultDepositPercent: intString(0, 100),
+    vatPercent: intString(0, 50),
     holdMinutes: intString(5, 120),
     maxConcurrentBookings: intString(1, 10),
   })
@@ -52,6 +66,7 @@ export const bookingRulesSchema = z
     slot_interval_minutes: v.slotIntervalMinutes,
     buffer_minutes: v.bufferMinutes,
     default_deposit_percent: v.defaultDepositPercent,
+    vat_percent: v.vatPercent,
     hold_minutes: v.holdMinutes,
     max_concurrent_bookings: v.maxConcurrentBookings,
   }));

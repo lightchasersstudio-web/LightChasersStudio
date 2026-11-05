@@ -14,7 +14,8 @@ import type { MonthSlotsPayload } from "@/server/queries/availability-slots";
 
 /**
  * Month calendar + time list (mockup A). `load` fetches one month's free times;
- * results are kept per month so flipping back is instant. `value` is the chosen
+ * results are kept per month so flipping back is instant (dropped when the tab is
+ * shown again). `value` is the chosen
  * start time as an ISO string. Change `reloadKey` to force a refetch (e.g. after
  * "that time was just taken").
  */
@@ -52,6 +53,15 @@ export function SlotPicker({
     setLastReload(reloadKey);
     setCache({});
   }
+
+  // Back on this tab after a while: times may have been taken or freed meanwhile.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") setCache({});
+    };
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, []);
 
   const days = cache[month] ?? null;
   useEffect(() => {

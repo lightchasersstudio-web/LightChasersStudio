@@ -1,9 +1,9 @@
-import { CalendarIcon, CameraIcon, MapPinIcon } from "lucide-react";
+import { CalendarIcon, CameraIcon, CirclePlusIcon, MapPinIcon } from "lucide-react";
 import Image from "next/image";
 
 import { StatusBadge } from "@/components/booking/status-badge";
 import { Sparkle } from "@/components/shared/sparkle";
-import { formatBookingWhen, type BookingSummary } from "@/lib/booking/booking-summary";
+import { formatSummaryWhen, type BookingSummary } from "@/lib/booking/booking-summary";
 import type { BookingStatus } from "@/lib/booking/status";
 import { cn } from "@/lib/utils";
 import { formatPeso } from "@/lib/utils/money";
@@ -48,9 +48,18 @@ export function BookingCard({
             <CameraIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
             <span>{b.serviceName}</span>
           </li>
+          {b.addOns.length > 0 && (
+            <li className="flex gap-2.5">
+              <CirclePlusIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
+              <span>
+                <span className="sr-only">Add-ons: </span>
+                {b.addOns.map((a) => a.name).join(", ")}
+              </span>
+            </li>
+          )}
           <li className="flex gap-2.5">
             <CalendarIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
-            <span>{formatBookingWhen(b.startAt, b.endAt)}</span>
+            <span>{formatSummaryWhen(b)}</span>
           </li>
           {b.location && (
             <li className="flex gap-2.5">
@@ -73,6 +82,11 @@ export function BookingCard({
             <dd className="font-bold">{balance > 0 ? formatPeso(balance) : "Paid"}</dd>
           </div>
         </dl>
+        {b.vatCents > 0 && (
+          <p className="-mt-2 text-center text-xs text-muted-foreground">
+            Total includes {formatPeso(b.vatCents)} VAT
+          </p>
+        )}
         {(b.studioPhone || b.studioEmail) && (
           <p className="text-center text-xs text-muted-foreground">
             {[b.studioPhone, b.studioEmail].filter(Boolean).join(" · ")}

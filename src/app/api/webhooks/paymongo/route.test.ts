@@ -7,6 +7,7 @@ const db = {
   insertError: null as { code: string } | null,
   rpc: vi.fn(),
   deleted: vi.fn(),
+  processed: vi.fn(),
 };
 const notify = vi.fn();
 
@@ -18,6 +19,9 @@ vi.mock("@/lib/supabase/admin", () => ({
     from: () => ({
       insert: async () => ({ error: db.insertError }),
       delete: () => ({ eq: async (...args: unknown[]) => db.deleted(...args) }),
+      update: (values: unknown) => ({
+        eq: async (...args: unknown[]) => db.processed(values, ...args),
+      }),
     }),
     rpc: (...args: unknown[]) => ({ single: async () => db.rpc(...args) }),
   }),
@@ -64,6 +68,7 @@ beforeEach(() => {
     error: null,
   });
   db.deleted.mockReset().mockResolvedValue({ error: null });
+  db.processed.mockReset().mockResolvedValue({ error: null });
   notify.mockReset();
 });
 
@@ -84,6 +89,11 @@ describe("PayMongo webhook", () => {
       p_amount_cents: 105000,
       p_raw: event,
     });
+    expect(db.processed).toHaveBeenCalledWith(
+      { processed_at: expect.any(String) },
+      "event_id",
+      expect.any(String),
+    );
     expect(notify).toHaveBeenCalledTimes(1);
   });
 
