@@ -83,6 +83,8 @@ export const publicBookingSchema = z
     // wording shown. The server checks both when the package has a contract.
     contractAccepted: z.boolean().optional(),
     contractHash: z.string().max(64).optional(),
+    // Their full name, typed as their signature (must match fullName).
+    contractSignature: z.string().max(120).optional(),
     // Honeypot: hidden from people, filled in by bots.
     website: z.string().max(0),
     // Workshops only: pay the full price (else half), after accepting the refund rule.

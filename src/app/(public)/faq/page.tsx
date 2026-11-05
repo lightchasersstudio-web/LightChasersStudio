@@ -7,9 +7,17 @@ import { MessengerIcon } from "@/components/shared/messenger-icon";
 import { Reveal } from "@/components/shared/reveal";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
-import { visibleFaq, type FaqItem } from "@/content/faq";
+import { fillFaqTokens, groupFaqs } from "@/lib/faq";
 import { messengerUrl } from "@/lib/utils/social";
-import { getPublicSettings } from "@/server/queries/public";
+import { getPublicSettings, listPublishedFaqs } from "@/server/queries/public";
+
+/** One question as shown: answer with the setting placeholders filled in. */
+type FaqItem = {
+  id: string;
+  question: string;
+  answer: string;
+  link: { href: string; label: string } | null;
+};
 
 export const metadata: Metadata = {
   title: "Questions & answers",
@@ -20,8 +28,17 @@ export const metadata: Metadata = {
 const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
 export default async function FaqPage() {
-  const settings = await getPublicSettings();
-  const groups = visibleFaq(settings);
+  const [settings, faqs] = await Promise.all([getPublicSettings(), listPublishedFaqs()]);
+  // Edited in Admin → FAQ; {tokens} in answers come from the studio settings.
+  const groups = groupFaqs(faqs).map((g) => ({
+    title: g.label,
+    items: g.items.map((f): FaqItem => ({
+      id: f.id,
+      question: f.question,
+      answer: fillFaqTokens(f.answer, settings),
+      link: f.link_href && f.link_label ? { href: f.link_href, label: f.link_label } : null,
+    })),
+  }));
   const messenger = messengerUrl(settings.facebook_url);
 
   // FAQ rich results for search engines (published answers only).
@@ -30,7 +47,6 @@ export default async function FaqPage() {
     "@type": "FAQPage",
     mainEntity: groups
       .flatMap((g) => g.items)
-      .filter((i) => !i.draft)
       .map((i) => ({
         "@type": "Question",
         name: i.question,
@@ -85,7 +101,7 @@ export default async function FaqPage() {
               </h2>
               <div className="mt-5 space-y-3">
                 {g.items.map((item) => (
-                  <Question key={item.question} item={item} />
+                  <Question key={item.id} item={item} />
                 ))}
               </div>
             </section>
@@ -147,26 +163,27 @@ function Question({ item }: { item: FaqItem }) {
       className="faq group rounded-2xl border bg-card transition-shadow duration-300 open:shadow-md"
     >
       <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 rounded-2xl px-5 py-4 font-semibold transition-colors hover:text-terracotta-ink focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
-        <span className="flex flex-wrap items-center gap-2">
-          {item.question}
-          {item.draft && (
-            <span className="rounded-full border border-dashed border-terracotta/60 bg-blush/60 px-2 py-0.5 text-xs font-bold text-terracotta-ink">
-              Needs your answer (hidden on live site)
-            </span>
-          )}
-        </span>
+        <span>{item.question}</span>
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-accent-foreground transition-transform duration-300 group-open:rotate-180">
           <ChevronDownIcon className="size-4" aria-hidden />
         </span>
       </summary>
       <div className="px-5 pb-5 text-muted-foreground">
-        <p className={item.draft ? "italic" : undefined}>{item.answer}</p>
+        <p className="whitespace-pre-line">{item.answer}</p>
         {item.link && (
           <Button asChild variant="link" className="mt-1 h-auto px-0 text-terracotta-ink">
-            <Link href={item.link.href}>
-              {item.link.label}
-              <ArrowRightIcon aria-hidden />
-            </Link>
+            {item.link.href.startsWith("/") ? (
+              <Link href={item.link.href}>
+                {item.link.label}
+                <ArrowRightIcon aria-hidden />
+              </Link>
+            ) : (
+              <a href={item.link.href} target="_blank" rel="noopener noreferrer">
+                {item.link.label}
+                <ArrowRightIcon aria-hidden />
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            )}
           </Button>
         )}
       </div>

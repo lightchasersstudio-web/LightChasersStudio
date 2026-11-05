@@ -1,6 +1,7 @@
 import {
   CalendarClockIcon,
   CalendarDaysIcon,
+  CircleHelpIcon,
   ClipboardListIcon,
   HistoryIcon,
   CameraIcon,
@@ -26,6 +27,7 @@ export const adminNav: AdminNavItem[] = [
   { href: "/admin/availability", label: "Availability", icon: CalendarClockIcon },
   { href: "/admin/portfolio", label: "Portfolio", icon: ImagesIcon },
   { href: "/admin/reviews", label: "Reviews", icon: MessageSquareQuoteIcon },
+  { href: "/admin/faq", label: "FAQ", icon: CircleHelpIcon },
   { href: "/admin/activity", label: "Activity", icon: HistoryIcon },
   { href: "/admin/settings", label: "Settings", icon: SettingsIcon },
   { href: "/admin/account", label: "Account", icon: UserRoundIcon },

@@ -16,7 +16,7 @@ export type BookingRecord = {
   needsRefundReview: boolean;
   summary: BookingSummary;
   /** The package contract the client agreed to when booking online (null = none). */
-  contract: { text: string; acceptedAt: string } | null;
+  contract: { text: string; acceptedAt: string; signedName: string | null } | null;
 };
 
 /**
@@ -30,7 +30,7 @@ export async function loadBookingRecord(
   const query = supabase
     .from("bookings")
     .select(
-      "id, reference_code, status, start_at, end_at, has_end_time, contract_text, contract_accepted_at, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name, category, workshop_days), add_ons:booking_add_ons(name, price_cents), attendees:booking_attendees(position, full_name, category, price_cents), client:clients(email), payments(amount_cents, status)",
+      "id, reference_code, status, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contract_signed_name, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name, category, workshop_days), add_ons:booking_add_ons(name, price_cents), attendees:booking_attendees(position, full_name, category, price_cents), client:clients(email), payments(amount_cents, status)",
     );
   const [{ data, error }, settings] = await Promise.all([
     "id" in where
@@ -54,7 +54,11 @@ export async function loadBookingRecord(
     needsRefundReview: data.needs_refund_review,
     contract:
       data.contract_text && data.contract_accepted_at
-        ? { text: data.contract_text, acceptedAt: data.contract_accepted_at }
+        ? {
+            text: data.contract_text,
+            acceptedAt: data.contract_accepted_at,
+            signedName: data.contract_signed_name,
+          }
         : null,
     summary: {
       reference: data.reference_code,

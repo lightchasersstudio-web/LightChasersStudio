@@ -298,6 +298,7 @@ export type Database = {
           client_id: string
           contract_accepted_at: string | null
           contract_text: string | null
+          contract_signed_name: string | null
           contact_name: string
           contact_phone: string
           created_at: string
@@ -328,6 +329,7 @@ export type Database = {
           client_id: string
           contract_accepted_at?: string | null
           contract_text?: string | null
+          contract_signed_name?: string | null
           contact_name: string
           contact_phone: string
           created_at?: string
@@ -358,6 +360,7 @@ export type Database = {
           client_id?: string
           contract_accepted_at?: string | null
           contract_text?: string | null
+          contract_signed_name?: string | null
           contact_name?: string
           contact_phone?: string
           created_at?: string
@@ -512,6 +515,45 @@ export type Database = {
           id?: string
           phone?: string
           preferred_contact?: Database["public"]["Enums"]["contact_method"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      faqs: {
+        Row: {
+          answer: string
+          created_at: string
+          id: string
+          is_published: boolean
+          link_href: string | null
+          link_label: string | null
+          question: string
+          sort_order: number
+          topic: string
+          updated_at: string
+        }
+        Insert: {
+          answer: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          link_href?: string | null
+          link_label?: string | null
+          question: string
+          sort_order?: number
+          topic: string
+          updated_at?: string
+        }
+        Update: {
+          answer?: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          link_href?: string | null
+          link_label?: string | null
+          question?: string
+          sort_order?: number
+          topic?: string
           updated_at?: string
         }
         Relationships: []
