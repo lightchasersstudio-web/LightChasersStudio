@@ -104,6 +104,17 @@ describe("bookingStatusSchema", () => {
     }
     expect(bookingStatusSchema.safeParse({ id, status: "pending" }).success).toBe(false);
   });
+
+  it("takes an optional https photos link", () => {
+    const id = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    const parse = (photosUrl: string) =>
+      bookingStatusSchema.safeParse({ id, status: "completed", photosUrl });
+    expect(parse("https://drive.google.com/drive/folders/abc").data?.photosUrl).toBe(
+      "https://drive.google.com/drive/folders/abc",
+    );
+    expect(parse("").data?.photosUrl).toBeNull();
+    expect(parse("drive.google.com/abc").success).toBe(false);
+  });
 });
 
 describe("add-ons on staff bookings", () => {

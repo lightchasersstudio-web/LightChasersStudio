@@ -156,4 +156,23 @@ describe("booking emails", () => {
     expect(without.html).toContain("View your booking");
     expect(without.text).not.toContain("Leave a review");
   });
+
+  it("says the photos are ready when staff add a link, keeping the review ask", () => {
+    const drive = "https://drive.google.com/drive/folders/abc123";
+    const email = thankYouReviewEmail(
+      booking,
+      "https://studio.example",
+      "https://www.facebook.com/lightchasersstudio/reviews",
+      drive,
+    );
+    expect(email.subject).toBe("Your photos are ready – Light Chasers Studio");
+    expect(email.html).toContain("Your photos are ready!");
+    expect(email.html).toContain(`href="${drive}"`);
+    expect(email.html).toContain("View your photos");
+    expect(email.html).toContain("Leave us a review");
+    expect(email.text).toContain(`Your photos: ${drive}`);
+    expect(email.text).toContain(
+      "Leave a review: https://www.facebook.com/lightchasersstudio/reviews",
+    );
+  });
 });

@@ -134,7 +134,10 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                   text.
                 </p>
               </div>
-              <ReplyTemplates templates={replyTemplates(b.summary, lookupUrl)} />
+              <ReplyTemplates
+                templates={replyTemplates(b.summary, lookupUrl)}
+                initialId={b.status === "completed" ? "photos" : undefined}
+              />
             </section>
 
             <section aria-labelledby="shoot" className="space-y-3 rounded-3xl border bg-card p-5">

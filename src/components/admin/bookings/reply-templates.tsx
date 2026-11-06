@@ -10,8 +10,17 @@ import type { ReplyTemplate } from "@/lib/booking/reply-templates";
 import { cn } from "@/lib/utils";
 
 /** Pick a ready-made reply, tweak it if needed, copy it into Messenger. */
-export function ReplyTemplates({ templates }: { templates: ReplyTemplate[] }) {
-  const [id, setId] = useState(templates[0]!.id);
+export function ReplyTemplates({
+  templates,
+  initialId,
+}: {
+  templates: ReplyTemplate[];
+  /** The reply to show first (e.g. "photos" once the shoot is done). */
+  initialId?: string;
+}) {
+  const [id, setId] = useState(
+    templates.some((t) => t.id === initialId) ? initialId! : templates[0]!.id,
+  );
   const template = templates.find((t) => t.id === id) ?? templates[0]!;
   const [text, setText] = useState(template.text);
 

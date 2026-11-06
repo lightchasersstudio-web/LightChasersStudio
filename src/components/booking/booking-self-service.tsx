@@ -34,6 +34,10 @@ export type StudioContact = {
 
 type Credentials = { reference: string; email: string };
 
+/** Tall, left-aligned action buttons whose label wraps instead of spilling out of a half-width column. */
+const ACTION_CLASS =
+  "h-auto min-w-0 shrink justify-start whitespace-normal rounded-2xl py-3 text-left";
+
 const sentOn = (iso: string) => format(new TZDate(iso, BUSINESS_TZ), "EEE, d MMM 'at' h:mm a");
 
 /**
@@ -101,7 +105,7 @@ export function BookingSelfService({
             <Button
               type="button"
               variant="outline"
-              className="h-auto justify-start rounded-2xl py-3"
+              className={ACTION_CLASS}
               aria-expanded={asking}
               onClick={() => setAsking((v) => !v)}
             >
@@ -143,7 +147,7 @@ export function BookingSelfService({
 /** Messenger (with the reference typed in and copied), else a call or an email. */
 function MessageUs({ reference, contact }: { reference: string; contact: StudioContact }) {
   const text = `Hi! I have a question about my booking ${reference}.`;
-  const className = "h-auto justify-start rounded-2xl py-3";
+  const className = ACTION_CLASS;
   if (contact.messengerHref) {
     return (
       <Button asChild variant="outline" className={className}>

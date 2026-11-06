@@ -33,6 +33,7 @@ function layout(
   link: { href: string; label: string },
   keepNote = false,
   note?: string,
+  secondLink?: { href: string; label: string },
 ) {
   const balance = Math.max(b.priceCents - b.paidCents, 0);
   const rows: [string, string][] = [
@@ -58,6 +59,7 @@ ${rows.map(([k, v]) => `<tr><td style="padding:8px 14px;font-size:13px;opacity:.
 ${note ? `<p style="margin:16px 0 0;line-height:1.5;white-space:pre-line">${esc(note)}</p>` : ""}
 ${b.people ? `<p style="margin:16px 0 0;font-size:13px;line-height:1.5"><strong>Refunds:</strong> ${esc(WORKSHOP_REFUND_RULE)}</p>` : ""}
 <p style="margin:24px 0 0"><a href="${esc(link.href)}" style="display:inline-block;background:${EVERGREEN};color:#fff;text-decoration:none;padding:12px 20px;border-radius:999px;font-weight:bold">${esc(link.label)}</a></p>
+${secondLink ? `<p style="margin:12px 0 0"><a href="${esc(secondLink.href)}" style="color:${EVERGREEN};font-weight:bold">${esc(secondLink.label)}</a></p>` : ""}
 ${keepNote ? `<p style="margin:20px 0 0;font-size:13px;line-height:1.5"><strong>Keep this email.</strong> Your reference <strong>${esc(b.reference)}</strong> and this email address are all you need to look up your booking any time at ${esc(siteUrl)}/booking.</p>` : ""}
 ${questions(b.studioPhone, b.studioEmail)}`,
   );
@@ -312,18 +314,42 @@ export function thankYouReviewEmail(
   b: BookingSummary,
   siteUrl: string,
   reviewUrl: string | null,
+  /** Link to the client's photos (e.g. Google Drive); turns this into the "photos are ready" email. */
+  photosUrl: string | null = null,
 ): Content {
   const what = b.people ? "workshop" : "session";
-  const intro = `thank you for choosing ${b.studioName} for your ${what}. We hope you loved it as much as we did!`;
-  const note = reviewUrl
+  const thanks = `thank you for choosing ${b.studioName} for your ${what}.`;
+  const reviewAsk = reviewUrl
     ? "If you have a minute, a short review on our Facebook page means a lot to us and helps others find us."
     : "We'd love to hear how it went. Just reply to this email.";
-  const link = reviewUrl
+  const reviewLink = reviewUrl
     ? { href: reviewUrl, label: "Leave us a review" }
     : { href: lookupUrl(siteUrl, b.reference), label: "View your booking" };
+  const reviewText = reviewUrl ? `\n\nLeave a review: ${reviewUrl}` : "";
+
+  if (photosUrl) {
+    const intro = `${thanks} Your photos are ready! Open the link below to view and download them. We hope you love them.`;
+    const note = `Please download your photos soon and keep a copy, as the link may not stay open forever.\n\n${reviewAsk}`;
+    return {
+      subject: `Your photos are ready – ${b.studioName}`,
+      html: layout(
+        siteUrl,
+        b,
+        "Your photos are ready!",
+        intro,
+        { href: photosUrl, label: "View your photos" },
+        false,
+        note,
+        reviewLink,
+      ),
+      text: `Hi ${b.contactName}, ${intro}\n\nYour photos: ${photosUrl}\n\n${note}${reviewText}`,
+    };
+  }
+
+  const intro = `${thanks} We hope you loved it as much as we did!`;
   return {
     subject: `Thank you from ${b.studioName}`,
-    html: layout(siteUrl, b, "Thank you!", intro, link, false, note),
-    text: `Hi ${b.contactName}, ${intro}\n\n${note}${reviewUrl ? `\n\nLeave a review: ${reviewUrl}` : ""}`,
+    html: layout(siteUrl, b, "Thank you!", intro, reviewLink, false, reviewAsk),
+    text: `Hi ${b.contactName}, ${intro}\n\n${reviewAsk}${reviewText}`,
   };
 }
