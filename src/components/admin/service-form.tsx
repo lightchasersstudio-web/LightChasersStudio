@@ -16,7 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { WORKSHOP_MAX_DAYS } from "@/lib/booking/workshop";
-import { PACKAGE_CATEGORIES } from "@/lib/catalog";
+import { asBookingCategory, BOOKING_CATEGORIES, PACKAGE_CATEGORIES } from "@/lib/catalog";
 import { centsToPesoInput } from "@/lib/utils/money";
 import {
   serviceSchema,
@@ -50,7 +50,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           coverImagePath: service.cover_image_path,
           contract: service.contract ?? "",
           isActive: service.is_active,
-          ignoresDayLimit: service.ignores_day_limit,
+          bookingCategory: asBookingCategory(service.booking_category),
           ...workshopFormValues(service),
         }
       : {
@@ -69,7 +69,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           coverImagePath: null,
           contract: "",
           isActive: true,
-          ignoresDayLimit: false,
+          bookingCategory: "studio",
           workshopDate: "",
           workshopStart: "",
           workshopEnd: "",
@@ -89,7 +89,15 @@ export function ServiceForm({ service }: { service?: Service }) {
   const { control } = form;
   const extraDays = useFieldArray({ control, name: "workshopExtraDays" });
   useUnsavedChangesWarning(form.formState.isDirty);
-  const [depositMode, hasSetLength, category, price, earlyBirdEnabled, studentEnabled] = useWatch({
+  const [
+    depositMode,
+    hasSetLength,
+    category,
+    price,
+    earlyBirdEnabled,
+    studentEnabled,
+    bookingCategory,
+  ] = useWatch({
     control,
     name: [
       "depositMode",
@@ -98,6 +106,7 @@ export function ServiceForm({ service }: { service?: Service }) {
       "price",
       "earlyBirdEnabled",
       "studentEnabled",
+      "bookingCategory",
     ],
   });
 
@@ -171,6 +180,18 @@ export function ServiceForm({ service }: { service?: Service }) {
                   options={PACKAGE_CATEGORIES}
                 />
               </div>
+              {category !== "workshop" && (
+                <SelectField
+                  control={control}
+                  name="bookingCategory"
+                  label="Booking type"
+                  options={[...BOOKING_CATEGORIES]}
+                  description={
+                    BOOKING_CATEGORIES.find((c) => c.value === bookingCategory)?.hint ??
+                    "How this package is scheduled."
+                  }
+                />
+              )}
               <TextField
                 control={control}
                 name="summary"
@@ -512,15 +533,6 @@ export function ServiceForm({ service }: { service?: Service }) {
               label="Bookable"
               description="Turn off to hide this service from clients."
             />
-            {category !== "workshop" && (
-              <SwitchField
-                control={control}
-                name="ignoresDayLimit"
-                label="Doesn't count toward bookings per day"
-                description="For packages like the Photobooth: it can be booked on a day that already has a booking, and it doesn't fill the day for others. Its time still can't overlap beyond “Shoots that can run at the same time” in Settings."
-                className="mt-5 border-t pt-5"
-              />
-            )}
           </CardContent>
         </Card>
       </div>

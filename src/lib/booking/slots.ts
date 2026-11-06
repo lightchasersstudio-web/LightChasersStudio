@@ -43,7 +43,7 @@ export function monthSlots({
   /** "YYYY-MM-DD" */
   blackouts: string[];
   busy: BusyRange[];
-  /** "YYYY-MM-DD" days already at the bookings-per-day limit (none for packages that don't count). */
+  /** "YYYY-MM-DD" days with no place at all (for an outside event: days that already have one). */
   fullDays?: string[];
   now: Date;
 }): DaySlots[] {

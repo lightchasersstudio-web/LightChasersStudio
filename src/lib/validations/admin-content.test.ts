@@ -19,6 +19,7 @@ const service: ServiceFormInput = {
   inclusions: "  2 locations \n\n 50 edited photos ",
   coverImagePath: null,
   isActive: true,
+  bookingCategory: "outside",
   workshopDate: "",
   workshopStart: "",
   workshopEnd: "",
@@ -71,6 +72,16 @@ describe("serviceSchema", () => {
     const timed = { ...service, hasSetLength: true, lengthHours: "4.5" };
     expect(serviceSchema.parse(timed).duration_minutes).toBe(270);
     expect(serviceSchema.parse({ ...service, lengthHours: "4" }).duration_minutes).toBeNull();
+  });
+
+  it("saves the booking type; workshops are always excluded", () => {
+    expect(serviceSchema.parse(service).booking_category).toBe("outside");
+    expect(serviceSchema.parse({ ...service, bookingCategory: "excluded" }).booking_category).toBe(
+      "excluded",
+    );
+    expect(
+      serviceSchema.safeParse({ ...service, bookingCategory: "anywhere" as "studio" }).success,
+    ).toBe(false);
   });
 
   it("rejects bad slugs and bad lengths", () => {
@@ -371,8 +382,6 @@ describe("bookingRulesSchema", () => {
     vatPercent: "12",
     holdMinutes: "20",
     maxConcurrentBookings: "3",
-    allowMultiplePerDay: false,
-    maxBookingsPerDay: "2",
   } as const;
 
   it("saves how many shoots can run at the same time", () => {
@@ -386,17 +395,5 @@ describe("bookingRulesSchema", () => {
     expect(bookingRulesSchema.safeParse({ ...rules, maxConcurrentBookings: "11" }).success).toBe(
       false,
     );
-  });
-
-  it("saves the bookings-per-day switch and its maximum (1 to 20)", () => {
-    const on = bookingRulesSchema.parse({
-      ...rules,
-      allowMultiplePerDay: true,
-      maxBookingsPerDay: "3",
-    });
-    expect(on).toMatchObject({ allow_multiple_per_day: true, max_bookings_per_day: 3 });
-    expect(bookingRulesSchema.parse(rules).allow_multiple_per_day).toBe(false);
-    expect(bookingRulesSchema.safeParse({ ...rules, maxBookingsPerDay: "0" }).success).toBe(false);
-    expect(bookingRulesSchema.safeParse({ ...rules, maxBookingsPerDay: "21" }).success).toBe(false);
   });
 });

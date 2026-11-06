@@ -771,6 +771,7 @@ export type Database = {
           duration_minutes: number | null
           id: string
           ignores_day_limit: boolean
+          booking_category: string
           inclusions: Json
           is_active: boolean
           name: string
@@ -804,6 +805,7 @@ export type Database = {
           duration_minutes?: number | null
           id?: string
           ignores_day_limit?: boolean
+          booking_category?: string
           inclusions?: Json
           is_active?: boolean
           name: string
@@ -837,6 +839,7 @@ export type Database = {
           duration_minutes?: number | null
           id?: string
           ignores_day_limit?: boolean
+          booking_category?: string
           inclusions?: Json
           is_active?: boolean
           name?: string
@@ -933,8 +936,14 @@ export type Database = {
         Args: { p_blocked_until: string; p_exclude?: string; p_start: string }
         Returns: undefined
       }
-      assert_day_limit: {
-        Args: { p_exclude?: string; p_service_id: string; p_start: string }
+      assert_schedule: {
+        Args: {
+          p_blocked_until: string
+          p_exclude?: string
+          p_public?: boolean
+          p_service_id: string
+          p_start: string
+        }
         Returns: undefined
       }
       booking_holds_place: {
@@ -1000,6 +1009,10 @@ export type Database = {
         }[]
       }
       get_full_days: {
+        Args: { p_exclude?: string; p_from: string; p_to: string }
+        Returns: string[]
+      }
+      get_outside_days: {
         Args: { p_exclude?: string; p_from: string; p_to: string }
         Returns: string[]
       }
