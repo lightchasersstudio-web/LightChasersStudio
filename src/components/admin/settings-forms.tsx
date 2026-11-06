@@ -3,10 +3,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
 
-import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
+import { SelectField, SwitchField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { ImageUploadField } from "@/components/admin/image-upload-field";
 import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
@@ -232,9 +232,12 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
       vatPercent: String(settings.vat_percent),
       holdMinutes: String(settings.hold_minutes),
       maxConcurrentBookings: String(settings.max_concurrent_bookings),
+      allowMultiplePerDay: settings.allow_multiple_per_day,
+      maxBookingsPerDay: String(settings.max_bookings_per_day),
     },
   });
   const { control } = form;
+  const allowMultiplePerDay = useWatch({ control, name: "allowMultiplePerDay" });
   useUnsavedChangesWarning(form.formState.isDirty);
 
   async function onSubmit() {
@@ -318,6 +321,23 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
               inputMode="numeric"
               description="1–10. Online bookings and the calendar never go over this."
             />
+          </div>
+          <div className="mt-6 grid gap-5 border-t pt-6 sm:grid-cols-2">
+            <SwitchField
+              control={control}
+              name="allowMultiplePerDay"
+              label="Allow more than one booking per day"
+              description="Off: once a day has a booking, it's full for everyone (clients and staff). Packages set to “doesn't count toward bookings per day” (like the Photobooth) can still share the day."
+            />
+            {allowMultiplePerDay && (
+              <TextField
+                control={control}
+                name="maxBookingsPerDay"
+                label="Maximum bookings per day"
+                inputMode="numeric"
+                description="1–20. Their times still can't overlap beyond “Shoots that can run at the same time”."
+              />
+            )}
           </div>
         </CardContent>
         <CardFooter className="justify-end">

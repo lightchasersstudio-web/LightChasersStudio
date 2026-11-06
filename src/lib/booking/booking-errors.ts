@@ -1,6 +1,7 @@
 /** Friendly text for the P0001 codes raised by create_booking / admin_create_booking. */
 export const BOOKING_ERRORS: Record<string, string> = {
   slot_unavailable: "That time was just taken. Please pick another.",
+  day_full: "That day is already fully booked. Please pick another date.",
   too_soon: "That time is too soon to book online. Please pick a later time.",
   too_far: "That date is too far ahead to book yet.",
   blackout_date: "We're closed that day. Please pick another date.",

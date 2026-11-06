@@ -59,6 +59,9 @@ export const bookingRulesSchema = z
     vatPercent: intString(0, 50),
     holdMinutes: intString(5, 120),
     maxConcurrentBookings: intString(1, 10),
+    // Off = one booking per day; on = up to maxBookingsPerDay (owner decision 2026-11-06).
+    allowMultiplePerDay: z.boolean(),
+    maxBookingsPerDay: intString(1, 20),
   })
   .transform((v) => ({
     min_notice_hours: v.minNoticeHours,
@@ -69,6 +72,8 @@ export const bookingRulesSchema = z
     vat_percent: v.vatPercent,
     hold_minutes: v.holdMinutes,
     max_concurrent_bookings: v.maxConcurrentBookings,
+    allow_multiple_per_day: v.allowMultiplePerDay,
+    max_bookings_per_day: v.maxBookingsPerDay,
   }));
 
 export type BookingRulesInput = z.input<typeof bookingRulesSchema>;

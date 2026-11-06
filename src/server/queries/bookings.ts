@@ -74,12 +74,16 @@ export type CalendarContext = {
   blackouts: { date: string; reason: string | null }[];
   capacity: number;
   slotInterval: number;
+  /** "YYYY-MM-DD" days at the bookings-per-day limit (only packages that don't count fit). */
+  fullDays: string[];
 };
 
 /** Opening hours, blocked dates and capacity for drawing the calendar. */
 export async function getCalendarContext(month: string): Promise<CalendarContext> {
   const supabase = await createClient();
-  const [hours, blackouts, settings] = await Promise.all([
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const lastDate = `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+  const [hours, blackouts, settings, fullDays] = await Promise.all([
     supabase.from("availability_rules").select("day_of_week, start_time, end_time"),
     supabase
       .from("blackout_dates")
@@ -90,8 +94,9 @@ export async function getCalendarContext(month: string): Promise<CalendarContext
       .from("business_settings")
       .select("max_concurrent_bookings, slot_interval_minutes")
       .single(),
+    supabase.rpc("get_full_days", { p_from: `${month}-01`, p_to: lastDate }),
   ]);
-  for (const r of [hours, blackouts, settings]) if (r.error) throw r.error;
+  for (const r of [hours, blackouts, settings, fullDays]) if (r.error) throw r.error;
   return {
     hours: hours.data!.map((h) => ({
       day: h.day_of_week,
@@ -101,6 +106,7 @@ export async function getCalendarContext(month: string): Promise<CalendarContext
     blackouts: blackouts.data!,
     capacity: settings.data!.max_concurrent_bookings,
     slotInterval: settings.data!.slot_interval_minutes,
+    fullDays: fullDays.data ?? [],
   };
 }
 

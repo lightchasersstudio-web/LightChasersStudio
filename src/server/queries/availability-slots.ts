@@ -17,6 +17,8 @@ import type { Database } from "@/types/database.types";
  * (staff only, when moving a booking) leaves that booking's own time free.
  * `addOnIds` lengthens a package with a set length by its time-adding add-ons
  * (e.g. a photobooth extension); other packages just need their start slot.
+ * Days at the bookings-per-day limit are full, except for packages that don't
+ * count toward it (services.ignores_day_limit, e.g. the Photobooth).
  */
 export async function loadMonthAvailability(
   supabase: SupabaseClient<Database>,
@@ -35,8 +37,12 @@ export async function loadMonthAvailability(
   const from = addDays(first, -1).toISOString();
   const to = addDays(first, getDaysInMonth(first) + 1).toISOString();
 
-  const [service, settings, hours, blackouts, busy, addOns] = await Promise.all([
-    supabase.from("services").select("duration_minutes").eq("id", serviceId).maybeSingle(),
+  const [service, settings, hours, blackouts, busy, addOns, fullDays] = await Promise.all([
+    supabase
+      .from("services")
+      .select("duration_minutes, ignores_day_limit")
+      .eq("id", serviceId)
+      .maybeSingle(),
     supabase
       .from("business_settings")
       .select(
@@ -51,8 +57,14 @@ export async function loadMonthAvailability(
     addOnIds.length
       ? supabase.from("add_ons").select("extra_minutes, service_ids").in("id", addOnIds)
       : { data: [], error: null },
+    supabase.rpc("get_full_days", {
+      p_from: `${month}-01`,
+      p_to: lastDate,
+      ...(excludeBookingId ? { p_exclude: excludeBookingId } : {}),
+    }),
   ]);
-  for (const r of [service, settings, hours, blackouts, busy, addOns]) if (r.error) throw r.error;
+  for (const r of [service, settings, hours, blackouts, busy, addOns, fullDays])
+    if (r.error) throw r.error;
   if (!service.data) return null;
   const s = settings.data!;
   // Staff may put any add-on on a booking; the public only those offered with it.
@@ -82,6 +94,7 @@ export async function loadMonthAvailability(
     })),
     blackouts: blackouts.data!.map((b) => b.date),
     busy: busy.data!.map((b) => ({ start: new Date(b.start_at), end: new Date(b.blocked_until) })),
+    fullDays: service.data.ignores_day_limit ? [] : (fullDays.data ?? []),
     now: new Date(),
   });
 }

@@ -50,6 +50,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           coverImagePath: service.cover_image_path,
           contract: service.contract ?? "",
           isActive: service.is_active,
+          ignoresDayLimit: service.ignores_day_limit,
           ...workshopFormValues(service),
         }
       : {
@@ -68,6 +69,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           coverImagePath: null,
           contract: "",
           isActive: true,
+          ignoresDayLimit: false,
           workshopDate: "",
           workshopStart: "",
           workshopEnd: "",
@@ -510,6 +512,15 @@ export function ServiceForm({ service }: { service?: Service }) {
               label="Bookable"
               description="Turn off to hide this service from clients."
             />
+            {category !== "workshop" && (
+              <SwitchField
+                control={control}
+                name="ignoresDayLimit"
+                label="Doesn't count toward bookings per day"
+                description="For packages like the Photobooth: it can be booked on a day that already has a booking, and it doesn't fill the day for others. Its time still can't overlap beyond “Shoots that can run at the same time” in Settings."
+                className="mt-5 border-t pt-5"
+              />
+            )}
           </CardContent>
         </Card>
       </div>

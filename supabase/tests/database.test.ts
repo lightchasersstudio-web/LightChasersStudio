@@ -58,7 +58,9 @@ async function setupFixtures(c: PoolClient, capacity = 1) {
   await c.query(`update public.business_settings
     set timezone = '${TZ}', min_notice_hours = 48, max_advance_days = 180,
         slot_interval_minutes = 30, buffer_minutes = 30, default_deposit_percent = 30, hold_minutes = 20,
-        max_concurrent_bookings = ${capacity}, vat_percent = 0
+        max_concurrent_bookings = ${capacity}, vat_percent = 0,
+        -- Most tests are about times; the per-day limit has its own tests below.
+        allow_multiple_per_day = true, max_bookings_per_day = 20
     where id`);
   await c.query("delete from public.availability_rules");
   await c.query("delete from public.blackout_dates");
@@ -589,6 +591,142 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       expect(rows[0].hold_expires_at).toBeNull();
     });
   });
+  describe("bookings per day", () => {
+    // Far ahead, so the shared dev database's own bookings don't land on the same day.
+    const DAY = 150;
+
+    async function oneADay(c: PoolClient) {
+      const s = await setupFixtures(c, 3);
+      await c.query(
+        "update public.business_settings set allow_multiple_per_day = false, max_advance_days = 400 where id",
+      );
+      const { rows } = await c.query<{ id: string }>(`
+        insert into public.services (name, slug, category, duration_minutes, price_cents, is_active, ignores_day_limit)
+        values ('Test Booth', 'test-booth', 'event', 240, 500000, true, true)
+        returning id`);
+      return { ...s, booth: rows[0]!.id };
+    }
+
+    it("allows only one booking a day while the switch is off", async () => {
+      await inRollback(async (c) => {
+        const s = await oneADay(c);
+        await actAs(c, "service_role");
+        await book(c, s.wedding, manila(DAY, 8), "a@example.com");
+        // A different, non-overlapping time the same day is still refused.
+        const later = [
+          "Bo",
+          "b@example.com",
+          "09170000000",
+          s.portrait,
+          manila(DAY, 16).toISOString(),
+        ];
+        expect(await expectFailure(c, CREATE, later)).toMatch(/day_full/);
+        // Staff can't add one either.
+        const staff = await c.query("savepoint s1").then(() =>
+          adminBook(c, s.portrait, manila(DAY, 16)).then(
+            () => "ok",
+            (e: Error) => e.message,
+          ),
+        );
+        expect(staff).toMatch(/day_full/);
+        await c.query("rollback to savepoint s1");
+        // The next day is free.
+        await expect(
+          book(c, s.portrait, manila(DAY + 1, 8), "c@example.com"),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("lets packages that don't count share the day", async () => {
+      await inRollback(async (c) => {
+        const s = await oneADay(c);
+        await actAs(c, "service_role");
+        await book(c, s.wedding, manila(DAY, 8), "a@example.com");
+        // Capacity 3, so the booth can run alongside the wedding.
+        await expect(book(c, s.booth, manila(DAY, 9), "b@example.com")).resolves.toBeDefined();
+        // A booth booked first doesn't fill the day for a shoot.
+        await book(c, s.booth, manila(DAY + 2, 8), "c@example.com");
+        await expect(
+          book(c, s.portrait, manila(DAY + 2, 14), "d@example.com"),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("allows up to the maximum per day once the switch is on", async () => {
+      await inRollback(async (c) => {
+        const s = await oneADay(c);
+        await c.query(
+          "update public.business_settings set allow_multiple_per_day = true, max_bookings_per_day = 2 where id",
+        );
+        await actAs(c, "service_role");
+        await book(c, s.portrait, manila(DAY, 8), "a@example.com");
+        await book(c, s.portrait, manila(DAY, 11), "b@example.com");
+        const third = [
+          "Cy",
+          "c@example.com",
+          "09170000000",
+          s.portrait,
+          manila(DAY, 15).toISOString(),
+        ];
+        expect(await expectFailure(c, CREATE, third)).toMatch(/day_full/);
+      });
+    });
+
+    it("refuses moving a booking onto a full day, but not editing it in place", async () => {
+      await inRollback(async (c) => {
+        const s = await oneADay(c);
+        await actAs(c, "service_role");
+        await adminBook(c, s.portrait, manila(DAY, 8));
+        const { rows } = await adminBook(c, s.portrait, manila(DAY + 1, 8));
+        const id = rows[0]!.booking_id;
+        // Same day, new time: fine.
+        await updateBooking(c, id, s.portrait, manila(DAY + 1, 10));
+        // Onto the full day: refused.
+        const onto = await c.query("savepoint s2").then(() =>
+          updateBooking(c, id, s.portrait, manila(DAY, 14)).then(
+            () => "ok",
+            (e: Error) => e.message,
+          ),
+        );
+        expect(onto).toMatch(/day_full/);
+        await c.query("rollback to savepoint s2");
+      });
+    });
+
+    it("lists full days for the calendar, and ignores expired holds", async () => {
+      await inRollback(async (c) => {
+        const s = await oneADay(c);
+        await actAs(c, "service_role");
+        const { rows } = await book(c, s.portrait, manila(DAY, 8), "a@example.com");
+        await book(c, s.booth, manila(DAY + 1, 8), "b@example.com");
+        await actAs(c, "anon");
+        const from = manila(DAY - 1, 0)
+          .toISOString()
+          .slice(0, 10);
+        const to = manila(DAY + 3, 0)
+          .toISOString()
+          .slice(0, 10);
+        const full = await c.query<{ d: string }>(
+          "select to_char(d, 'YYYY-MM-DD') as d from public.get_full_days($1::date, $2::date) d",
+          [from, to],
+        );
+        expect(full.rows.map((r) => r.d)).toEqual([manila(DAY, 8).toISOString().slice(0, 10)]);
+
+        await c.query("reset role");
+        await c.query(
+          "update public.bookings set hold_expires_at = now() - interval '1 minute' where id = $1",
+          [rows[0]!.booking_id],
+        );
+        await actAs(c, "anon");
+        const after = await c.query("select * from public.get_full_days($1::date, $2::date)", [
+          from,
+          to,
+        ]);
+        expect(after.rows).toEqual([]);
+      });
+    });
+  });
+
   describe("capacity (several shoots at once)", () => {
     it("allows up to max_concurrent_bookings at the same time", async () => {
       await inRollback(async (c) => {

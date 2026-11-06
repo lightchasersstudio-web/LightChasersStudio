@@ -44,6 +44,8 @@ export function DayTimeline({
 
   const blockedReason = context.blackouts.find((b) => b.date === date);
   const windows = blockedReason ? [] : context.hours.filter((h) => h.day === midnight.getDay());
+  // At the bookings-per-day limit: no free gaps (only packages that don't count still fit).
+  const dayFull = context.fullDays.includes(date);
 
   // Visible range: opening hours plus any bookings outside them, whole hours.
   const bookingMins = bookings.flatMap((b) => [
@@ -60,7 +62,7 @@ export function DayTimeline({
   const busy = bookings.map((b) => ({ start: new Date(b.startAt), end: new Date(b.blockedUntil) }));
   const step = context.slotInterval;
   const gaps: { start: number; end: number }[] = [];
-  for (const w of windows) {
+  for (const w of dayFull ? [] : windows) {
     for (let m = toMin(w.start); m + step <= toMin(w.end); m += step) {
       const s = at(m);
       const free = s > now && occupancyAt(busy, s, addMinutes(s, step)) < context.capacity;
@@ -89,6 +91,7 @@ export function DayTimeline({
           <p className="text-sm text-muted-foreground">
             {bookings.length} booking{bookings.length === 1 ? "" : "s"}
             {context.capacity > 1 && ` · up to ${context.capacity} at once`}
+            {dayFull && " · day full"}
           </p>
         </div>
         <Button asChild size="sm">

@@ -407,6 +407,7 @@ export type Database = {
           about: string | null
           address: string | null
           buffer_minutes: number
+          allow_multiple_per_day: boolean
           business_name: string
           city: string
           currency: string
@@ -419,6 +420,7 @@ export type Database = {
           logo_path: string | null
           maps_url: string | null
           max_advance_days: number
+          max_bookings_per_day: number
           max_concurrent_bookings: number
           min_notice_hours: number
           phone: string | null
@@ -433,6 +435,7 @@ export type Database = {
           about?: string | null
           address?: string | null
           buffer_minutes?: number
+          allow_multiple_per_day?: boolean
           business_name?: string
           city?: string
           currency?: string
@@ -445,6 +448,7 @@ export type Database = {
           logo_path?: string | null
           maps_url?: string | null
           max_advance_days?: number
+          max_bookings_per_day?: number
           max_concurrent_bookings?: number
           min_notice_hours?: number
           phone?: string | null
@@ -459,6 +463,7 @@ export type Database = {
           about?: string | null
           address?: string | null
           buffer_minutes?: number
+          allow_multiple_per_day?: boolean
           business_name?: string
           city?: string
           currency?: string
@@ -471,6 +476,7 @@ export type Database = {
           logo_path?: string | null
           maps_url?: string | null
           max_advance_days?: number
+          max_bookings_per_day?: number
           max_concurrent_bookings?: number
           min_notice_hours?: number
           phone?: string | null
@@ -764,6 +770,7 @@ export type Database = {
           description: string | null
           duration_minutes: number | null
           id: string
+          ignores_day_limit: boolean
           inclusions: Json
           is_active: boolean
           name: string
@@ -796,6 +803,7 @@ export type Database = {
           description?: string | null
           duration_minutes?: number | null
           id?: string
+          ignores_day_limit?: boolean
           inclusions?: Json
           is_active?: boolean
           name: string
@@ -828,6 +836,7 @@ export type Database = {
           description?: string | null
           duration_minutes?: number | null
           id?: string
+          ignores_day_limit?: boolean
           inclusions?: Json
           is_active?: boolean
           name?: string
@@ -924,6 +933,10 @@ export type Database = {
         Args: { p_blocked_until: string; p_exclude?: string; p_start: string }
         Returns: undefined
       }
+      assert_day_limit: {
+        Args: { p_exclude?: string; p_service_id: string; p_start: string }
+        Returns: undefined
+      }
       booking_holds_place: {
         Args: {
           p_hold_expires_at: string
@@ -931,6 +944,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      bookings_per_day_limit: { Args: never; Returns: number }
       booking_length_minutes: {
         Args: {
           p_duration_minutes: number
@@ -984,6 +998,10 @@ export type Database = {
           blocked_until: string
           start_at: string
         }[]
+      }
+      get_full_days: {
+        Args: { p_exclude?: string; p_from: string; p_to: string }
+        Returns: string[]
       }
       hit_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_seconds: number }
