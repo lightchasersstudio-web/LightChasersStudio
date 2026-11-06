@@ -6,6 +6,7 @@ import { addDays, getDaysInMonth } from "date-fns";
 import { PAGE_SIZE, searchTerm, type BookingFilters } from "@/lib/admin/list-filters";
 import { summaryDays, summaryPeople } from "@/lib/booking/booking-summary";
 import type { BookingStatus } from "@/lib/booking/status";
+import { asBookingCategory, type BookingCategory } from "@/lib/catalog";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { BUSINESS_TZ, tzDate } from "@/lib/utils/business-date";
@@ -19,6 +20,8 @@ export type CalendarBooking = {
   blockedUntil: string;
   contactName: string;
   serviceName: string;
+  /** How the package is scheduled; only studio bookings use up studio time. */
+  bookingCategory: BookingCategory;
   needsRefundReview: boolean;
   source: string;
 };
@@ -37,7 +40,7 @@ export async function listBookingsForMonth(
   const { data, error } = await supabase
     .from("bookings")
     .select(
-      "id, reference_code, status, start_at, end_at, blocked_until, hold_expires_at, contact_name, needs_refund_review, source, service:services(name)",
+      "id, reference_code, status, start_at, end_at, blocked_until, hold_expires_at, contact_name, needs_refund_review, source, service:services(name, booking_category)",
     )
     .lt("start_at", to)
     .gt("blocked_until", from)
@@ -64,6 +67,7 @@ export async function listBookingsForMonth(
       blockedUntil: b.blocked_until,
       contactName: b.contact_name,
       serviceName: b.service?.name ?? "Session",
+      bookingCategory: asBookingCategory(b.service?.booking_category),
       needsRefundReview: b.needs_refund_review,
       source: b.source,
     }));
@@ -74,8 +78,8 @@ export type CalendarContext = {
   blackouts: { date: string; reason: string | null }[];
   capacity: number;
   slotInterval: number;
-  /** "YYYY-MM-DD" days at the bookings-per-day limit (only packages that don't count fit). */
-  fullDays: string[];
+  /** "YYYY-MM-DD" days that already have an outside event (no other wedding/prenup fits). */
+  outsideDays: string[];
 };
 
 /** Opening hours, blocked dates and capacity for drawing the calendar. */
@@ -83,7 +87,7 @@ export async function getCalendarContext(month: string): Promise<CalendarContext
   const supabase = await createClient();
   const [y, m] = month.split("-").map(Number) as [number, number];
   const lastDate = `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
-  const [hours, blackouts, settings, fullDays] = await Promise.all([
+  const [hours, blackouts, settings, outsideDays] = await Promise.all([
     supabase.from("availability_rules").select("day_of_week, start_time, end_time"),
     supabase
       .from("blackout_dates")
@@ -94,9 +98,9 @@ export async function getCalendarContext(month: string): Promise<CalendarContext
       .from("business_settings")
       .select("max_concurrent_bookings, slot_interval_minutes")
       .single(),
-    supabase.rpc("get_full_days", { p_from: `${month}-01`, p_to: lastDate }),
+    supabase.rpc("get_outside_days", { p_from: `${month}-01`, p_to: lastDate }),
   ]);
-  for (const r of [hours, blackouts, settings, fullDays]) if (r.error) throw r.error;
+  for (const r of [hours, blackouts, settings, outsideDays]) if (r.error) throw r.error;
   return {
     hours: hours.data!.map((h) => ({
       day: h.day_of_week,
@@ -106,7 +110,7 @@ export async function getCalendarContext(month: string): Promise<CalendarContext
     blackouts: blackouts.data!,
     capacity: settings.data!.max_concurrent_bookings,
     slotInterval: settings.data!.slot_interval_minutes,
-    fullDays: fullDays.data ?? [],
+    outsideDays: outsideDays.data ?? [],
   };
 }
 

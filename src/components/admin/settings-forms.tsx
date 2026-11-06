@@ -3,10 +3,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import type { z } from "zod";
 
-import { SelectField, SwitchField, TextAreaField, TextField } from "@/components/admin/form-fields";
+import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { ImageUploadField } from "@/components/admin/image-upload-field";
 import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
@@ -232,12 +232,9 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
       vatPercent: String(settings.vat_percent),
       holdMinutes: String(settings.hold_minutes),
       maxConcurrentBookings: String(settings.max_concurrent_bookings),
-      allowMultiplePerDay: settings.allow_multiple_per_day,
-      maxBookingsPerDay: String(settings.max_bookings_per_day),
     },
   });
   const { control } = form;
-  const allowMultiplePerDay = useWatch({ control, name: "allowMultiplePerDay" });
   useUnsavedChangesWarning(form.formState.isDirty);
 
   async function onSubmit() {
@@ -291,7 +288,7 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
               name="bufferMinutes"
               label="Buffer between sessions (minutes)"
               inputMode="numeric"
-              description="Travel and setup time after each booking."
+              description="Gap after each studio session before the next can start. 0 = back to back."
             />
             <TextField
               control={control}
@@ -317,27 +314,10 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
             <TextField
               control={control}
               name="maxConcurrentBookings"
-              label="Shoots that can run at the same time"
+              label="Studio sessions at the same time"
               inputMode="numeric"
-              description="1–10. Online bookings and the calendar never go over this."
+              description="Usually 1. Outside events (weddings, prenups) are one per day and don't count here; set each package's type in Services."
             />
-          </div>
-          <div className="mt-6 grid gap-5 border-t pt-6 sm:grid-cols-2">
-            <SwitchField
-              control={control}
-              name="allowMultiplePerDay"
-              label="Allow more than one booking per day"
-              description="Off: once a day has a booking, it's full for everyone (clients and staff). Packages set to “doesn't count toward bookings per day” (like the Photobooth) can still share the day."
-            />
-            {allowMultiplePerDay && (
-              <TextField
-                control={control}
-                name="maxBookingsPerDay"
-                label="Maximum bookings per day"
-                inputMode="numeric"
-                description="1–20. Their times still can't overlap beyond “Shoots that can run at the same time”."
-              />
-            )}
           </div>
         </CardContent>
         <CardFooter className="justify-end">

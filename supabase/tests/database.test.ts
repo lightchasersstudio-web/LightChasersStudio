@@ -58,9 +58,7 @@ async function setupFixtures(c: PoolClient, capacity = 1) {
   await c.query(`update public.business_settings
     set timezone = '${TZ}', min_notice_hours = 48, max_advance_days = 180,
         slot_interval_minutes = 30, buffer_minutes = 30, default_deposit_percent = 30, hold_minutes = 20,
-        max_concurrent_bookings = ${capacity}, vat_percent = 0,
-        -- Most tests are about times; the per-day limit has its own tests below.
-        allow_multiple_per_day = true, max_bookings_per_day = 20
+        max_concurrent_bookings = ${capacity}, vat_percent = 0
     where id`);
   await c.query("delete from public.availability_rules");
   await c.query("delete from public.blackout_dates");
@@ -591,138 +589,218 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       expect(rows[0].hold_expires_at).toBeNull();
     });
   });
-  describe("bookings per day", () => {
+  describe("booking categories (studio, outside events, excluded)", () => {
     // Far ahead, so the shared dev database's own bookings don't land on the same day.
     const DAY = 150;
+    const dateOf = (d: Date) => new TZDate(d, TZ).toISOString().slice(0, 10);
 
-    async function oneADay(c: PoolClient) {
-      const s = await setupFixtures(c, 3);
-      await c.query(
-        "update public.business_settings set allow_multiple_per_day = false, max_advance_days = 400 where id",
-      );
-      const { rows } = await c.query<{ id: string }>(`
-        insert into public.services (name, slug, category, duration_minutes, price_cents, is_active, ignores_day_limit)
-        values ('Test Booth', 'test-booth', 'event', 240, 500000, true, true)
-        returning id`);
-      return { ...s, booth: rows[0]!.id };
+    /** Studio portrait (60 min + 30 buffer), outside wedding + prenup, excluded booth. */
+    async function categories(c: PoolClient) {
+      const s = await setupFixtures(c, 1);
+      await c.query("update public.business_settings set max_advance_days = 400 where id");
+      await c.query("update public.services set booking_category = 'outside' where id = $1", [
+        s.wedding,
+      ]);
+      const { rows } = await c.query<{ id: string; slug: string }>(`
+        insert into public.services (name, slug, category, duration_minutes, price_cents, is_active, booking_category)
+        values
+          ('Test Prenup', 'test-prenup', 'wedding', null, 800000, true, 'outside'),
+          ('Test Booth', 'test-booth', 'event', 240, 500000, true, 'excluded')
+        returning id, slug`);
+      const id = (slug: string) => rows.find((r) => r.slug === slug)!.id;
+      return { ...s, prenup: id("test-prenup"), booth: id("test-booth") };
     }
 
-    it("allows only one booking a day while the switch is off", async () => {
+    /** create_booking that must fail; returns the error message. */
+    const refused = (c: PoolClient, serviceId: string, start: Date, email: string) =>
+      expectFailure(c, CREATE, ["Bo", email, "09170000000", serviceId, start.toISOString()]);
+
+    /** Runs something that must fail inside a savepoint; returns the error message. */
+    async function failsWith(c: PoolClient, run: () => Promise<unknown>) {
+      await c.query("savepoint cat");
+      try {
+        await run();
+      } catch (e) {
+        await c.query("rollback to savepoint cat");
+        return (e as Error).message;
+      }
+      throw new Error("expected failure but succeeded");
+    }
+
+    it("1. two studio bookings at overlapping times: the second is refused", async () => {
       await inRollback(async (c) => {
-        const s = await oneADay(c);
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        expect(await refused(c, s.portrait, manila(DAY, 10, 30), "b@example.com")).toMatch(
+          /slot_unavailable/,
+        );
+        // Staff can't double-book the studio either.
+        expect(await failsWith(c, () => adminBook(c, s.portrait, manila(DAY, 10)))).toMatch(
+          /slot_unavailable/,
+        );
+      });
+    });
+
+    it("2. a studio booking right after the previous one ends is allowed", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        // 10:00 + 60 min + 30 min buffer = free again at 11:30.
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        expect(await refused(c, s.portrait, manila(DAY, 11), "b@example.com")).toMatch(
+          /slot_unavailable/,
+        );
+        await expect(
+          book(c, s.portrait, manila(DAY, 11, 30), "b@example.com"),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("3. two weddings/prenups on the same day: the second is refused", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
         await actAs(c, "service_role");
         await book(c, s.wedding, manila(DAY, 8), "a@example.com");
-        // A different, non-overlapping time the same day is still refused.
-        const later = [
-          "Bo",
-          "b@example.com",
-          "09170000000",
-          s.portrait,
-          manila(DAY, 16).toISOString(),
-        ];
-        expect(await expectFailure(c, CREATE, later)).toMatch(/day_full/);
-        // Staff can't add one either.
-        const staff = await c.query("savepoint s1").then(() =>
-          adminBook(c, s.portrait, manila(DAY, 16)).then(
-            () => "ok",
-            (e: Error) => e.message,
-          ),
+        // Hours apart, and a different outside package: still the same day.
+        expect(await refused(c, s.prenup, manila(DAY, 16), "b@example.com")).toMatch(
+          /outside_day_full/,
         );
-        expect(staff).toMatch(/day_full/);
-        await c.query("rollback to savepoint s1");
+        expect(await refused(c, s.wedding, manila(DAY, 13), "c@example.com")).toMatch(
+          /outside_day_full/,
+        );
+        expect(await failsWith(c, () => adminBook(c, s.prenup, manila(DAY, 17)))).toMatch(
+          /outside_day_full/,
+        );
         // The next day is free.
+        await expect(book(c, s.prenup, manila(DAY + 1, 8), "d@example.com")).resolves.toBeDefined();
+      });
+    });
+
+    it("4. a wedding and a studio booking at the same time are both allowed", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        await book(c, s.wedding, manila(DAY, 10), "a@example.com");
+        await expect(book(c, s.portrait, manila(DAY, 10), "b@example.com")).resolves.toBeDefined();
+        // And the other way round: studio first, then a prenup at that time.
+        await book(c, s.portrait, manila(DAY + 1, 10), "c@example.com");
         await expect(
-          book(c, s.portrait, manila(DAY + 1, 8), "c@example.com"),
+          book(c, s.prenup, manila(DAY + 1, 10), "d@example.com"),
         ).resolves.toBeDefined();
       });
     });
 
-    it("lets packages that don't count share the day", async () => {
+    it("5. a photobooth overlapping a studio booking and a wedding is allowed", async () => {
       await inRollback(async (c) => {
-        const s = await oneADay(c);
+        const s = await categories(c);
         await actAs(c, "service_role");
-        await book(c, s.wedding, manila(DAY, 8), "a@example.com");
-        // Capacity 3, so the booth can run alongside the wedding.
-        await expect(book(c, s.booth, manila(DAY, 9), "b@example.com")).resolves.toBeDefined();
-        // A booth booked first doesn't fill the day for a shoot.
-        await book(c, s.booth, manila(DAY + 2, 8), "c@example.com");
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        await book(c, s.wedding, manila(DAY, 10), "b@example.com");
+        await expect(book(c, s.booth, manila(DAY, 9), "c@example.com")).resolves.toBeDefined();
+        // A second booth on top, and booths block neither the studio nor the day.
+        await expect(book(c, s.booth, manila(DAY, 10), "d@example.com")).resolves.toBeDefined();
+        await expect(book(c, s.portrait, manila(DAY, 13), "e@example.com")).resolves.toBeDefined();
+        await book(c, s.booth, manila(DAY + 1, 8), "f@example.com");
         await expect(
-          book(c, s.portrait, manila(DAY + 2, 14), "d@example.com"),
+          book(c, s.wedding, manila(DAY + 1, 9), "g@example.com"),
         ).resolves.toBeDefined();
       });
     });
 
-    it("allows up to the maximum per day once the switch is on", async () => {
+    it("cancelled bookings don't block, and moves are checked too", async () => {
       await inRollback(async (c) => {
-        const s = await oneADay(c);
-        await c.query(
-          "update public.business_settings set allow_multiple_per_day = true, max_bookings_per_day = 2 where id",
-        );
+        const s = await categories(c);
         await actAs(c, "service_role");
-        await book(c, s.portrait, manila(DAY, 8), "a@example.com");
-        await book(c, s.portrait, manila(DAY, 11), "b@example.com");
-        const third = [
-          "Cy",
-          "c@example.com",
-          "09170000000",
-          s.portrait,
-          manila(DAY, 15).toISOString(),
-        ];
-        expect(await expectFailure(c, CREATE, third)).toMatch(/day_full/);
-      });
-    });
+        const w = (await book(c, s.wedding, manila(DAY, 8), "a@example.com")).rows[0]!;
+        await c.query("update public.bookings set status = 'cancelled' where id = $1", [
+          w.booking_id,
+        ]);
+        await book(c, s.wedding, manila(DAY, 9), "b@example.com");
 
-    it("refuses moving a booking onto a full day, but not editing it in place", async () => {
-      await inRollback(async (c) => {
-        const s = await oneADay(c);
-        await actAs(c, "service_role");
-        await adminBook(c, s.portrait, manila(DAY, 8));
-        const { rows } = await adminBook(c, s.portrait, manila(DAY + 1, 8));
+        // A staff booking on another day can't be moved onto that day...
+        const { rows } = await adminBook(c, s.prenup, manila(DAY + 1, 8), { price: 800000 });
         const id = rows[0]!.booking_id;
-        // Same day, new time: fine.
-        await updateBooking(c, id, s.portrait, manila(DAY + 1, 10));
-        // Onto the full day: refused.
-        const onto = await c.query("savepoint s2").then(() =>
-          updateBooking(c, id, s.portrait, manila(DAY, 14)).then(
-            () => "ok",
-            (e: Error) => e.message,
+        await updateBooking(c, id, s.prenup, manila(DAY + 1, 10), { pkg: 800000 });
+        expect(
+          await failsWith(c, () =>
+            updateBooking(c, id, s.prenup, manila(DAY, 14), { pkg: 800000 }),
           ),
-        );
-        expect(onto).toMatch(/day_full/);
-        await c.query("rollback to savepoint s2");
+        ).toMatch(/outside_day_full/);
+        // ...but as a studio package that day it's fine (the other category).
+        await expect(
+          updateBooking(c, id, s.portrait, manila(DAY, 14), { pkg: 800000 }),
+        ).resolves.toBeDefined();
       });
     });
 
-    it("lists full days for the calendar, and ignores expired holds", async () => {
+    it("feeds the calendars: busy ranges are studio only, outside days per date", async () => {
       await inRollback(async (c) => {
-        const s = await oneADay(c);
+        const s = await categories(c);
         await actAs(c, "service_role");
-        const { rows } = await book(c, s.portrait, manila(DAY, 8), "a@example.com");
-        await book(c, s.booth, manila(DAY + 1, 8), "b@example.com");
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        const w = (await book(c, s.wedding, manila(DAY + 1, 10), "b@example.com")).rows[0]!;
+        await book(c, s.booth, manila(DAY + 2, 10), "c@example.com");
+
         await actAs(c, "anon");
-        const from = manila(DAY - 1, 0)
-          .toISOString()
-          .slice(0, 10);
-        const to = manila(DAY + 3, 0)
-          .toISOString()
-          .slice(0, 10);
-        const full = await c.query<{ d: string }>(
-          "select to_char(d, 'YYYY-MM-DD') as d from public.get_full_days($1::date, $2::date) d",
-          [from, to],
-        );
-        expect(full.rows.map((r) => r.d)).toEqual([manila(DAY, 8).toISOString().slice(0, 10)]);
+        const busy = await c.query("select * from public.get_busy_ranges($1, $2)", [
+          manila(DAY, 0).toISOString(),
+          manila(DAY + 3, 0).toISOString(),
+        ]);
+        expect(busy.rows.map((r) => new Date(r.start_at).getTime())).toEqual([
+          manila(DAY, 10).getTime(),
+        ]);
+        const outside = () =>
+          c.query<{ d: string }>(
+            "select to_char(d, 'YYYY-MM-DD') as d from public.get_outside_days($1::date, $2::date) d",
+            [dateOf(manila(DAY - 1, 12)), dateOf(manila(DAY + 3, 12))],
+          );
+        expect((await outside()).rows.map((r) => r.d)).toEqual([dateOf(manila(DAY + 1, 10))]);
 
         await c.query("reset role");
         await c.query(
           "update public.bookings set hold_expires_at = now() - interval '1 minute' where id = $1",
-          [rows[0]!.booking_id],
+          [w.booking_id],
         );
         await actAs(c, "anon");
-        const after = await c.query("select * from public.get_full_days($1::date, $2::date)", [
-          from,
-          to,
-        ]);
-        expect(after.rows).toEqual([]);
+        expect((await outside()).rows).toEqual([]);
+      });
+    });
+
+    it("flags a late wedding payment when the day was taken meanwhile", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        const lapsed = (await book(c, s.wedding, manila(DAY, 8), "a@example.com")).rows[0]!;
+        await c.query(
+          "update public.bookings set hold_expires_at = now() - interval '1 minute' where id = $1",
+          [lapsed.booking_id],
+        );
+        await book(c, s.prenup, manila(DAY, 15), "b@example.com"); // expires `lapsed`, takes the day
+        const { rows } = await c.query(PAID, [lapsed.reference_code, "cs_c", "pay_c", 200000]);
+        expect(rows[0].outcome).toBe("needs_review");
+      });
+    });
+
+    it("keeps workshops excluded, and the workshop only blocks studio bookings", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        const { rows } = await c.query<{ booking_category: string }>(
+          `insert into public.services (name, slug, category, price_cents, is_active, booking_category,
+             workshop_starts_at, workshop_ends_at, workshop_seats)
+           values ('Test Class', 'test-class', 'workshop', 500000, true, 'studio', $1, $2, 10)
+           returning booking_category`,
+          [manila(DAY, 9).toISOString(), manila(DAY, 12).toISOString()],
+        );
+        expect(rows[0]!.booking_category).toBe("excluded");
+        await actAs(c, "service_role");
+        expect(await refused(c, s.portrait, manila(DAY, 10), "a@example.com")).toMatch(
+          /slot_unavailable/,
+        );
+        await expect(book(c, s.wedding, manila(DAY, 10), "b@example.com")).resolves.toBeDefined();
+        await expect(book(c, s.booth, manila(DAY, 10), "c@example.com")).resolves.toBeDefined();
+        // Staff can still book the studio during the workshop.
+        await expect(adminBook(c, s.portrait, manila(DAY, 10))).resolves.toBeDefined();
       });
     });
   });
@@ -769,17 +847,19 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     });
 
     it("serialises booking creation so two requests can't both take the last spot", async () => {
-      // Session A checks capacity and keeps its transaction open; session B's check
+      // Session A checks the schedule and keeps its transaction open; session B's check
       // must wait for A (advisory lock), so B can't count before A's booking exists.
-      const range = "now() + interval '10 days', now() + interval '10 days 1 hour'";
+      // Any committed studio package will do (the lock is taken before counting).
+      const range = `now() + interval '10 days', now() + interval '10 days 1 hour',
+        (select id from public.services where booking_category = 'studio' limit 1)`;
       const a = await pool!.connect();
       const b = await pool!.connect();
       try {
         await a.query("begin");
-        await a.query(`select public.assert_capacity(${range})`);
+        await a.query(`select public.assert_schedule(${range})`);
         await b.query("begin");
         await b.query("set local lock_timeout = '1s'");
-        await expect(b.query(`select public.assert_capacity(${range})`)).rejects.toThrow(
+        await expect(b.query(`select public.assert_schedule(${range})`)).rejects.toThrow(
           /lock timeout/,
         );
       } finally {

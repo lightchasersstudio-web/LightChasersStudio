@@ -1,6 +1,6 @@
 "use server";
 
-import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
+import { BOOKING_ERRORS, bookingErrorCode, isScheduleClash } from "@/lib/booking/booking-errors";
 import { contractHash, packageContract } from "@/lib/booking/contract";
 import { rescheduleFeeNotice } from "@/lib/booking/reschedule-fee";
 import { cleanSignature, signatureMatches } from "@/lib/booking/signature";
@@ -151,21 +151,20 @@ export async function submitBooking(
     if (error) {
       const code = bookingErrorCode(error.message);
       if (!code) throw error;
-      const field =
-        code === "slot_unavailable"
-          ? "startAt"
-          : code === "add_on_unavailable"
-            ? "addOnIds"
-            : code === "workshop_full" || code === "invalid_participants"
-              ? "participants"
-              : code === "invalid_attendees" ||
-                  code === "attendee_contact_required" ||
-                  code === "category_unavailable" ||
-                  code === "student_id_required" ||
-                  code === "early_bird_closed" ||
-                  code === "early_bird_full"
-                ? "attendees"
-                : null;
+      const field = isScheduleClash(code)
+        ? "startAt"
+        : code === "add_on_unavailable"
+          ? "addOnIds"
+          : code === "workshop_full" || code === "invalid_participants"
+            ? "participants"
+            : code === "invalid_attendees" ||
+                code === "attendee_contact_required" ||
+                code === "category_unavailable" ||
+                code === "student_id_required" ||
+                code === "early_bird_closed" ||
+                code === "early_bird_full"
+              ? "attendees"
+              : null;
       return fail(BOOKING_ERRORS[code]!, field ? { [field]: [BOOKING_ERRORS[code]!] } : undefined);
     }
 

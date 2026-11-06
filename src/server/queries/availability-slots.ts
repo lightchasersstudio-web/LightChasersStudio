@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, getDaysInMonth } from "date-fns";
 
 import { addOnOffered, bookingLengthMinutes } from "@/lib/booking/package-length";
-import { monthSlots, type DaySlots } from "@/lib/booking/slots";
+import { monthSlots, type BusyRange, type DaySlots } from "@/lib/booking/slots";
+import { asBookingCategory } from "@/lib/catalog";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import type { Database } from "@/types/database.types";
 
@@ -17,8 +18,10 @@ import type { Database } from "@/types/database.types";
  * (staff only, when moving a booking) leaves that booking's own time free.
  * `addOnIds` lengthens a package with a set length by its time-adding add-ons
  * (e.g. a photobooth extension); other packages just need their start slot.
- * Days at the bookings-per-day limit are full, except for packages that don't
- * count toward it (services.ignores_day_limit, e.g. the Photobooth).
+ * What blocks a time depends on the package's booking category (mirrors
+ * assert_schedule): a studio package is blocked by studio bookings (and, for
+ * clients, the workshop's hours); an outside event by any day that already has
+ * one; a package with no scheduling rules by nothing.
  */
 export async function loadMonthAvailability(
   supabase: SupabaseClient<Database>,
@@ -37,10 +40,10 @@ export async function loadMonthAvailability(
   const from = addDays(first, -1).toISOString();
   const to = addDays(first, getDaysInMonth(first) + 1).toISOString();
 
-  const [service, settings, hours, blackouts, busy, addOns, fullDays] = await Promise.all([
+  const [service, settings, hours, blackouts, busy, addOns, outsideDays] = await Promise.all([
     supabase
       .from("services")
-      .select("duration_minutes, ignores_day_limit")
+      .select("duration_minutes, booking_category")
       .eq("id", serviceId)
       .maybeSingle(),
     supabase
@@ -57,16 +60,21 @@ export async function loadMonthAvailability(
     addOnIds.length
       ? supabase.from("add_ons").select("extra_minutes, service_ids").in("id", addOnIds)
       : { data: [], error: null },
-    supabase.rpc("get_full_days", {
+    supabase.rpc("get_outside_days", {
       p_from: `${month}-01`,
       p_to: lastDate,
       ...(excludeBookingId ? { p_exclude: excludeBookingId } : {}),
     }),
   ]);
-  for (const r of [service, settings, hours, blackouts, busy, addOns, fullDays])
+  for (const r of [service, settings, hours, blackouts, busy, addOns, outsideDays])
     if (r.error) throw r.error;
   if (!service.data) return null;
   const s = settings.data!;
+  const category = asBookingCategory(service.data.booking_category);
+  const studioBusy: BusyRange[] =
+    category === "studio"
+      ? busy.data!.map((b) => ({ start: new Date(b.start_at), end: new Date(b.blocked_until) }))
+      : [];
   // Staff may put any add-on on a booking; the public only those offered with it.
   const extraMinutes = addOns
     .data!.filter((a) => staff || addOnOffered(a, serviceId))
@@ -93,8 +101,8 @@ export async function loadMonthAvailability(
       end: h.end_time.slice(0, 5),
     })),
     blackouts: blackouts.data!.map((b) => b.date),
-    busy: busy.data!.map((b) => ({ start: new Date(b.start_at), end: new Date(b.blocked_until) })),
-    fullDays: service.data.ignores_day_limit ? [] : (fullDays.data ?? []),
+    busy: studioBusy,
+    fullDays: category === "outside" ? (outsideDays.data ?? []) : [],
     now: new Date(),
   });
 }
@@ -110,7 +118,11 @@ export function toPayload(days: DaySlots[]): MonthSlotsPayload {
   }));
 }
 
-/** Like get_busy_ranges, minus one booking (admin RLS can read bookings directly). */
+/**
+ * Like get_busy_ranges (studio bookings only), minus one booking and without
+ * the workshop's hours: staff may move a booking into them. Admin RLS can read
+ * bookings directly.
+ */
 async function busyExcluding(
   supabase: SupabaseClient<Database>,
   from: string,
@@ -119,7 +131,10 @@ async function busyExcluding(
 ) {
   const { data, error } = await supabase
     .from("bookings")
-    .select("start_at, blocked_until, status, hold_expires_at")
+    .select(
+      "start_at, blocked_until, status, hold_expires_at, service:services!inner(booking_category)",
+    )
+    .eq("service.booking_category", "studio")
     .lt("start_at", to)
     .gt("blocked_until", from)
     .neq("id", excludeId)

@@ -1,7 +1,8 @@
 /** Friendly text for the P0001 codes raised by create_booking / admin_create_booking. */
 export const BOOKING_ERRORS: Record<string, string> = {
   slot_unavailable: "That time was just taken. Please pick another.",
-  day_full: "That day is already fully booked. Please pick another date.",
+  outside_day_full:
+    "Another wedding or prenup is already booked that day. Please pick another date.",
   too_soon: "That time is too soon to book online. Please pick a later time.",
   too_far: "That date is too far ahead to book yet.",
   blackout_date: "We're closed that day. Please pick another date.",
@@ -31,6 +32,18 @@ export const BOOKING_ERRORS: Record<string, string> = {
   booking_has_payments:
     "This booking has real payments, so it can't be deleted. Cancel it instead (and refund if needed).",
 };
+
+/** Staff wording for schedule clashes: says what's in the way. */
+export const STAFF_SCHEDULE_ERRORS: Record<string, string> = {
+  slot_unavailable:
+    "This time overlaps another studio session. Studio sessions run one at a time; pick another time or move the other booking first.",
+  outside_day_full:
+    "Another outside event (wedding or prenup) is already booked that day. Only one outside event per day; pick another date.",
+};
+
+/** A clash with another booking (shown on the time field). */
+export const isScheduleClash = (code: string) =>
+  code === "slot_unavailable" || code === "outside_day_full";
 
 /** The booking error code inside a Postgres error message, if any. */
 export function bookingErrorCode(message: string | undefined): string | null {

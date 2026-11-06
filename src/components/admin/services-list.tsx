@@ -11,7 +11,7 @@ import { moveItem, ReorderButtons } from "@/components/admin/reorder-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { categoryLabel } from "@/lib/catalog";
+import { asBookingCategory, bookingCategoryLabel, categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
 import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
@@ -94,6 +94,7 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate font-heading text-lg font-semibold">{service.name}</h2>
+                <BookingTypeBadge value={service.booking_category} />
                 {!service.is_active && <Badge variant="secondary">Hidden</Badge>}
               </div>
               <p className="text-sm text-muted-foreground">{categoryLabel(service.category)}</p>
@@ -145,5 +146,21 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+const BOOKING_TYPE_TONES = {
+  studio: "border-sage bg-sage/25 text-foreground",
+  outside: "border-terracotta/40 bg-blush text-terracotta-ink",
+  excluded: "border-border bg-muted text-muted-foreground",
+} as const;
+
+/** How the package is scheduled (studio / outside event / no scheduling rules). */
+function BookingTypeBadge({ value }: { value: string }) {
+  const category = asBookingCategory(value);
+  return (
+    <Badge variant="outline" className={BOOKING_TYPE_TONES[category]}>
+      {bookingCategoryLabel(category)}
+    </Badge>
   );
 }

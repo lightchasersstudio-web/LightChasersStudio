@@ -2,7 +2,12 @@
 
 import { z } from "zod";
 
-import { BOOKING_ERRORS, bookingErrorCode } from "@/lib/booking/booking-errors";
+import {
+  BOOKING_ERRORS,
+  bookingErrorCode,
+  isScheduleClash,
+  STAFF_SCHEDULE_ERRORS,
+} from "@/lib/booking/booking-errors";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fail, ok, type ActionResult } from "@/lib/utils/action-result";
 import {
@@ -96,11 +101,10 @@ export async function createAdminBooking(input: unknown): Promise<ActionResult<{
           { allowOutsideHours: ["needs-confirm"] },
         );
       }
-      if (code)
-        return fail(
-          BOOKING_ERRORS[code]!,
-          code === "slot_unavailable" ? { time: [BOOKING_ERRORS[code]!] } : undefined,
-        );
+      if (code) {
+        const message = STAFF_SCHEDULE_ERRORS[code] ?? BOOKING_ERRORS[code]!;
+        return fail(message, isScheduleClash(code) ? { time: [message] } : undefined);
+      }
       throw error;
     }
 
@@ -323,10 +327,8 @@ export async function updateAdminBooking(input: unknown): Promise<ActionResult<{
         );
       }
       if (code) {
-        return fail(
-          BOOKING_ERRORS[code]!,
-          code === "slot_unavailable" ? { time: [BOOKING_ERRORS[code]!] } : undefined,
-        );
+        const message = STAFF_SCHEDULE_ERRORS[code] ?? BOOKING_ERRORS[code]!;
+        return fail(message, isScheduleClash(code) ? { time: [message] } : undefined);
       }
       if (error.code === PG.check) return fail("Please check the client's name and phone.");
       throw error;

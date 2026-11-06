@@ -2,7 +2,7 @@ import { TZDate } from "@date-fns/tz";
 import { z } from "zod";
 
 import { WORKSHOP_MAX_DAYS, workshopDays } from "@/lib/booking/workshop";
-import { PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
+import { BOOKING_CATEGORY_VALUES, PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { centsToPesoInput, pesosToCents } from "@/lib/utils/money";
@@ -64,8 +64,8 @@ export const serviceSchema = z
       .optional()
       .transform((v) => v || null),
     isActive: z.boolean(),
-    // Doesn't count toward (or get refused by) the bookings-per-day limit, e.g. the Photobooth.
-    ignoresDayLimit: z.boolean().default(false),
+    // How it's scheduled (owner decision 2026-11-06); workshops are always "excluded".
+    bookingCategory: z.enum(BOOKING_CATEGORY_VALUES, "Pick how this package is scheduled."),
     // Workshops only: when it runs (Manila time) and how many people can join.
     workshopDate: z.string().trim(),
     workshopStart: z.string().trim(),
@@ -153,7 +153,7 @@ export const serviceSchema = z
       cover_image_path: v.coverImagePath,
       contract: v.contract,
       is_active: v.isActive,
-      ignores_day_limit: v.category !== "workshop" && v.ignoresDayLimit,
+      booking_category: v.category === "workshop" ? "excluded" : v.bookingCategory,
       ...workshop,
       ...pricing,
     };
