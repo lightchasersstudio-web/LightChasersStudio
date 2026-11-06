@@ -14,7 +14,14 @@ import type { z } from "zod";
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { rememberBooking } from "@/components/booking/add-to-calendar";
-import { clearDraft, loadDraft, saveDraft } from "@/components/booking/booking-draft";
+import {
+  clearDraft,
+  forgetClientDetails,
+  loadClientDetails,
+  loadDraft,
+  saveClientDetails,
+  saveDraft,
+} from "@/components/booking/booking-draft";
 import { BookingSummaryPanel } from "@/components/booking/booking-summary-panel";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { StudentIdUpload } from "@/components/booking/student-id-upload";
@@ -187,10 +194,19 @@ export function BookingWizard({
   });
 
   // Bring back what they typed last time (this browser only), then keep it saved as they go.
-  const [restored, setRestored] = useState(false);
+  // "draft" = a half-finished booking came back; "client" = a returning client's details.
+  const [restored, setRestored] = useState<false | "draft" | "client">(false);
   useEffect(() => {
     const draft = loadDraft();
-    if (!draft) return;
+    if (!draft) {
+      // No half-finished booking: fill in a returning client's own details.
+      const client = loadClientDetails();
+      if (!client) return;
+      form.reset({ ...form.getValues(), ...client });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRestored("client");
+      return;
+    }
     form.reset({
       ...form.getValues(),
       ...draft,
@@ -205,8 +221,7 @@ export function BookingWizard({
       ...(workshop && { startAt: workshop.startAt }),
     });
     // Browser storage can only be read after hydration, so this can't be initial state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRestored(true);
+    setRestored("draft");
     // Once, on first load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -220,6 +235,7 @@ export function BookingWizard({
 
   function startOver() {
     clearDraft();
+    if (restored === "client") forgetClientDetails();
     form.reset(emptyValues());
     setRestored(false);
     goTo(0);
@@ -408,6 +424,8 @@ export function BookingWizard({
       const result = await submitBooking(form.getValues());
       if (result.ok) {
         clearDraft();
+        // Next time, this client's own details are filled in for them.
+        saveClientDetails(form.getValues());
         if (service) {
           rememberBooking({
             reference: result.data.reference,
@@ -465,11 +483,24 @@ export function BookingWizard({
               role="status"
               className="flex animate-in flex-wrap items-center justify-between gap-3 rounded-2xl border border-sage bg-secondary px-4 py-3 text-sm text-secondary-foreground duration-300 fade-in"
             >
-              <span>
-                <strong>Welcome back!</strong> We kept the details you entered last time.
-              </span>
+              {restored === "client" ? (
+                <span>
+                  <strong>
+                    Welcome back
+                    {form.getValues("fullName")
+                      ? `, ${form.getValues("fullName").split(" ")[0]}`
+                      : ""}
+                    !
+                  </strong>{" "}
+                  We&apos;ve filled in your details from last time.
+                </span>
+              ) : (
+                <span>
+                  <strong>Welcome back!</strong> We kept the details you entered last time.
+                </span>
+              )}
               <Button type="button" variant="link" className="h-auto px-0" onClick={startOver}>
-                Start over
+                {restored === "client" ? "Not you? Clear" : "Start over"}
               </Button>
             </div>
           )}

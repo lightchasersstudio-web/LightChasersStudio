@@ -482,3 +482,39 @@ export async function requestReschedule(
     return fail("Something went wrong. Please try again.");
   }
 }
+
+export type PaymentState = "waiting" | "paid" | "received" | "closed";
+
+/**
+ * /book/done: has the payment come through yet? Polled for a few minutes after
+ * PayMongo sends the client back. Needs the reference and the booking email
+ * (kept in that browser tab only); answers with no personal details.
+ */
+export async function bookingPaymentStatus(
+  input: unknown,
+): Promise<ActionResult<{ state: PaymentState; paidCents: number }>> {
+  try {
+    const parsed = lookupSchema.safeParse(input);
+    if (!parsed.success) return fail("Invalid request.");
+    if (!(await rateLimit("pay-status", 90, 600))) return fail("Too many requests.");
+    const record = await loadBookingRecord({ reference: parsed.data.reference });
+    if (!record || record.email?.toLowerCase() !== parsed.data.email) {
+      return fail("Booking not found.");
+    }
+    const paidCents = record.summary.paidCents;
+    const state: PaymentState =
+      paidCents > 0
+        ? "paid"
+        : record.status === "pending_payment"
+          ? "waiting"
+          : record.status === "pending" ||
+              record.status === "confirmed" ||
+              record.status === "completed"
+            ? "received"
+            : "closed";
+    return ok({ state, paidCents });
+  } catch (error) {
+    console.error("[bookingPaymentStatus]", error);
+    return fail("Something went wrong.");
+  }
+}

@@ -58,3 +58,41 @@ export function clearDraft() {
     // ignore
   }
 }
+
+/**
+ * A returning client's own details (name, email, number, how to reach them),
+ * kept in this browser after they book so the next booking starts filled in.
+ * "Not you?" on the form forgets them.
+ */
+const CLIENT_KEY = "lcs:client";
+const CLIENT_FIELDS = ["fullName", "email", "phone", "preferredContact", "messenger"] as const;
+export type ClientDetails = Partial<Pick<PublicBookingInput, (typeof CLIENT_FIELDS)[number]>>;
+
+export function saveClientDetails(values: Partial<PublicBookingInput>) {
+  const details: ClientDetails = {};
+  for (const field of CLIENT_FIELDS) {
+    if (values[field] !== undefined) Object.assign(details, { [field]: values[field] });
+  }
+  try {
+    localStorage.setItem(CLIENT_KEY, JSON.stringify(details));
+  } catch {
+    // Storage blocked: they just type their details again next time.
+  }
+}
+
+export function loadClientDetails(): ClientDetails | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CLIENT_KEY) ?? "null") as ClientDetails | null;
+    return saved?.fullName && saved.email ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+export function forgetClientDetails() {
+  try {
+    localStorage.removeItem(CLIENT_KEY);
+  } catch {
+    // ignore
+  }
+}

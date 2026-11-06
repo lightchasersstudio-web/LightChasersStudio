@@ -42,7 +42,14 @@ export function StatusActions({
   const move = (to: Move) =>
     new Promise<boolean>((resolve) =>
       start(async () =>
-        resolve(handleResult(await setBookingStatus({ id, status: to }), MESSAGES[to])),
+        resolve(
+          handleResult(
+            await setBookingStatus({ id, status: to }),
+            to === "completed" && hasEmail
+              ? "Marked as completed. The client gets a thank-you email asking for a review."
+              : MESSAGES[to],
+          ),
+        ),
       ),
     );
   const emailNote = hasEmail ? " The client will get an email." : "";

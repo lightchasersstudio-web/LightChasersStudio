@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 import { AddToCalendar, useRememberedBooking } from "@/components/booking/add-to-calendar";
 import { drawBookingPass } from "@/components/booking/booking-pass-image";
+import { PaymentStatus } from "@/components/booking/payment-status";
 import { saveBookingOnDevice } from "@/components/booking/saved-bookings";
 import { Sparkle } from "@/components/shared/sparkle";
 import {
@@ -183,7 +184,13 @@ export function BookingDone({ reference, studioName }: { reference: string; stud
   }
 
   return (
-    <div className="mt-10 space-y-12 text-left">
+    <div className="space-y-12 text-left">
+      {/* Turns into "Payment received" once PayMongo confirms (needs this tab's booking email). */}
+      {event?.email ? (
+        <PaymentStatus reference={reference} email={event.email} />
+      ) : (
+        <div className="mt-10" />
+      )}
       {/* Booking pass */}
       <article
         aria-label={`Booking ${reference}`}

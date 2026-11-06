@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isGoogleMapsUrl, messengerUrl, studioMapsUrl } from "./social";
+import { facebookReviewsUrl, isGoogleMapsUrl, messengerUrl, studioMapsUrl } from "./social";
 
 describe("messengerUrl", () => {
   it("turns a Facebook page link into a Messenger chat link", () => {
@@ -56,5 +56,15 @@ describe("Google Maps links", () => {
     expect(studioMapsUrl({ ...s, maps_url: "https://maps.app.goo.gl/x" })).toBe(
       "https://maps.app.goo.gl/x",
     );
+  });
+});
+
+describe("facebookReviewsUrl", () => {
+  it("points to the page's reviews, or nothing for links that aren't a page", () => {
+    expect(facebookReviewsUrl("https://www.facebook.com/lightchasersstudio/")).toBe(
+      "https://www.facebook.com/lightchasersstudio/reviews",
+    );
+    expect(facebookReviewsUrl("https://www.facebook.com/profile.php?id=1")).toBeNull();
+    expect(facebookReviewsUrl(null)).toBeNull();
   });
 });
