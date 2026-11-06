@@ -33,6 +33,7 @@ export function monthSlots({
   hours,
   blackouts,
   busy,
+  fullDays = [],
   now,
 }: {
   /** "YYYY-MM" in the business timezone. */
@@ -42,6 +43,8 @@ export function monthSlots({
   /** "YYYY-MM-DD" */
   blackouts: string[];
   busy: BusyRange[];
+  /** "YYYY-MM-DD" days already at the bookings-per-day limit (none for packages that don't count). */
+  fullDays?: string[];
   now: Date;
 }): DaySlots[] {
   const [year, monthIndex] = month.split("-").map(Number) as [number, number];
@@ -63,7 +66,9 @@ export function monthSlots({
         const t = start.getTime();
         return t >= earliest && t <= latest;
       });
+    const dayFull = fullDays.includes(date);
     const slots = candidates.filter((start) => {
+      if (dayFull) return false;
       const blockedUntil = addMinutes(start, rules.durationMinutes + rules.bufferMinutes);
       return occupancyAt(busy, start, blockedUntil) < rules.capacity;
     });

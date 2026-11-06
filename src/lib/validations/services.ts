@@ -64,6 +64,8 @@ export const serviceSchema = z
       .optional()
       .transform((v) => v || null),
     isActive: z.boolean(),
+    // Doesn't count toward (or get refused by) the bookings-per-day limit, e.g. the Photobooth.
+    ignoresDayLimit: z.boolean().default(false),
     // Workshops only: when it runs (Manila time) and how many people can join.
     workshopDate: z.string().trim(),
     workshopStart: z.string().trim(),
@@ -151,6 +153,7 @@ export const serviceSchema = z
       cover_image_path: v.coverImagePath,
       contract: v.contract,
       is_active: v.isActive,
+      ignores_day_limit: v.category !== "workshop" && v.ignoresDayLimit,
       ...workshop,
       ...pricing,
     };

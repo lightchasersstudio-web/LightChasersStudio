@@ -41,6 +41,14 @@ function day(date: string, opts: Partial<Parameters<typeof monthSlots>[number]> 
 }
 
 describe("monthSlots", () => {
+  it("shows a day at the bookings-per-day limit as fully booked", () => {
+    const full = day("2026-11-03", { fullDays: ["2026-11-03"] });
+    expect(full.status).toBe("full");
+    expect(full.slots).toEqual([]);
+    // Other days are unaffected.
+    expect(day("2026-11-04", { fullDays: ["2026-11-03"] }).status).toBe("open");
+  });
+
   it("lists every day of the month by its Manila date", () => {
     const days = monthSlots({
       month: "2026-11",
