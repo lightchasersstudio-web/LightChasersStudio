@@ -5,16 +5,19 @@ import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useEffect, useState } from "react";
 
 import { MessengerIcon } from "@/components/shared/messenger-icon";
+import { cn } from "@/lib/utils";
 
 const GREETED_KEY = "lcs:messenger-greeted";
 
 /**
  * Floating "chat on Messenger" bubble on every public page. A small greeting
  * pops up once per visit after a few seconds. On phones it sits above the
- * "Book now" bar so the two never overlap.
+ * "Book now" bar so the two never overlap, and steps aside while the client is
+ * typing in a form (it would cover the field and the keyboard).
  */
 export function MessengerButton({ href, businessName }: { href: string; businessName: string }) {
   const [greeting, setGreeting] = useState(false);
+  const typing = useTyping();
 
   useEffect(() => {
     let greeted = false;
@@ -23,7 +26,8 @@ export function MessengerButton({ href, businessName }: { href: string; business
     } catch {
       // Storage blocked (private mode): just greet.
     }
-    if (greeted) return;
+    // Phones: no pop-up greeting, it would sit on top of the page (and the booking form).
+    if (greeted || !window.matchMedia("(min-width: 768px)").matches) return;
     const id = window.setTimeout(() => setGreeting(true), 6000);
     return () => window.clearTimeout(id);
   }, []);
@@ -39,7 +43,12 @@ export function MessengerButton({ href, businessName }: { href: string; business
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="fixed right-4 bottom-[5.25rem] z-30 flex flex-col items-end gap-3 md:right-6 md:bottom-6">
+      <div
+        className={cn(
+          "fixed right-4 bottom-[5.25rem] z-30 flex flex-col items-end gap-3 transition-opacity md:right-6 md:bottom-6",
+          typing && "max-md:pointer-events-none max-md:opacity-0",
+        )}
+      >
         <AnimatePresence>
           {greeting && (
             <motion.div
@@ -90,4 +99,22 @@ export function MessengerButton({ href, businessName }: { href: string; business
       </div>
     </MotionConfig>
   );
+}
+
+/** True while a text field, select or text area has focus. */
+function useTyping() {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const isField = (el: EventTarget | null) =>
+      el instanceof HTMLElement && el.matches("input, textarea, select, [contenteditable]");
+    const onIn = (e: FocusEvent) => setTyping(isField(e.target));
+    const onOut = (e: FocusEvent) => setTyping(isField(e.relatedTarget));
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => {
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+    };
+  }, []);
+  return typing;
 }

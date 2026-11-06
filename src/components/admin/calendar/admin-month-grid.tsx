@@ -33,6 +33,8 @@ export function AdminMonthGrid({
   const [y, m] = month.split("-").map(Number) as [number, number];
   const first = new TZDate(y, m - 1, 1, BUSINESS_TZ);
   const leading = (first.getDay() + 6) % 7;
+  // Blank cells after the last day so the final week is a full row.
+  const trailing = (7 - ((leading + getDaysInMonth(first)) % 7)) % 7;
   const byDay = Map.groupBy(bookings, (b) => manilaDate(b.startAt));
   const blocked = new Map(context.blackouts.map((b) => [b.date, b.reason]));
   const openDays = new Set(context.hours.map((h) => h.day));
@@ -117,6 +119,9 @@ export function AdminMonthGrid({
             </li>
           );
         })}
+        {Array.from({ length: trailing }, (_, i) => (
+          <li key={`end-${i}`} aria-hidden className="border-r border-b bg-muted/20" />
+        ))}
       </ol>
     </div>
   );

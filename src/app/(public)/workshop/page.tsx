@@ -146,7 +146,7 @@ async function Workshop() {
         )}
       </div>
 
-      <div className="mt-6 rounded-[2rem] border bg-background p-5 shadow-sm sm:p-8">
+      <div className="mt-6 rounded-[2rem] border bg-background px-3.5 py-5 shadow-sm sm:p-8">
         {opening.open && workshop.workshop_starts_at && workshop.workshop_ends_at ? (
           <BookingWizard
             workshop={{

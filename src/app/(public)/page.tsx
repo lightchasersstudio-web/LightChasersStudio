@@ -332,7 +332,11 @@ export default async function HomePage() {
           </RevealList>
         </div>
         <Reveal className="mt-8 text-center">
-          <Button asChild variant="link" className="text-terracotta-ink">
+          <Button
+            asChild
+            variant="link"
+            className="h-auto max-w-full shrink text-center whitespace-normal text-terracotta-ink"
+          >
             <Link href="/faq">
               Questions about deposits or payment? Read our FAQ
               <ArrowRightIcon aria-hidden />

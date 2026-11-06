@@ -1016,6 +1016,7 @@ export function BookingWizard({
           <Button
             type="button"
             variant="ghost"
+            className="max-sm:px-2"
             onClick={() => goTo(step - 1)}
             disabled={submitting}
           >
@@ -1028,7 +1029,13 @@ export function BookingWizard({
         {last ? (
           // Distinct keys: React must not turn the clicked "Continue" button into this
           // submit button mid-click, or the form submits and skips the Review step.
-          <Button key="submit" type="submit" size="lg" disabled={submitting}>
+          <Button
+            key="submit"
+            type="submit"
+            size="lg"
+            className="max-sm:flex-1"
+            disabled={submitting}
+          >
             {submitting && <Loader2Icon className="animate-spin" aria-hidden />}
             {deposit <= 0
               ? "Request booking"
@@ -1037,7 +1044,7 @@ export function BookingWizard({
                 : `Pay ${formatPeso(deposit)} deposit`}
           </Button>
         ) : (
-          <Button key="continue" type="button" size="lg" onClick={next}>
+          <Button key="continue" type="button" size="lg" className="max-sm:flex-1" onClick={next}>
             Continue
             <ArrowRightIcon aria-hidden />
           </Button>
