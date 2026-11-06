@@ -18,7 +18,7 @@ export function ExportBookings() {
       aria-labelledby="export"
       className="mb-6 flex flex-wrap items-end gap-3 rounded-3xl border bg-card p-5"
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-64">
         <h2 id="export" className="text-xl font-semibold">
           Export bookings
         </h2>

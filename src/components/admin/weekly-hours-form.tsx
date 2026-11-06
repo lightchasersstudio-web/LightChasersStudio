@@ -113,7 +113,7 @@ function DayRow({ day, form }: { day: number; form: Form }) {
                   <Input
                     type="time"
                     aria-label={`${name} opens`}
-                    className="w-full sm:w-36"
+                    className="flex-1 sm:w-36 sm:flex-none"
                     aria-invalid={Boolean(errs?.start)}
                     {...form.register(`days.${day}.windows.${i}.start`)}
                   />
@@ -123,7 +123,7 @@ function DayRow({ day, form }: { day: number; form: Form }) {
                   <Input
                     type="time"
                     aria-label={`${name} closes`}
-                    className="w-full sm:w-36"
+                    className="flex-1 sm:w-36 sm:flex-none"
                     aria-invalid={Boolean(errs?.end)}
                     {...form.register(`days.${day}.windows.${i}.end`)}
                   />

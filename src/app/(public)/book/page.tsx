@@ -25,7 +25,7 @@ export default function BookPage({ searchParams }: PageProps<"/book">) {
           title="Book your session"
           description="It takes about two minutes. Only free times are shown."
         />
-        <div className="mt-10 rounded-[2rem] border bg-background p-5 shadow-sm sm:p-8">
+        <div className="mt-10 rounded-[2rem] border bg-background px-3.5 py-5 shadow-sm sm:p-8">
           {/* searchParams (?service=slug) is request data, so it's read inside Suspense. */}
           <Suspense fallback={<WizardSkeleton />}>
             <Wizard searchParams={searchParams} />

@@ -40,16 +40,16 @@ export function BookingRows({ rows }: { rows: BookingRow[] }) {
                   <span className="font-semibold">{format(when, "EEE d MMM yyyy")}</span>
                   <span className="md:block"> · {format(when, "h:mm a")}</span>
                 </span>
-                <span className="min-w-0">
+                <span className="col-start-1 row-start-2 min-w-0 md:col-start-auto md:row-start-auto">
                   <span className="block truncate font-semibold">{b.contactName}</span>
                   <span className="block truncate text-sm text-muted-foreground">
                     {b.reference}
                   </span>
                 </span>
-                <span className="row-start-3 min-w-0 truncate text-sm md:row-start-auto">
+                <span className="col-start-1 row-start-3 min-w-0 truncate text-sm md:col-start-auto md:row-start-auto">
                   {b.serviceName}
                 </span>
-                <span className="row-start-2 text-right md:row-start-auto">
+                <span className="col-start-2 row-start-2 text-right md:col-start-auto md:row-start-auto">
                   <span className="block font-semibold tabular-nums">
                     {formatPeso(b.totalCents)}
                   </span>
@@ -61,7 +61,7 @@ export function BookingRows({ rows }: { rows: BookingRow[] }) {
                         : "paid in full"}
                   </span>
                 </span>
-                <span className="row-start-3 flex flex-col items-end gap-1 md:row-start-auto md:items-start">
+                <span className="col-start-2 row-start-3 flex flex-col items-end gap-1 md:col-start-auto md:row-start-auto md:items-start">
                   <StatusBadge status={b.status} />
                   {b.needsRefundReview && (
                     <span className="text-xs font-semibold text-terracotta-ink">Check payment</span>

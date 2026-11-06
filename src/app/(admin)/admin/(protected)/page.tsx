@@ -137,7 +137,7 @@ async function DashboardBody() {
         ))}
       </RevealList>
 
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel
           title="Up next"
           action={
@@ -251,15 +251,22 @@ function BookingList({ bookings, showDay }: { bookings: DashboardBooking[]; show
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold">{b.contactName}</span>
               <span className="block truncate text-sm text-muted-foreground">{b.serviceName}</span>
+              {/* Phones: the status sits under the name so the name gets the full width. */}
+              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
+                <StatusBadge status={b.status} />
+                {b.needsRefundReview && (
+                  <span className="text-xs font-semibold text-terracotta-ink">Check payment</span>
+                )}
+              </span>
             </span>
-            <span className="flex shrink-0 flex-col items-end gap-1">
+            <span className="hidden shrink-0 flex-col items-end gap-1 sm:flex">
               <StatusBadge status={b.status} />
               {b.needsRefundReview && (
                 <span className="text-xs font-semibold text-terracotta-ink">Check payment</span>
               )}
             </span>
             <ArrowRightIcon
-              className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5"
+              className="hidden size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 sm:block"
               aria-hidden
             />
           </Link>
@@ -305,7 +312,7 @@ function DashboardSkeleton() {
           <Skeleton key={i} className="h-36 rounded-3xl" />
         ))}
       </div>
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Skeleton className="h-80 rounded-3xl" />
         <Skeleton className="h-80 rounded-3xl" />
       </div>
