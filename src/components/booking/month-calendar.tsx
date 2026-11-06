@@ -5,20 +5,11 @@ import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { useRef } from "react";
 
 import { Button } from "@/components/ui/button";
-import type { ClosedReason, DayStatus } from "@/lib/booking/slots";
+import type { DayStatus } from "@/lib/booking/slots";
 import { cn } from "@/lib/utils";
 import { shiftMonth, tzDate } from "@/lib/utils/business-date";
 
-export type CalendarDay = { date: string; status: DayStatus; count: number; reason?: ClosedReason };
-
-/** What a greyed-out day means, in the client's words. */
-const CLOSED_REASONS: Record<ClosedReason, string> = {
-  past: "already passed",
-  day_off: "studio closed",
-  blocked: "not available",
-  too_soon: "too soon to book online",
-  too_far: "not open for booking yet",
-};
+export type CalendarDay = { date: string; status: DayStatus; count: number };
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -133,7 +124,6 @@ export function MonthCalendar({
               disabled={!pickable}
               aria-pressed={selected}
               aria-label={`${format(tzDate(date), "EEEE, d MMMM")}, ${describe(day)}`}
-              title={pickable ? undefined : describe(day)}
               onClick={() => onSelectDate(date)}
               className={cn(
                 "relative flex aspect-square min-h-11 flex-col items-center justify-center rounded-2xl text-sm font-semibold transition-colors",
@@ -144,9 +134,6 @@ export function MonthCalendar({
                 status === "few" && "after:bg-terracotta",
                 status === "full" && "text-muted-foreground/60 line-through",
                 status === "closed" && "text-muted-foreground/45",
-                // Not bookable online yet (or any more), as opposed to a day off.
-                (day?.reason === "too_soon" || day?.reason === "too_far") &&
-                  "border border-dashed border-muted-foreground/30",
                 selected &&
                   "border-primary bg-primary text-primary-foreground after:bg-primary-foreground hover:border-primary",
               )}
@@ -165,27 +152,13 @@ export function MonthCalendar({
           <span className="size-2 rounded-full bg-terracotta" aria-hidden /> Few times left
         </li>
         <li className="line-through">Fully booked</li>
-        <li className="flex items-center gap-1.5">
-          <span
-            className="size-3 rounded border border-dashed border-muted-foreground/50"
-            aria-hidden
-          />{" "}
-          Too soon or too far ahead to book online
-        </li>
-        <li className="text-muted-foreground/60">Faded: studio closed</li>
       </ul>
-      {days?.some((d) => d.reason === "too_soon") && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Need a date sooner than this? Message us and we&apos;ll see what we can do.
-        </p>
-      )}
     </div>
   );
 }
 
 function describe(day: CalendarDay | undefined): string {
-  if (!day || day.status === "closed")
-    return day?.reason ? CLOSED_REASONS[day.reason] : "not available";
+  if (!day || day.status === "closed") return "not available";
   if (day.status === "full") return "fully booked";
   return `${day.count} ${day.count === 1 ? "time" : "times"} available`;
 }

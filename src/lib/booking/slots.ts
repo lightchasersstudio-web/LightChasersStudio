@@ -23,9 +23,7 @@ export type WeeklyWindow = { day: number; start: string; end: string };
 /** A booking's blocked time: start until end + buffer. */
 export type BusyRange = { start: Date; end: Date };
 export type DayStatus = "open" | "few" | "full" | "closed";
-/** Why a "closed" day can't be booked, so the calendar can say so. */
-export type ClosedReason = "past" | "day_off" | "blocked" | "too_soon" | "too_far";
-export type DaySlots = { date: string; slots: Date[]; status: DayStatus; reason?: ClosedReason };
+export type DaySlots = { date: string; slots: Date[]; status: DayStatus };
 
 const FEW_LEFT = 2;
 
@@ -57,14 +55,14 @@ export function monthSlots({
   return Array.from({ length: getDaysInMonth(first) }, (_, i) => {
     const day = new TZDate(year, monthIndex - 1, i + 1, BUSINESS_TZ);
     const date = isoDate(day);
-    const blocked = blackouts.includes(date);
-    const windows = blocked ? [] : hours.filter((h) => h.day === day.getDay());
+    const windows = blackouts.includes(date) ? [] : hours.filter((h) => h.day === day.getDay());
 
-    const all = windows.flatMap((w) => startsInWindow(day, w, rules));
-    const candidates = all.filter((start) => {
-      const t = start.getTime();
-      return t >= earliest && t <= latest;
-    });
+    const candidates = windows
+      .flatMap((w) => startsInWindow(day, w, rules))
+      .filter((start) => {
+        const t = start.getTime();
+        return t >= earliest && t <= latest;
+      });
     const slots = candidates.filter((start) => {
       const blockedUntil = addMinutes(start, rules.durationMinutes + rules.bufferMinutes);
       return occupancyAt(busy, start, blockedUntil) < rules.capacity;
@@ -78,21 +76,7 @@ export function monthSlots({
           : slots.length <= FEW_LEFT
             ? "few"
             : "open";
-    if (status !== "closed") return { date, slots, status };
-    // Closed: say why (a day off, a blocked date, or outside the booking window).
-    const lastStart = all.at(-1)?.getTime();
-    const reason: ClosedReason = blocked
-      ? "blocked"
-      : lastStart === undefined
-        ? day.getTime() + 24 * 3_600_000 <= now.getTime()
-          ? "past"
-          : "day_off"
-        : lastStart < now.getTime()
-          ? "past"
-          : lastStart < earliest
-            ? "too_soon"
-            : "too_far";
-    return { date, slots, status, reason };
+    return { date, slots, status };
   });
 }
 

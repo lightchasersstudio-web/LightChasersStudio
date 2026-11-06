@@ -87,18 +87,12 @@ export async function loadMonthAvailability(
 }
 
 /** Wire format for the calendar: ISO strings instead of Dates. */
-export type MonthSlotsPayload = {
-  date: string;
-  status: DaySlots["status"];
-  reason?: DaySlots["reason"];
-  slots: string[];
-}[];
+export type MonthSlotsPayload = { date: string; status: DaySlots["status"]; slots: string[] }[];
 
 export function toPayload(days: DaySlots[]): MonthSlotsPayload {
   return days.map((d) => ({
     date: d.date,
     status: d.status,
-    reason: d.reason,
     slots: d.slots.map((s) => s.toISOString()),
   }));
 }
