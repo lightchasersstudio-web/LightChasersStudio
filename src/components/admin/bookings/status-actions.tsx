@@ -1,8 +1,12 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
 import { useState, useTransition } from "react";
+import { useForm } from "react-hook-form";
+import type { z } from "zod";
 
+import { TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import {
   AlertDialog,
@@ -16,7 +20,18 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import type { BookingStatus } from "@/lib/booking/status";
+import { bookingStatusSchema, type BookingStatusInput } from "@/lib/validations/admin-booking";
 import { markRefundReviewed, setBookingStatus } from "@/server/actions/admin-bookings";
 
 type Move = "confirmed" | "declined" | "completed" | "cancelled";
@@ -39,17 +54,10 @@ export function StatusActions({
   hasEmail: boolean;
 }) {
   const [pending, start] = useTransition();
-  const move = (to: Move) =>
+  const move = (to: Exclude<Move, "completed">) =>
     new Promise<boolean>((resolve) =>
       start(async () =>
-        resolve(
-          handleResult(
-            await setBookingStatus({ id, status: to }),
-            to === "completed" && hasEmail
-              ? "Marked as completed. The client gets a thank-you email asking for a review."
-              : MESSAGES[to],
-          ),
-        ),
+        resolve(handleResult(await setBookingStatus({ id, status: to }), MESSAGES[to])),
       ),
     );
   const emailNote = hasEmail ? " The client will get an email." : "";
@@ -70,16 +78,7 @@ export function StatusActions({
           />
         </>
       )}
-      {status === "confirmed" && (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={pending}
-          onClick={() => move("completed")}
-        >
-          Mark completed
-        </Button>
-      )}
+      {status === "confirmed" && <CompleteDialog id={id} hasEmail={hasEmail} />}
       {["pending_payment", "pending", "confirmed"].includes(status) && (
         <ConfirmMove
           label="Cancel booking"
@@ -89,6 +88,80 @@ export function StatusActions({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * "Mark completed" with an optional link to the photos (e.g. Google Drive). With
+ * a link, the client's thank-you email says their photos are ready and links them.
+ */
+function CompleteDialog({ id, hasEmail }: { id: string; hasEmail: boolean }) {
+  const [open, setOpen] = useState(false);
+  const form = useForm<BookingStatusInput, unknown, z.output<typeof bookingStatusSchema>>({
+    resolver: zodResolver(bookingStatusSchema),
+    defaultValues: { id, status: "completed", photosUrl: "" },
+  });
+
+  async function onSubmit(values: z.output<typeof bookingStatusSchema>) {
+    const message = !hasEmail
+      ? MESSAGES.completed
+      : values.photosUrl
+        ? "Marked as completed. The client gets an email saying their photos are ready."
+        : "Marked as completed. The client gets a thank-you email asking for a review.";
+    if (handleResult(await setBookingStatus(values), message, form)) setOpen(false);
+  }
+
+  const submitting = form.formState.isSubmitting;
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!submitting) setOpen(next);
+        if (next) form.reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline">
+          Mark completed
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-5">
+          <DialogHeader>
+            <DialogTitle>Mark this booking completed?</DialogTitle>
+            <DialogDescription>
+              {hasEmail
+                ? "Paste the link to their photos and the client's email will say their photos are ready, with a button to open them. Leave it empty to send just the thank-you email."
+                : "This booking has no email address, so nothing is sent. Share the photos through Messenger instead (Quick replies → Photos are ready)."}
+            </DialogDescription>
+          </DialogHeader>
+          {hasEmail && (
+            <TextField
+              control={form.control}
+              name="photosUrl"
+              label="Link to the photos (optional)"
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              placeholder="https://drive.google.com/…"
+              maxLength={300}
+              description="Check the folder is shared as “Anyone with the link” so the client can open it."
+            />
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={submitting}>
+                Not yet
+              </Button>
+            </DialogClose>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2Icon className="animate-spin" aria-hidden />}
+              Mark completed
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

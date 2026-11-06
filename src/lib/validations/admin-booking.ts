@@ -7,6 +7,7 @@ import {
   dateString,
   intString,
   optionalText,
+  optionalUrl,
   pesoString,
   timeString,
 } from "@/lib/validations/shared";
@@ -177,7 +178,10 @@ export const bookingIdSchema = z.object({ id: z.uuid() });
 export const bookingStatusSchema = z.object({
   id: z.uuid(),
   status: z.enum(["confirmed", "declined", "completed", "cancelled"]),
+  /** Marking completed: link to the client's photos (e.g. Google Drive), sent in the thank-you email. */
+  photosUrl: optionalUrl.optional(),
 });
+export type BookingStatusInput = z.input<typeof bookingStatusSchema>;
 
 export const recordPaymentSchema = z
   .object({

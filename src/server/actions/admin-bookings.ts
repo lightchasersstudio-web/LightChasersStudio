@@ -117,7 +117,7 @@ export async function createAdminBooking(input: unknown): Promise<ActionResult<{
 
 /** Confirm / decline / complete / cancel. The DB trigger rejects moves that don't make sense. */
 export async function setBookingStatus(input: unknown): Promise<ActionResult> {
-  return adminAction(bookingStatusSchema, input, async ({ id, status }, ctx) => {
+  return adminAction(bookingStatusSchema, input, async ({ id, status, photosUrl }, ctx) => {
     const { data, error } = await ctx.supabase
       .from("bookings")
       .update({ status })
@@ -128,10 +128,17 @@ export async function setBookingStatus(input: unknown): Promise<ActionResult> {
     if (error) throw error;
     if (!data) return fail("Booking not found.");
 
-    await audit(ctx, `booking.${status}`, "booking", id);
+    const photos = status === "completed" ? (photosUrl ?? null) : null;
+    await audit(
+      ctx,
+      `booking.${status}`,
+      "booking",
+      id,
+      photos ? { photos_url: photos } : undefined,
+    );
     const record = await loadBookingRecord({ id });
     if (record && status === "confirmed") await notifyBookingConfirmed(record);
-    if (record && status === "completed") await notifyBookingCompleted(record);
+    if (record && status === "completed") await notifyBookingCompleted(record, photos);
     if (record && (status === "declined" || status === "cancelled")) {
       await notifyBookingClosed(record, status);
     }

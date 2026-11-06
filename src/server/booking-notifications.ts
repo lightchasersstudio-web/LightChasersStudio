@@ -92,7 +92,8 @@ export async function sendShootReminder(b: BookingRecord) {
 }
 
 /** Marked completed: thank the client and ask for a Facebook review. */
-export async function notifyBookingCompleted(b: BookingRecord) {
+/** Thank-you email after the shoot; with a photos link it also says the photos are ready. */
+export async function notifyBookingCompleted(b: BookingRecord, photosUrl: string | null = null) {
   if (!b.email) return;
   const { data } = await createAdminClient()
     .from("business_settings")
@@ -100,6 +101,11 @@ export async function notifyBookingCompleted(b: BookingRecord) {
     .single();
   await sendEmail({
     to: b.email,
-    ...thankYouReviewEmail(b.summary, siteUrl(), facebookReviewsUrl(data?.facebook_url ?? null)),
+    ...thankYouReviewEmail(
+      b.summary,
+      siteUrl(),
+      facebookReviewsUrl(data?.facebook_url ?? null),
+      photosUrl,
+    ),
   });
 }
