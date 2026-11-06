@@ -85,7 +85,14 @@ export function SlotPicker({
     <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
       <MonthCalendar
         month={month}
-        days={days?.map((d) => ({ date: d.date, status: d.status, count: d.slots.length })) ?? null}
+        days={
+          days?.map((d) => ({
+            date: d.date,
+            status: d.status,
+            reason: d.reason,
+            count: d.slots.length,
+          })) ?? null
+        }
         selectedDate={date}
         onSelectDate={(d) => {
           setDate(d);

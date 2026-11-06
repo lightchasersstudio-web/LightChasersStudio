@@ -17,6 +17,7 @@ import { PackageCompare } from "@/components/public/package-compare";
 import { ReviewsSection } from "@/components/public/reviews-section";
 import { PhotoPolaroid, PlaceholderPolaroid } from "@/components/public/photo-polaroid";
 import { bookHref } from "@/components/public/site-nav";
+import { NextAvailable } from "@/components/public/next-available";
 import { ShareButton } from "@/components/shared/share-button";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
@@ -160,6 +161,9 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
                 </div>
               )}
             </dl>
+            {service.category !== "workshop" && (
+              <NextAvailable serviceId={service.id} bookHref={bookHref(service.slug)} />
+            )}
             {depositCents > 0 && (
               <p className="mt-3 flex items-start gap-2 rounded-2xl bg-accent p-4 text-sm text-accent-foreground">
                 <WalletIcon className="mt-0.5 size-4 shrink-0" aria-hidden />

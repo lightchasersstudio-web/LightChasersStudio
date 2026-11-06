@@ -303,3 +303,27 @@ export function shootReminderEmail(b: BookingSummary, siteUrl: string): Content 
     note,
   );
 }
+
+/**
+ * After the studio marks a booking completed: a thank-you, with a button to
+ * leave a review on the studio's Facebook page (or to their booking without one).
+ */
+export function thankYouReviewEmail(
+  b: BookingSummary,
+  siteUrl: string,
+  reviewUrl: string | null,
+): Content {
+  const what = b.people ? "workshop" : "session";
+  const intro = `thank you for choosing ${b.studioName} for your ${what}. We hope you loved it as much as we did!`;
+  const note = reviewUrl
+    ? "If you have a minute, a short review on our Facebook page means a lot to us and helps others find us."
+    : "We'd love to hear how it went. Just reply to this email.";
+  const link = reviewUrl
+    ? { href: reviewUrl, label: "Leave us a review" }
+    : { href: lookupUrl(siteUrl, b.reference), label: "View your booking" };
+  return {
+    subject: `Thank you from ${b.studioName}`,
+    html: layout(siteUrl, b, "Thank you!", intro, link, false, note),
+    text: `Hi ${b.contactName}, ${intro}\n\n${note}${reviewUrl ? `\n\nLeave a review: ${reviewUrl}` : ""}`,
+  };
+}

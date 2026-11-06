@@ -123,3 +123,20 @@ describe("occupancyAt", () => {
     expect(occupancyAt(overlapping, nov(3, 12, 0), nov(3, 13, 0))).toBe(0);
   });
 });
+
+describe("why a day is closed", () => {
+  it("names the reason so the calendar can explain greyed-out days", () => {
+    // Sun 1 Nov is inside the 48h notice from Sat 31 Oct 08:00.
+    expect(day("2026-11-01").reason).toBe("too_soon");
+    expect(day("2026-11-10", { blackouts: ["2026-11-10"] }).reason).toBe("blocked");
+    // Only Monday to Saturday open: Sunday 8 Nov is a day off.
+    const weekdays = EVERY_DAY.filter((h) => h.day !== 0);
+    expect(day("2026-11-08", { hours: weekdays }).reason).toBe("day_off");
+    // A 5-day booking window: 20 Nov is too far ahead.
+    expect(day("2026-11-20", { rules: { ...RULES, maxAdvanceDays: 5 } }).reason).toBe("too_far");
+    // Seen from 15 Nov, 3 Nov is in the past.
+    expect(day("2026-11-03", { now: new Date("2026-11-15T00:00:00Z") }).reason).toBe("past");
+    // Bookable days have no reason.
+    expect(day("2026-11-03").reason).toBeUndefined();
+  });
+});

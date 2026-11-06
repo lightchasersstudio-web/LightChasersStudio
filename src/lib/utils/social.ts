@@ -61,3 +61,9 @@ export function studioMapsUrl(s: {
 }): string {
   return s.maps_url ?? googleMapsUrl(`${s.business_name}, ${s.address ?? s.city}`);
 }
+
+/** "https://www.facebook.com/lightchasersstudio/" → "https://www.facebook.com/lightchasersstudio/reviews", else null. */
+export function facebookReviewsUrl(facebookUrl: string | null): string | null {
+  const chat = messengerUrl(facebookUrl); // same page-name rules
+  return chat ? `https://www.facebook.com/${chat.slice("https://m.me/".length)}/reviews` : null;
+}

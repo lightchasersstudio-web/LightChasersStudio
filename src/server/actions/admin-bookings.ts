@@ -20,6 +20,7 @@ import { CONSENT_VERSION } from "@/lib/validations/booking";
 import { adminAction, audit, PG, revalidate, TAGS } from "@/server/admin-action";
 import {
   notifyBookingClosed,
+  notifyBookingCompleted,
   notifyBookingConfirmed,
   notifyBookingUpdated,
   resendLatestEmail,
@@ -130,6 +131,7 @@ export async function setBookingStatus(input: unknown): Promise<ActionResult> {
     await audit(ctx, `booking.${status}`, "booking", id);
     const record = await loadBookingRecord({ id });
     if (record && status === "confirmed") await notifyBookingConfirmed(record);
+    if (record && status === "completed") await notifyBookingCompleted(record);
     if (record && (status === "declined" || status === "cancelled")) {
       await notifyBookingClosed(record, status);
     }

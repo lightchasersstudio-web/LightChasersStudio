@@ -12,6 +12,7 @@ import { handleResult } from "@/components/admin/form-utils";
 import { AddToCalendar } from "@/components/booking/add-to-calendar";
 import { AgreedContract } from "@/components/booking/agreed-contract";
 import { BookingCard } from "@/components/booking/booking-card";
+import { BookingCountdown } from "@/components/booking/booking-countdown";
 import { BookingSelfService, type StudioContact } from "@/components/booking/booking-self-service";
 import { saveBookingOnDevice, useSavedBookings } from "@/components/booking/saved-bookings";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,7 @@ export function BookingLookup({
           </p>
         )}
         <BookingCard summary={booking.summary} status={booking.status} />
+        <BookingCountdown booking={booking} />
         {booking.status === "pending_payment" && booking.holdExpiresAt && (
           <p className="text-center text-sm text-muted-foreground">
             Your time is held until {manilaTime(booking.holdExpiresAt)} while the deposit is paid.

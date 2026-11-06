@@ -10,8 +10,11 @@ import {
   paymentReceivedEmail,
   rescheduleRequestAlertEmail,
   shootReminderEmail,
+  thankYouReviewEmail,
 } from "@/lib/email/booking-emails";
 import { sendEmail } from "@/lib/email/send";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { facebookReviewsUrl } from "@/lib/utils/social";
 import { getPublicEnv } from "@/lib/env";
 import type { BookingRecord } from "@/server/queries/booking-record";
 
@@ -86,4 +89,17 @@ export async function notifyRescheduleRequest(
 /** "See you tomorrow!" (the daily reminders job). */
 export async function sendShootReminder(b: BookingRecord) {
   if (b.email) await sendEmail({ to: b.email, ...shootReminderEmail(b.summary, siteUrl()) });
+}
+
+/** Marked completed: thank the client and ask for a Facebook review. */
+export async function notifyBookingCompleted(b: BookingRecord) {
+  if (!b.email) return;
+  const { data } = await createAdminClient()
+    .from("business_settings")
+    .select("facebook_url")
+    .single();
+  await sendEmail({
+    to: b.email,
+    ...thankYouReviewEmail(b.summary, siteUrl(), facebookReviewsUrl(data?.facebook_url ?? null)),
+  });
 }

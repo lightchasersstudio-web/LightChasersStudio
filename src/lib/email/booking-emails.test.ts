@@ -11,6 +11,7 @@ import {
   paymentReceivedEmail,
   rescheduleRequestAlertEmail,
   shootReminderEmail,
+  thankYouReviewEmail,
 } from "./booking-emails";
 
 const booking: BookingSummary = {
@@ -140,5 +141,19 @@ describe("booking emails", () => {
     expect(balancePaidAlertEmail(booking, "https://studio.example", "b-1").subject).toBe(
       "Balance paid online: BK-2026-ABC123",
     );
+  });
+
+  it("thanks the client after the shoot, with a review button when there's a page", () => {
+    const withPage = thankYouReviewEmail(
+      booking,
+      "https://studio.example",
+      "https://www.facebook.com/lightchasersstudio/reviews",
+    );
+    expect(withPage.subject).toBe("Thank you from Light Chasers Studio");
+    expect(withPage.html).toContain("Leave us a review");
+    expect(withPage.text).toContain("https://www.facebook.com/lightchasersstudio/reviews");
+    const without = thankYouReviewEmail(booking, "https://studio.example", null);
+    expect(without.html).toContain("View your booking");
+    expect(without.text).not.toContain("Leave a review");
   });
 });
