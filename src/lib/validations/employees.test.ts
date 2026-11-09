@@ -17,6 +17,7 @@ const base: EmployeeFormInput = {
   pagibigNo: "",
   salaryType: "monthly",
   salaryRate: "18,000",
+  paysOvertime: false,
   overtimeRate: "",
 };
 
@@ -48,6 +49,7 @@ describe("employeeSchema", () => {
       email: "Ana@Example.com",
       salaryType: "daily",
       salaryRate: "650.50",
+      paysOvertime: true,
       overtimeRate: "125",
     });
     expect(row).toMatchObject({
@@ -68,12 +70,26 @@ describe("employeeSchema", () => {
       salaryRate: "0",
       email: "nope",
       photoPath: "../evil.png",
-      overtimeRate: "lots",
     });
     expect(result.success).toBe(false);
     const paths = result.error!.issues.map((i) => i.path.join("."));
-    expect(paths.sort()).toEqual(["email", "overtimeRate", "photoPath", "salaryRate", "sssNo"]);
+    expect(paths.sort()).toEqual(["email", "photoPath", "salaryRate", "sssNo"]);
     expect(result.error!.issues.find((i) => i.path[0] === "sssNo")?.message).toMatch(/10 digits/);
+  });
+});
+
+describe("employeeSchema overtime", () => {
+  it("needs an amount when overtime is switched on", () => {
+    const result = employeeSchema.safeParse({ ...base, paysOvertime: true, overtimeRate: "" });
+    expect(result.error?.issues.map((i) => [i.path.join("."), i.message])).toEqual([
+      ["overtimeRate", "Enter the overtime pay per hour, like 150."],
+    ]);
+  });
+
+  it("ignores a leftover amount when overtime is switched off", () => {
+    expect(
+      employeeSchema.parse({ ...base, paysOvertime: false, overtimeRate: "150" }).overtime_rate,
+    ).toBeNull();
   });
 });
 

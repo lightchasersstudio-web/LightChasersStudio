@@ -60,7 +60,7 @@ export function BenefitsCard({
             href="/admin/payroll/settings"
             className="font-semibold text-primary underline-offset-4 hover:underline"
           >
-            Contribution rates
+            Payroll settings
           </Link>
         </CardDescription>
       </CardHeader>

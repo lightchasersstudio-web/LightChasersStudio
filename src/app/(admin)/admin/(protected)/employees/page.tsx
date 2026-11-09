@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { ArrowRightIcon, FileDownIcon, PercentIcon, PlusIcon } from "lucide-react";
+import { ArrowRightIcon, FileDownIcon, SlidersHorizontalIcon, PlusIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -33,8 +33,8 @@ export default function EmployeesPage({ searchParams }: PageProps<"/admin/employ
           <>
             <Button asChild size="lg" variant="outline">
               <Link href="/admin/payroll/settings">
-                <PercentIcon aria-hidden />
-                Contribution rates
+                <SlidersHorizontalIcon aria-hidden />
+                Payroll settings
               </Link>
             </Button>
             <Button asChild size="lg">

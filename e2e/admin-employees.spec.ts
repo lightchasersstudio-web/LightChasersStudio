@@ -80,7 +80,11 @@ test("employees: add with photo, edit salary, deactivate and reactivate", async 
   await page.getByLabel("Daily rate").fill("650");
   await expect(page.getByText("₱19,500", { exact: true })).toBeVisible(); // × 30 days
   await expect(page.getByText("₱81.25", { exact: true })).toBeVisible(); // ÷ 8 hours
+  // The previous page (Add employee) stays mounted but hidden after navigating: visible only.
+  await expect(page.getByText("Overtime isn't paid.").filter({ visible: true })).toBeVisible();
+  await page.getByRole("switch", { name: "Pays overtime" }).click();
   await page.getByLabel("Overtime pay per hour").fill("100");
+  await expect(page.getByText("e.g. 2 hours overtime = ₱200")).toBeVisible();
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Employee saved.")).toBeVisible();
 

@@ -80,7 +80,7 @@ export async function listEmployeeDetails(status: EmployeeStatusFilter): Promise
   return data.map(({ benefits, ...e }) => ({ ...e, benefits, photoUrl: null }));
 }
 
-/** Contribution rates and working days per month (Payroll → Contribution rates). */
+/** Contribution rates and working days per month (Payroll → Payroll settings). */
 export async function getContributionRates(): Promise<ContributionRates> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("contribution_settings").select("*").single();

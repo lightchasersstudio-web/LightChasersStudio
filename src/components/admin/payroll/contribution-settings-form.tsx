@@ -78,7 +78,7 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
   async function onSubmit() {
     const v = form.getValues();
     const result = await updateContributionSettings(v);
-    if (handleResult(result, "Contribution rates saved.", form)) form.reset(v);
+    if (handleResult(result, "Payroll settings saved.", form)) form.reset(v);
   }
 
   return (
@@ -93,6 +93,35 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
       className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:grid-rows-[auto_1fr]"
     >
       <div className="space-y-6 lg:row-span-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Work hours</CardTitle>
+            <CardDescription>
+              For everyone. Pay is worked out by the hour: with ₱30,000 a month, ÷ 30 days = ₱1,000
+              a day, ÷ 8 hours = ₱125 an hour, so a 4-hour day is ₱500 short. Each
+              employee&apos;s overtime pay is set on their own page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <TextField
+                control={control}
+                name="workDays"
+                label="Days in a month"
+                inputMode="decimal"
+                description="Daily rate = monthly salary ÷ this. A daily-paid employee's monthly salary (for contributions) = daily rate × this."
+              />
+              <TextField
+                control={control}
+                name="hoursPerDay"
+                label="Hours in a shift"
+                inputMode="decimal"
+                description="Hourly rate = daily rate ÷ this. Less time in a day is deducted (undertime); more is overtime."
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>SSS</CardTitle>
@@ -190,34 +219,6 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
                 label="Salary cap"
                 prefix="₱"
                 inputMode="decimal"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Days and hours</CardTitle>
-            <CardDescription>
-              How pay is worked out by the hour. With ₱30,000 a month: ÷ 30 days = ₱1,000 a day, ÷ 8
-              hours = ₱125 an hour, so a 4-hour day is ₱500 short.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <TextField
-                control={control}
-                name="workDays"
-                label="Days in a month"
-                inputMode="decimal"
-                description="Daily rate = monthly salary ÷ this. A daily-paid employee's monthly salary (for contributions) = daily rate × this."
-              />
-              <TextField
-                control={control}
-                name="hoursPerDay"
-                label="Hours in a shift"
-                inputMode="decimal"
-                description="Hourly rate = daily rate ÷ this. Less time than this is deducted (undertime); more is overtime."
               />
             </div>
           </CardContent>

@@ -4,7 +4,7 @@ import {
   CircleCheckIcon,
   FileDownIcon,
   InfoIcon,
-  PercentIcon,
+  SlidersHorizontalIcon,
   TriangleAlertIcon,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -37,8 +37,8 @@ export default function PayrollPage({ searchParams }: PageProps<"/admin/payroll"
         actions={
           <Button asChild variant="outline" size="lg">
             <Link href="/admin/payroll/settings">
-              <PercentIcon aria-hidden />
-              Contribution rates
+              <SlidersHorizontalIcon aria-hidden />
+              Payroll settings
             </Link>
           </Button>
         }

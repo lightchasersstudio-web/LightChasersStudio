@@ -2,12 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import type { z } from "zod";
 
-import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
+import { SelectField, SwitchField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { EmployeePhotoField } from "@/components/admin/payroll/employee-photo-field";
 import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
@@ -53,6 +54,7 @@ export function EmployeeForm({
           pagibigNo: formatGovId("pagibig", employee.pagibig_no) ?? "",
           salaryType: asSalaryType(employee.salary_type),
           salaryRate: amountToInput(Number(employee.salary_rate)),
+          paysOvertime: employee.overtime_rate !== null,
           overtimeRate:
             employee.overtime_rate === null ? "" : amountToInput(Number(employee.overtime_rate)),
         }
@@ -69,12 +71,16 @@ export function EmployeeForm({
           pagibigNo: "",
           salaryType: "monthly",
           salaryRate: "",
+          paysOvertime: false,
           overtimeRate: "",
         },
   });
   const { control } = form;
   useUnsavedChangesWarning(form.formState.isDirty);
-  const [salaryType, salaryRate] = useWatch({ control, name: ["salaryType", "salaryRate"] });
+  const [salaryType, salaryRate, paysOvertime, overtimeRate] = useWatch({
+    control,
+    name: ["salaryType", "salaryRate", "paysOvertime", "overtimeRate"],
+  });
 
   async function onSubmit() {
     const values = form.getValues();
@@ -94,6 +100,7 @@ export function EmployeeForm({
   const rate = parseAmount(salaryRate ?? "");
   const rates = rate ? salaryRates(type, rate, workDays) : null;
   const hourly = rates ? Math.round((rates.daily * 100) / hoursPerDay) / 100 : null;
+  const otRate = parseAmount(overtimeRate ?? "");
 
   return (
     <form
@@ -210,76 +217,119 @@ export function EmployeeForm({
         </Card>
       </div>
 
-      <Card className="lg:col-start-2 lg:row-start-1 lg:self-start">
-        <CardHeader>
-          <CardTitle>Salary</CardTitle>
-          <CardDescription>
-            Paid twice a month: the 1st–15th and the 16th–end of month.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
-            <SelectField
-              control={control}
-              name="salaryType"
-              label="Paid by"
-              options={SALARY_TYPES.map((t) => ({ value: t.value, label: t.label }))}
-            />
-            <TextField
-              control={control}
-              name="salaryRate"
-              label={type === "monthly" ? "Monthly salary" : "Daily rate"}
-              prefix="₱"
-              inputMode="decimal"
-              autoComplete="off"
-              description={employee ? "Changes apply to payrolls you save from now on." : undefined}
-            />
-            {rates && (
-              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-2xl bg-muted/60 p-4 text-sm">
-                {type === "monthly" ? (
-                  <>
-                    <dt className="text-muted-foreground">Per cut-off</dt>
-                    <dd className="text-right font-semibold tabular-nums">
-                      {formatAmount(rates.monthly / 2)}
-                    </dd>
-                    <dt className="text-muted-foreground">Daily rate (÷ {workDays} days)</dt>
-                    <dd className="text-right font-semibold tabular-nums">
-                      {formatAmount(rates.daily)}
-                    </dd>
-                  </>
-                ) : (
-                  <>
-                    <dt className="text-muted-foreground">
-                      Monthly, for contributions (× {workDays} days)
-                    </dt>
-                    <dd className="text-right font-semibold tabular-nums">
-                      {formatAmount(rates.monthly)}
-                    </dd>
-                  </>
-                )}
-                {hourly !== null && (
-                  <>
-                    <dt className="text-muted-foreground">Hourly rate (÷ {hoursPerDay} hours)</dt>
-                    <dd className="text-right font-semibold tabular-nums">
-                      {formatAmount(hourly)}
-                    </dd>
-                  </>
-                )}
-              </dl>
-            )}
-            <TextField
-              control={control}
-              name="overtimeRate"
-              label="Overtime pay per hour"
-              prefix="₱"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="Not paid"
-              description={`For time past ${hoursPerDay} hours in a day. Leave empty if overtime isn't paid.`}
-            />
-          </FieldGroup>
-        </CardContent>
-      </Card>
+      <div className="space-y-6 lg:col-start-2 lg:row-start-1 lg:self-start">
+        <Card>
+          <CardHeader>
+            <CardTitle>Salary</CardTitle>
+            <CardDescription>
+              Paid twice a month: the 1st–15th and the 16th–end of month.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
+              <SelectField
+                control={control}
+                name="salaryType"
+                label="Paid by"
+                options={SALARY_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+              />
+              <TextField
+                control={control}
+                name="salaryRate"
+                label={type === "monthly" ? "Monthly salary" : "Daily rate"}
+                prefix="₱"
+                inputMode="decimal"
+                autoComplete="off"
+                description={
+                  employee ? "Changes apply to payrolls you save from now on." : undefined
+                }
+              />
+              {rates && (
+                <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-2xl bg-muted/60 p-4 text-sm">
+                  {type === "monthly" ? (
+                    <>
+                      <dt className="text-muted-foreground">Per cut-off</dt>
+                      <dd className="text-right font-semibold tabular-nums">
+                        {formatAmount(rates.monthly / 2)}
+                      </dd>
+                      <dt className="text-muted-foreground">Daily rate (÷ {workDays} days)</dt>
+                      <dd className="text-right font-semibold tabular-nums">
+                        {formatAmount(rates.daily)}
+                      </dd>
+                    </>
+                  ) : (
+                    <>
+                      <dt className="text-muted-foreground">
+                        Monthly, for contributions (× {workDays} days)
+                      </dt>
+                      <dd className="text-right font-semibold tabular-nums">
+                        {formatAmount(rates.monthly)}
+                      </dd>
+                    </>
+                  )}
+                  {hourly !== null && (
+                    <>
+                      <dt className="text-muted-foreground">Hourly rate (÷ {hoursPerDay} hours)</dt>
+                      <dd className="text-right font-semibold tabular-nums">
+                        {formatAmount(hourly)}
+                      </dd>
+                    </>
+                  )}
+                </dl>
+              )}
+            </FieldGroup>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Overtime</CardTitle>
+            <CardDescription>
+              Time past {hoursPerDay} hours in a day (the shift in{" "}
+              <Link
+                href="/admin/payroll/settings"
+                className="font-semibold text-primary underline-offset-4 hover:underline"
+              >
+                Payroll settings
+              </Link>
+              ).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
+              <SwitchField control={control} name="paysOvertime" label="Pays overtime" />
+              {paysOvertime ? (
+                <>
+                  <TextField
+                    control={control}
+                    name="overtimeRate"
+                    label="Overtime pay per hour"
+                    prefix="₱"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="150"
+                  />
+                  {otRate !== null && otRate > 0 && (
+                    <p className="rounded-2xl bg-muted/60 p-4 text-sm">
+                      e.g. 2 hours overtime ={" "}
+                      <span className="font-semibold tabular-nums">{formatAmount(otRate * 2)}</span>
+                      {hourly !== null && (
+                        <span className="block text-muted-foreground">
+                          Their normal pay is {formatAmount(hourly)} an hour.
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Overtime isn&apos;t paid. Switch on to pay for extra hours.
+                </p>
+              )}
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="sticky bottom-4 z-10 flex gap-2 rounded-full border bg-background/90 p-2 shadow-lg backdrop-blur lg:static lg:col-start-2 lg:row-start-2 lg:self-start lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
         <Button

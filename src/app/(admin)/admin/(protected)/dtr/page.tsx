@@ -1,6 +1,11 @@
 import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
-import { ArrowLeftIcon, ArrowRightIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  SlidersHorizontalIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -44,6 +49,14 @@ export default function DtrPage({ searchParams }: PageProps<"/admin/dtr">) {
         eyebrow="who worked when"
         title="Time record"
         description="Daily time record per cut-off. Mark each day present, absent, leave or holiday; hours are worked out from the time in and out."
+        actions={
+          <Button asChild variant="outline" size="lg">
+            <Link href="/admin/payroll/settings">
+              <SlidersHorizontalIcon aria-hidden />
+              Payroll settings
+            </Link>
+          </Button>
+        }
       />
       <Suspense fallback={<ListSkeleton rows={6} />}>
         <Dtr searchParams={searchParams} />

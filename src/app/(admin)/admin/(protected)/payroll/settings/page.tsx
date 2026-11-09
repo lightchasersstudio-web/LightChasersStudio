@@ -7,24 +7,24 @@ import { FormSkeleton } from "@/components/admin/skeletons";
 import { requireAdmin } from "@/server/auth";
 import { getContributionRates } from "@/server/queries/employees";
 
-export const metadata: Metadata = { title: "Contribution rates" };
+export const metadata: Metadata = { title: "Payroll settings" };
 
-export default function ContributionRatesPage() {
+export default function PayrollSettingsPage() {
   return (
     <>
       <PageHeader
         eyebrow="payroll"
-        title="Contribution rates"
-        description="Employee shares for SSS, PhilHealth and Pag-IBIG, set to the 2026 rates. Change them here when the agencies update theirs. Saved payslips keep the amounts they were made with."
+        title="Payroll settings"
+        description="Work hours for everyone, and the employee shares for SSS, PhilHealth and Pag-IBIG (set to the 2026 rates). Overtime pay is set per employee, on their page. Saved payslips keep the amounts they were made with."
       />
       <Suspense fallback={<FormSkeleton fields={8} />}>
-        <Rates />
+        <Settings />
       </Suspense>
     </>
   );
 }
 
-async function Rates() {
+async function Settings() {
   await requireAdmin();
   return <ContributionSettingsForm rates={await getContributionRates()} />;
 }
