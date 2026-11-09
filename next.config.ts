@@ -38,6 +38,10 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // PDF routes read their fonts and the fallback logo from disk at runtime.
+  outputFileTracingIncludes: {
+    "/admin/**/pdf": ["src/assets/fonts/*.ttf", "public/brand/logo.jpg"],
+  },
   turbopack: {
     rules: {
       "*.css": {

@@ -3,6 +3,9 @@
 import { createClient } from "@/lib/supabase/browser";
 import type { PublicBucket } from "@/lib/storage";
 
+/** The public image buckets, plus the private one for staff photos (admins only). */
+export type UploadBucket = PublicBucket | "employee-photos";
+
 export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const MAX_INPUT_BYTES = 40 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 15 * 1024 * 1024; // matches the bucket limit
@@ -51,13 +54,14 @@ export async function prepareImage(file: File, maxEdge: number): Promise<Prepare
   return { blob, ext, width, height, blurDataUrl };
 }
 
-/** Uploads to `<folder>/<uuid>.<ext>` and returns the storage path. */
+/** Uploads to `<folder>/<uuid>.<ext>` (`<uuid>.<ext>` when folder is "") and returns the storage path. */
 export async function uploadImage(
-  bucket: PublicBucket,
+  bucket: UploadBucket,
   folder: string,
   image: PreparedImage,
 ): Promise<string> {
-  const path = `${folder}/${crypto.randomUUID()}.${image.ext}`;
+  const name = `${crypto.randomUUID()}.${image.ext}`;
+  const path = folder ? `${folder}/${name}` : name;
   const { error } = await createClient().storage.from(bucket).upload(path, image.blob, {
     contentType: image.blob.type,
     cacheControl: "31536000", // paths are unique per upload, so cache forever
@@ -68,7 +72,7 @@ export async function uploadImage(
 }
 
 /** Cleans up an upload whose database row couldn't be saved. */
-export async function discardUpload(bucket: PublicBucket, paths: string[]) {
+export async function discardUpload(bucket: UploadBucket, paths: string[]) {
   if (paths.length) await createClient().storage.from(bucket).remove(paths);
 }
 

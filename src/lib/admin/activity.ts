@@ -9,6 +9,10 @@ export const ACTIVITY_KINDS = {
   service: { label: "Packages & add-ons", entities: ["service", "add_on"] },
   portfolio: { label: "Portfolio & reviews", entities: ["portfolio_images", "review"] },
   faq: { label: "FAQ", entities: ["faq"] },
+  payroll: {
+    label: "Staff & payroll",
+    entities: ["employee", "contribution_settings", "payroll_period"],
+  },
   settings: {
     label: "Hours & settings",
     entities: ["business_settings", "availability_rules", "blackout_dates"],
@@ -21,6 +25,15 @@ const SIMPLE: Record<string, string> = {
   "booking.student_id_accepted": "Accepted a student ID",
   "booking.student_id_rejected": "Rejected a student ID",
   "client.anonymise": "Deleted a client's personal data",
+  "employee.create": "Added an employee",
+  "employee.update": "Edited an employee",
+  "employee.activate": "Reactivated an employee",
+  "employee.deactivate": "Deactivated an employee",
+  "employee.benefit_on": "Turned on a contribution",
+  "employee.benefit_off": "Turned off a contribution",
+  "payroll.rates": "Changed the payroll settings",
+  "attendance.update": "Updated a time record",
+  "payroll.save": "Saved a payroll",
   "faq.create": "Added a FAQ question",
   "faq.update": "Edited a FAQ question",
   "faq.publish": "Showed a FAQ question",
@@ -52,10 +65,19 @@ const SIMPLE: Record<string, string> = {
   "settings.booking_rules": "Changed the booking rules",
 };
 
+const BENEFIT_LABEL: Record<string, string> = {
+  sss: "SSS",
+  philhealth: "PhilHealth",
+  pagibig: "Pag-IBIG",
+};
+
 /** One line for the Activity page: what was done, plus the item's name when known. */
 export function describeActivity(action: string, metadata: Meta, reference?: string): string {
+  const benefit = BENEFIT_LABEL[String(metadata.benefit)];
   const base =
-    SIMPLE[action] ??
+    ((benefit && action === "employee.benefit_on" && `Turned on ${benefit}`) ||
+      (benefit && action === "employee.benefit_off" && `Turned off ${benefit}`) ||
+      SIMPLE[action]) ??
     (action.startsWith("booking.") || action === "payment.record"
       ? describeHistoryEntry(action, metadata)
       : action);
@@ -93,6 +115,12 @@ export function activityHref(
       return "/admin/availability";
     case "business_settings":
       return "/admin/settings";
+    case "contribution_settings":
+      return "/admin/payroll/settings";
+    case "payroll_period":
+      return "/admin/payroll";
+    case "employee":
+      return entityId ? `/admin/employees/${entityId}` : "/admin/employees";
     default:
       return null;
   }

@@ -71,6 +71,27 @@ const blackouts = await sb
   .like("reason", "E2E test%")
   .select("date");
 removed.blackouts = blackouts.data?.length ?? 0;
+// Payroll: E2E staff, their payslips (time records go with them), and photos.
+const e2eStaff = await sb
+  .from("employees")
+  .select("id, photo_path")
+  .like("full_name", "E2E Staff%");
+const staffIds = (e2eStaff.data ?? []).map((e) => e.id);
+if (staffIds.length) {
+  await sb.from("payslips").delete().in("employee_id", staffIds);
+  await sb.from("employees").delete().in("id", staffIds);
+  const staffPhotos = (e2eStaff.data ?? []).flatMap((e) => (e.photo_path ? [e.photo_path] : []));
+  if (staffPhotos.length) await sb.storage.from("employee-photos").remove(staffPhotos);
+}
+removed.employees = staffIds.length;
+// The payroll E2E test saves its payrolls in 2031 cut-offs.
+const e2ePayrolls = await sb
+  .from("payroll_periods")
+  .delete()
+  .gte("period_start", "2031-01-01")
+  .lt("period_start", "2032-01-01")
+  .select("id");
+removed.payrolls = e2ePayrolls.data?.length ?? 0;
 // Test runs book from one computer and trip the 5-per-10-minutes limit; reset it.
 const limits = await sb.from("rate_limits").delete().neq("key", "").select("key");
 removed.rateLimitCounters = limits.data?.length ?? 0;

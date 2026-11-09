@@ -74,6 +74,54 @@ export type Database = {
         }
         Relationships: []
       }
+      attendance_logs: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          minutes_worked: number | null
+          note: string | null
+          status: string
+          time_in: string | null
+          time_out: string | null
+          updated_at: string
+          work_date: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          minutes_worked?: never
+          note?: string | null
+          status: string
+          time_in?: string | null
+          time_out?: string | null
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          minutes_worked?: never
+          note?: string | null
+          status?: string
+          time_in?: string | null
+          time_out?: string | null
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_logs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -525,6 +573,149 @@ export type Database = {
         }
         Relationships: []
       }
+      contribution_settings: {
+        Row: {
+          hours_per_day: number
+          id: boolean
+          pagibig_employee_rate: number
+          pagibig_salary_cap: number
+          philhealth_ceiling: number
+          philhealth_employee_rate: number
+          philhealth_floor: number
+          sss_employee_rate: number
+          sss_msc_max: number
+          sss_msc_min: number
+          sss_msc_step: number
+          updated_at: string
+          work_days_per_month: number
+        }
+        ComputedFields: never
+        Insert: {
+          hours_per_day?: number
+          id?: boolean
+          pagibig_employee_rate?: number
+          pagibig_salary_cap?: number
+          philhealth_ceiling?: number
+          philhealth_employee_rate?: number
+          philhealth_floor?: number
+          sss_employee_rate?: number
+          sss_msc_max?: number
+          sss_msc_min?: number
+          sss_msc_step?: number
+          updated_at?: string
+          work_days_per_month?: number
+        }
+        Update: {
+          hours_per_day?: number
+          id?: boolean
+          pagibig_employee_rate?: number
+          pagibig_salary_cap?: number
+          philhealth_ceiling?: number
+          philhealth_employee_rate?: number
+          philhealth_floor?: number
+          sss_employee_rate?: number
+          sss_msc_max?: number
+          sss_msc_min?: number
+          sss_msc_step?: number
+          updated_at?: string
+          work_days_per_month?: number
+        }
+        Relationships: []
+      }
+      employee_benefits: {
+        Row: {
+          employee_id: string
+          pagibig_enabled: boolean
+          philhealth_enabled: boolean
+          sss_enabled: boolean
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          employee_id: string
+          pagibig_enabled?: boolean
+          philhealth_enabled?: boolean
+          sss_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          employee_id?: string
+          pagibig_enabled?: boolean
+          philhealth_enabled?: boolean
+          sss_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_benefits_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          address: string | null
+          created_at: string
+          date_hired: string
+          email: string | null
+          full_name: string
+          id: string
+          is_active: boolean
+          overtime_rate: number | null
+          pagibig_no: string | null
+          philhealth_no: string | null
+          phone: string | null
+          photo_path: string | null
+          position: string
+          salary_rate: number
+          salary_type: string
+          sss_no: string | null
+          updated_at: string
+        }
+        ComputedFields: never
+        Insert: {
+          address?: string | null
+          created_at?: string
+          date_hired: string
+          email?: string | null
+          full_name: string
+          id?: string
+          is_active?: boolean
+          overtime_rate?: number | null
+          pagibig_no?: string | null
+          philhealth_no?: string | null
+          phone?: string | null
+          photo_path?: string | null
+          position: string
+          salary_rate: number
+          salary_type: string
+          sss_no?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          date_hired?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          overtime_rate?: number | null
+          pagibig_no?: string | null
+          philhealth_no?: string | null
+          phone?: string | null
+          photo_path?: string | null
+          position?: string
+          salary_rate?: number
+          salary_type?: string
+          sss_no?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       faqs: {
         Row: {
           answer: string
@@ -646,6 +837,149 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_periods: {
+        Row: {
+          created_at: string
+          id: string
+          period_end: string
+          period_start: string
+          saved_at: string
+          saved_by: string | null
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          id?: string
+          period_end: string
+          period_start: string
+          saved_at?: string
+          saved_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          saved_at?: string
+          saved_by?: string | null
+        }
+        Relationships: []
+      }
+      payslips: {
+        Row: {
+          absence_deduction: number
+          basic_pay: number
+          created_at: string
+          daily_rate: number
+          days_absent: number
+          days_holiday: number
+          days_leave: number
+          days_present: number
+          employee_id: string
+          employee_name: string
+          employee_position: string
+          gross_pay: number
+          hourly_rate: number
+          id: string
+          minutes_worked: number
+          monthly_salary: number
+          net_pay: number
+          overtime_minutes: number
+          overtime_pay: number
+          overtime_rate: number | null
+          pagibig_deduction: number | null
+          payroll_period_id: string
+          philhealth_deduction: number | null
+          regular_minutes: number
+          salary_rate: number
+          salary_type: string
+          sss_deduction: number | null
+          total_deductions: number
+          undertime_deduction: number
+          undertime_minutes: number
+        }
+        ComputedFields: never
+        Insert: {
+          absence_deduction?: number
+          basic_pay: number
+          created_at?: string
+          daily_rate: number
+          days_absent?: number
+          days_holiday?: number
+          days_leave?: number
+          days_present?: number
+          employee_id: string
+          employee_name: string
+          employee_position: string
+          gross_pay: number
+          hourly_rate?: number
+          id?: string
+          minutes_worked?: number
+          monthly_salary: number
+          net_pay: number
+          overtime_minutes?: number
+          overtime_pay?: number
+          overtime_rate?: number | null
+          pagibig_deduction?: number | null
+          payroll_period_id: string
+          philhealth_deduction?: number | null
+          regular_minutes?: number
+          salary_rate: number
+          salary_type: string
+          sss_deduction?: number | null
+          total_deductions: number
+          undertime_deduction?: number
+          undertime_minutes?: number
+        }
+        Update: {
+          absence_deduction?: number
+          basic_pay?: number
+          created_at?: string
+          daily_rate?: number
+          days_absent?: number
+          days_holiday?: number
+          days_leave?: number
+          days_present?: number
+          employee_id?: string
+          employee_name?: string
+          employee_position?: string
+          gross_pay?: number
+          hourly_rate?: number
+          id?: string
+          minutes_worked?: number
+          monthly_salary?: number
+          net_pay?: number
+          overtime_minutes?: number
+          overtime_pay?: number
+          overtime_rate?: number | null
+          pagibig_deduction?: number | null
+          payroll_period_id?: string
+          philhealth_deduction?: number | null
+          regular_minutes?: number
+          salary_rate?: number
+          salary_type?: string
+          sss_deduction?: number | null
+          total_deductions?: number
+          undertime_deduction?: number
+          undertime_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payslips_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payslips_payroll_period_id_fkey"
+            columns: ["payroll_period_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_periods"
             referencedColumns: ["id"]
           },
         ]
@@ -1039,6 +1373,15 @@ export type Database = {
         Returns: undefined
       }
       staff_add_on_minutes: { Args: { p_add_ons: Json }; Returns: number }
+      save_payroll: {
+        Args: {
+          p_payslips: Json
+          p_period_end: string
+          p_period_start: string
+          p_saved_by: string
+        }
+        Returns: string
+      }
       workshop_early_birds_taken: {
         Args: { p_service_id: string }
         Returns: number

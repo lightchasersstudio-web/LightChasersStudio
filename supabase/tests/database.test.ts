@@ -2068,4 +2068,199 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
   });
+
+  describe("payroll", () => {
+    async function payrollUsers(c: PoolClient) {
+      const adminId = crypto.randomUUID();
+      const userId = crypto.randomUUID();
+      await c.query(
+        "insert into auth.users (id, email) values ($1, 'admin@test.local'), ($2, 'user@test.local')",
+        [adminId, userId],
+      );
+      await c.query("insert into public.admin_profiles (user_id, role) values ($1, 'admin')", [
+        adminId,
+      ]);
+      return { adminId, userId };
+    }
+
+    async function addEmployee(c: PoolClient, name = "Ana Cruz") {
+      const { rows } = await c.query(
+        `insert into public.employees (full_name, position, date_hired, salary_type, salary_rate)
+         values ($1, 'Photographer', '2026-01-05', 'monthly', 20000) returning id`,
+        [name],
+      );
+      return rows[0]!.id as string;
+    }
+
+    it("lets admins (not other users or anon) use the payroll tables", async () => {
+      await inRollback(async (c) => {
+        const { adminId, userId } = await payrollUsers(c);
+        await actAs(c, "authenticated", adminId);
+        const id = await addEmployee(c);
+        const benefits = await c.query(
+          "select * from public.employee_benefits where employee_id = $1",
+          [id],
+        );
+        expect(benefits.rows[0]).toMatchObject({
+          sss_enabled: true,
+          philhealth_enabled: true,
+          pagibig_enabled: true,
+        });
+        const settings = await c.query("select * from public.contribution_settings");
+        expect(Number(settings.rows[0]!.sss_employee_rate)).toBe(0.05);
+        expect(Number(settings.rows[0]!.work_days_per_month)).toBe(30);
+        expect(Number(settings.rows[0]!.hours_per_day)).toBe(8);
+
+        for (const [role, uid] of [
+          ["authenticated", userId],
+          ["anon", undefined],
+        ] as const) {
+          await c.query("reset role");
+          await actAs(c, role, uid);
+          for (const table of [
+            "employees",
+            "employee_benefits",
+            "contribution_settings",
+            "attendance_logs",
+            "payroll_periods",
+            "payslips",
+          ]) {
+            const { rows } = await c.query(`select * from public.${table}`);
+            expect(rows, `${role}: ${table}`).toHaveLength(0);
+          }
+          expect(
+            await expectFailure(
+              c,
+              `insert into public.employees (full_name, position, date_hired, salary_type, salary_rate)
+               values ('X Y', 'Staff', '2026-01-01', 'daily', 600)`,
+            ),
+          ).toMatch(/row-level security|permission denied/);
+          expect(
+            await expectFailure(
+              c,
+              "select public.save_payroll('2026-11-01', '2026-11-15', '[]'::jsonb, null)",
+            ),
+          ).toMatch(/permission denied/);
+        }
+      });
+    });
+
+    it("computes hours worked, including shifts past midnight", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out) values
+           ($1, '2026-11-02', 'present', '08:00', '17:30'),
+           ($1, '2026-11-03', 'present', '18:00', '01:15'),
+           ($1, '2026-11-04', 'absent', null, null)`,
+          [id],
+        );
+        const { rows } = await c.query(
+          "select minutes_worked from public.attendance_logs where employee_id = $1 order by work_date",
+          [id],
+        );
+        expect(rows.map((r) => r.minutes_worked)).toEqual([570, 435, 0]);
+        const insert = (
+          date: string,
+          status: string,
+          timeIn: string | null,
+          timeOut: string | null,
+        ) =>
+          expectFailure(
+            c,
+            `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out)
+             values ($1, $2, $3, $4, $5)`,
+            [id, date, status, timeIn, timeOut],
+          );
+        expect(await insert("2026-11-05", "present", null, null)).toMatch(/attendance_logs_times/);
+        expect(await insert("2026-11-06", "leave", "08:00", "17:00")).toMatch(
+          /attendance_logs_times/,
+        );
+        expect(await insert("2026-11-04", "leave", null, null)).toMatch(
+          /attendance_logs_one_per_day/,
+        );
+      });
+    });
+
+    it("save_payroll replaces a cut-off's payslips and only accepts real cut-offs", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c);
+        const slip = {
+          employee_id: id,
+          employee_name: "Ana Cruz",
+          employee_position: "Photographer",
+          salary_type: "monthly",
+          salary_rate: 20000,
+          daily_rate: 769.23,
+          monthly_salary: 20000,
+          days_present: 10,
+          days_absent: 1,
+          days_leave: 0,
+          days_holiday: 0,
+          minutes_worked: 4800,
+          basic_pay: 10000,
+          absence_deduction: 769.23,
+          sss_deduction: 500,
+          philhealth_deduction: 250,
+          pagibig_deduction: 100,
+          gross_pay: 10000,
+          total_deductions: 1619.23,
+          net_pay: 8380.77,
+        };
+        await actAs(c, "service_role");
+        const save = (start: string, end: string, slips: unknown[]) =>
+          c.query("select public.save_payroll($1, $2, $3::jsonb, null) as id", [
+            start,
+            end,
+            JSON.stringify(slips),
+          ]);
+        const first = (await save("2026-11-16", "2026-11-30", [slip])).rows[0]!.id;
+        const again = (
+          await save("2026-11-16", "2026-11-30", [
+            { ...slip, sss_deduction: null, total_deductions: 1119.23, net_pay: 8880.77 },
+          ])
+        ).rows[0]!.id;
+        expect(again).toBe(first);
+        const { rows } = await c.query(
+          "select sss_deduction, net_pay from public.payslips where payroll_period_id = $1",
+          [first],
+        );
+        expect(rows).toEqual([{ sss_deduction: null, net_pay: "8880.77" }]);
+
+        await save("2026-02-16", "2026-02-28", []);
+        await save("2026-11-01", "2026-11-15", []);
+        const fails = (start: string, end: string, slips: unknown[] = []) =>
+          expectFailure(c, "select public.save_payroll($1, $2, $3::jsonb, null)", [
+            start,
+            end,
+            JSON.stringify(slips),
+          ]);
+        expect(await fails("2026-11-02", "2026-11-16")).toMatch(/payroll_periods_cutoff/);
+        expect(await fails("2026-11-16", "2026-11-29")).toMatch(/payroll_periods_cutoff/);
+        expect(await fails("2026-12-01", "2026-12-15", [{ ...slip, net_pay: 1 }])).toMatch(
+          /payslips_totals/,
+        );
+        // Overtime counts in gross pay; undertime in the deductions.
+        expect(await fails("2026-12-01", "2026-12-15", [{ ...slip, overtime_pay: 250 }])).toMatch(
+          /payslips_totals/,
+        );
+        const hourly = {
+          ...slip,
+          overtime_pay: 250,
+          undertime_deduction: 125,
+          gross_pay: 10250,
+          total_deductions: 1744.23,
+          net_pay: 8505.77,
+        };
+        const dec = (await save("2026-12-01", "2026-12-15", [hourly])).rows[0]!.id;
+        const { rows: saved } = await c.query(
+          "select overtime_pay, undertime_deduction, hourly_rate from public.payslips where payroll_period_id = $1",
+          [dec],
+        );
+        expect(saved).toEqual([
+          { overtime_pay: "250.00", undertime_deduction: "125.00", hourly_rate: "0.00" },
+        ]);
+      });
+    });
+  });
 });
