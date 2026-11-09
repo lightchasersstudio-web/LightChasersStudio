@@ -9,7 +9,10 @@ export const ACTIVITY_KINDS = {
   service: { label: "Packages & add-ons", entities: ["service", "add_on"] },
   portfolio: { label: "Portfolio & reviews", entities: ["portfolio_images", "review"] },
   faq: { label: "FAQ", entities: ["faq"] },
-  payroll: { label: "Staff & payroll", entities: ["employee", "contribution_settings"] },
+  payroll: {
+    label: "Staff & payroll",
+    entities: ["employee", "contribution_settings", "payroll_period"],
+  },
   settings: {
     label: "Hours & settings",
     entities: ["business_settings", "availability_rules", "blackout_dates"],
@@ -30,6 +33,7 @@ const SIMPLE: Record<string, string> = {
   "employee.benefit_off": "Turned off a contribution",
   "payroll.rates": "Changed the contribution rates",
   "attendance.update": "Updated a time record",
+  "payroll.save": "Saved a payroll",
   "faq.create": "Added a FAQ question",
   "faq.update": "Edited a FAQ question",
   "faq.publish": "Showed a FAQ question",
@@ -113,6 +117,8 @@ export function activityHref(
       return "/admin/settings";
     case "contribution_settings":
       return "/admin/payroll/settings";
+    case "payroll_period":
+      return "/admin/payroll";
     case "employee":
       return entityId ? `/admin/employees/${entityId}` : "/admin/employees";
     default:

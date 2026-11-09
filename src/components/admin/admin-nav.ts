@@ -14,6 +14,7 @@ import {
   SettingsIcon,
   UserRoundIcon,
   UsersRoundIcon,
+  WalletIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ export const adminNav: AdminNavItem[] = [
   { href: "/admin/reports", label: "Sales report", icon: ChartColumnIcon },
   { href: "/admin/employees", label: "Employees", icon: IdCardIcon },
   { href: "/admin/dtr", label: "Time record", icon: ClockIcon },
+  { href: "/admin/payroll", label: "Payroll", icon: WalletIcon },
   { href: "/admin/services", label: "Services", icon: CameraIcon },
   { href: "/admin/availability", label: "Availability", icon: CalendarClockIcon },
   { href: "/admin/portfolio", label: "Portfolio", icon: ImagesIcon },

@@ -1,0 +1,157 @@
+import { createClient } from "@supabase/supabase-js";
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * Payroll against the DEV Supabase project: preview, payslip, save, change,
+ * save again. Needs an admin login and the service role key (it adds its own
+ * employees and time records, and removes them and its payroll afterwards).
+ */
+const email = process.env.E2E_ADMIN_EMAIL;
+const password = process.env.E2E_ADMIN_PASSWORD;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+test.describe.configure({ mode: "serial" });
+test.skip(!email || !password || !url || !key, "needs admin login and the service role key");
+
+const RUN = `E2E Staff ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const MONTHLY = `${RUN} Monthly`;
+const DAILY = `${RUN} Daily`;
+const admin = () => createClient(url!, key!, { auth: { persistSession: false } });
+
+// A cut-off far from real data, different per project (they run side by side).
+const cutoffFor = (project: string) => (project === "mobile" ? "2031-01-16" : "2031-01-01");
+let cutoff = "";
+const ids: Record<string, string> = {};
+
+test.beforeAll(async ({}, testInfo) => {
+  cutoff = cutoffFor(testInfo.project.name);
+  const sb = admin();
+  // A payroll left by an earlier, interrupted run.
+  await sb.from("payroll_periods").delete().eq("period_start", cutoff);
+  const { data, error } = await sb
+    .from("employees")
+    .insert([
+      {
+        full_name: MONTHLY,
+        position: "Photographer",
+        date_hired: "2026-01-05",
+        salary_type: "monthly",
+        salary_rate: 20000,
+      },
+      {
+        full_name: DAILY,
+        position: "Assistant",
+        date_hired: "2026-01-05",
+        salary_type: "daily",
+        salary_rate: 650,
+      },
+    ])
+    .select("id, full_name");
+  if (error) throw error;
+  for (const e of data) ids[e.full_name] = e.id;
+  await sb.from("employee_benefits").update({ sss_enabled: false }).eq("employee_id", ids[DAILY]!);
+
+  // Monthly: 12 days present + 1 absent. Daily: 11 present + 1 holiday.
+  const day = (n: number) =>
+    `${cutoff.slice(0, 8)}${String(Number(cutoff.slice(8)) + n).padStart(2, "0")}`;
+  const present = (id: string, n: number) => ({
+    employee_id: id,
+    work_date: day(n),
+    status: "present",
+    time_in: "08:00",
+    time_out: "16:00",
+  });
+  const logs = [
+    ...Array.from({ length: 12 }, (_, n) => present(ids[MONTHLY]!, n)),
+    { employee_id: ids[MONTHLY]!, work_date: day(12), status: "absent" },
+    ...Array.from({ length: 11 }, (_, n) => present(ids[DAILY]!, n)),
+    { employee_id: ids[DAILY]!, work_date: day(11), status: "holiday" },
+  ];
+  const { error: logError } = await sb.from("attendance_logs").insert(logs);
+  if (logError) throw logError;
+});
+
+test.afterAll(async ({}, testInfo) => {
+  const sb = admin();
+  await sb.from("payroll_periods").delete().eq("period_start", cutoffFor(testInfo.project.name));
+  const { data } = await sb.from("employees").select("id").like("full_name", `${RUN}%`);
+  const list = (data ?? []).map((e) => e.id);
+  if (list.length) {
+    await sb.from("payslips").delete().in("employee_id", list);
+    await sb.from("employees").delete().in("id", list);
+  }
+});
+
+async function signIn(page: Page) {
+  await page.goto("/admin/login");
+  await page.getByLabel("Email").fill(email!);
+  await page.getByLabel("Password").fill(password!);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+}
+
+test("payroll: preview, payslip, save, change, save again", async ({ page }) => {
+  test.setTimeout(90_000);
+  await signIn(page);
+  await page.goto(`/admin/payroll?cutoff=${cutoff}`);
+  await expect(page.getByText("Preview, not saved yet.")).toBeVisible();
+
+  const monthly = page.getByRole("row").filter({ hasText: MONTHLY });
+  await expect(monthly).toContainText("₱10,000.00"); // gross
+  await expect(monthly).toContainText("₱769.23"); // 1 absence
+  await expect(monthly).toContainText("₱8,380.77"); // net
+  const daily = page.getByRole("row").filter({ hasText: DAILY });
+  await expect(daily).toContainText("₱7,150.00"); // 11 × ₱650
+  await expect(daily).toContainText("Not enrolled"); // SSS off
+  await expect(daily).toContainText("₱6,838.75"); // − PhilHealth ₱211.25 − Pag-IBIG ₱100
+
+  await monthly.getByRole("button", { name: `View ${MONTHLY}'s payslip` }).click();
+  const slip = page.getByRole("dialog");
+  await expect(slip).toContainText("Half of ₱20,000.00 monthly");
+  await expect(slip).toContainText("1 unpaid day × ₱769.23");
+  await expect(slip).toContainText("Net pay₱8,380.77");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Save payroll" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Save payroll" }).click();
+  await expect(page.getByText(/^Payroll saved: \d+ payslips\.$/)).toBeVisible();
+  // "Saved …" (other test files may add staff meanwhile, which marks it as changed).
+  await expect(page.getByText(/^Saved /).first()).toBeVisible();
+
+  // The absence turns out to be a work day: the saved payroll is now out of date.
+  const sb = admin();
+  const { error } = await sb
+    .from("attendance_logs")
+    .update({ status: "present", time_in: "08:00", time_out: "16:00" })
+    .eq("employee_id", ids[MONTHLY]!)
+    .eq("status", "absent");
+  expect(error).toBeNull();
+  await page.reload();
+  await expect(page.getByText(/things have changed since/)).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: MONTHLY })).toContainText("₱8,380.77");
+  await page.getByRole("link", { name: "Show new figures" }).click();
+  await expect(page.getByRole("row").filter({ hasText: MONTHLY })).toContainText("₱9,150.00");
+  await page.getByRole("button", { name: "Save again" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Replace payslips" }).click();
+  // Saving goes back to the saved view (no ?view=preview).
+  await expect(page).not.toHaveURL(/view=preview/);
+  await expect(page.getByRole("row").filter({ hasText: MONTHLY })).toContainText("₱9,150.00");
+
+  const { data: period } = await sb
+    .from("payroll_periods")
+    .select("id")
+    .eq("period_start", cutoff)
+    .single();
+  const { data } = await sb
+    .from("payslips")
+    .select("net_pay, sss_deduction")
+    .eq("payroll_period_id", period!.id)
+    .in("employee_id", [ids[MONTHLY]!, ids[DAILY]!]);
+  expect(data?.map((p) => [Number(p.net_pay), p.sss_deduction]).sort()).toEqual(
+    [
+      [6838.75, null],
+      [9150, 500],
+    ].sort(),
+  );
+});
