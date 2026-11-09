@@ -50,13 +50,17 @@ export type CutoffSummaryRow = {
 };
 
 /**
- * Everyone's totals for a cut-off: active staff, plus anyone inactive who
- * still has records in it.
+ * Active staff's totals for a cut-off (owner decision 2026-11-09: deactivated
+ * staff don't show in the time record; their records are kept).
  */
 export async function getCutoffSummary(cutoff: Cutoff): Promise<CutoffSummaryRow[]> {
   const supabase = await createClient();
   const [employees, logs] = await Promise.all([
-    supabase.from("employees").select("id, full_name, position, is_active").order("full_name"),
+    supabase
+      .from("employees")
+      .select("id, full_name, position, is_active")
+      .eq("is_active", true)
+      .order("full_name"),
     supabase
       .from("attendance_logs")
       .select("employee_id, status, minutes_worked")
@@ -73,19 +77,17 @@ export async function getCutoffSummary(cutoff: Cutoff): Promise<CutoffSummaryRow
     list.push({ status: l.status, minutes: l.minutes_worked ?? 0 });
     byEmployee.set(l.employee_id, list);
   }
-  return employees.data
-    .filter((e) => e.is_active || byEmployee.has(e.id))
-    .map((e) => {
-      const days = byEmployee.get(e.id) ?? [];
-      return {
-        id: e.id,
-        name: e.full_name,
-        position: e.position,
-        isActive: e.is_active,
-        recorded: days.length,
-        totals: dayTotals(days),
-      };
-    });
+  return employees.data.map((e) => {
+    const days = byEmployee.get(e.id) ?? [];
+    return {
+      id: e.id,
+      name: e.full_name,
+      position: e.position,
+      isActive: e.is_active,
+      recorded: days.length,
+      totals: dayTotals(days),
+    };
+  });
 }
 
 /** When the payroll for this cut-off was saved, if it was. */

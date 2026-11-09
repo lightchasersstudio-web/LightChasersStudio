@@ -132,4 +132,15 @@ test("time record: fill a cut-off, mark an absence, overnight shift, totals", as
     .eq("work_date", "2026-11-04")
     .single();
   expect(data?.minutes_worked).toBe(420);
+
+  // Deactivated staff leave the time record (their days are kept).
+  await admin().from("employees").update({ is_active: false }).eq("id", employeeId);
+  await page.reload();
+  await expect(page.getByText("Nov 1–15, 2026", { exact: true })).toBeVisible();
+  await expect(entry()).toHaveCount(0);
+  const { count } = await admin()
+    .from("attendance_logs")
+    .select("work_date", { count: "exact", head: true })
+    .eq("employee_id", employeeId);
+  expect(count).toBe(11);
 });
