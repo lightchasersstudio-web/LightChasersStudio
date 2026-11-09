@@ -18,4 +18,6 @@ export const STORAGE_PATH = {
   serviceCover: /^services\/[0-9a-f-]{36}\.(webp|jpg)$/,
   workshopSlide: /^workshop\/[0-9a-f-]{36}\.(webp|jpg)$/,
   logo: /^logo\/[0-9a-f-]{36}\.(webp|png|jpg)$/,
+  /** Private bucket employee-photos (no folder). */
+  employeePhoto: /^[0-9a-f-]{36}\.(webp|jpg)$/,
 } as const;
