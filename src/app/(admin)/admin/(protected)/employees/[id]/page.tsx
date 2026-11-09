@@ -73,7 +73,7 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-3xl font-semibold">{employee.full_name}</h1>
+              <h1 className="text-2xl font-semibold break-words sm:text-3xl">{employee.full_name}</h1>
               {!employee.is_active && <Badge variant="secondary">Inactive</Badge>}
             </div>
             <p className="text-muted-foreground">

@@ -85,7 +85,7 @@ async function Dtr({ searchParams }: Pick<PageProps<"/admin/dtr">, "searchParams
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <CutoffPicker cutoff={cutoff} current={current} href={href} />
         {selected && (
           <EmployeePicker
@@ -169,61 +169,128 @@ function Summary({
   }
   const days = cutoffDates(cutoff).length;
   return (
-    <div className="overflow-hidden rounded-3xl border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="pl-5">Employee</TableHead>
-            <TableHead className="text-right">Present</TableHead>
-            <TableHead className="text-right">Absent</TableHead>
-            <TableHead className="text-right">Leave</TableHead>
-            <TableHead className="text-right">Holiday</TableHead>
-            <TableHead className="text-right">Hours</TableHead>
-            <TableHead className="text-right">Recorded</TableHead>
-            <TableHead className="pr-5">
-              <span className="sr-only">Open</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {summary.map((s) => (
-            <TableRow key={s.id}>
-              <TableCell className="pl-5">
-                <span className="font-semibold">{s.name}</span>
-                {!s.isActive && (
-                  <Badge variant="secondary" className="ml-2">
-                    Inactive
-                  </Badge>
-                )}
-                <span className="block text-muted-foreground">{s.position}</span>
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{s.totals.present}</TableCell>
-              <TableCell className="text-right tabular-nums">{s.totals.absent}</TableCell>
-              <TableCell className="text-right tabular-nums">{s.totals.leave}</TableCell>
-              <TableCell className="text-right tabular-nums">{s.totals.holiday}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatMinutes(s.totals.minutes)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                <span className={s.recorded < days ? "text-muted-foreground" : "font-semibold"}>
-                  {s.recorded}/{days}
+    <>
+      {/* Phones: a card per person (the table is too wide). */}
+      <ul className="space-y-3 xl:hidden" aria-label="Time records">
+        {summary.map((s) => (
+          <li key={s.id}>
+            <Link
+              href={`/admin/dtr?cutoff=${cutoff.start}&employee=${s.id}`}
+              className="block rounded-3xl border bg-card p-4 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <span className="flex items-start justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="block font-semibold break-words">
+                    {s.name}
+                    {!s.isActive && (
+                      <Badge variant="secondary" className="ml-2">
+                        Inactive
+                      </Badge>
+                    )}
+                  </span>
+                  <span className="block text-sm text-muted-foreground">{s.position}</span>
                 </span>
-              </TableCell>
-              <TableCell className="pr-5 text-right">
-                <Button asChild variant="outline" size="sm">
-                  <Link
-                    href={`/admin/dtr?cutoff=${cutoff.start}&employee=${s.id}`}
-                    aria-label={`Open ${s.name}'s time record`}
+                <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-primary">
+                  Open
+                  <ArrowRightIcon className="size-4" aria-hidden />
+                </span>
+              </span>
+              <span className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-muted/60 p-3 text-sm">
+                <span>
+                  <span className="block text-xs text-muted-foreground">Recorded</span>
+                  <span
+                    className={
+                      s.recorded < days
+                        ? "text-muted-foreground tabular-nums"
+                        : "font-semibold tabular-nums"
+                    }
                   >
-                    Open
-                    <ArrowRightIcon aria-hidden />
-                  </Link>
-                </Button>
-              </TableCell>
+                    {s.recorded}/{days}
+                  </span>
+                </span>
+                <span>
+                  <span className="block text-xs text-muted-foreground">Present</span>
+                  <span className="font-semibold tabular-nums">{s.totals.present}</span>
+                </span>
+                <span>
+                  <span className="block text-xs text-muted-foreground">Hours</span>
+                  <span className="font-semibold tabular-nums">
+                    {formatMinutes(s.totals.minutes)}
+                  </span>
+                </span>
+                {s.totals.absent + s.totals.leave + s.totals.holiday > 0 && (
+                  <span className="col-span-3 text-xs text-muted-foreground">
+                    {[
+                      s.totals.absent && `${s.totals.absent} absent`,
+                      s.totals.leave && `${s.totals.leave} leave`,
+                      s.totals.holiday && `${s.totals.holiday} holiday`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                )}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden overflow-hidden rounded-3xl border bg-card xl:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-5">Employee</TableHead>
+              <TableHead className="text-right">Present</TableHead>
+              <TableHead className="text-right">Absent</TableHead>
+              <TableHead className="text-right">Leave</TableHead>
+              <TableHead className="text-right">Holiday</TableHead>
+              <TableHead className="text-right">Hours</TableHead>
+              <TableHead className="text-right">Recorded</TableHead>
+              <TableHead className="pr-5">
+                <span className="sr-only">Open</span>
+              </TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {summary.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell className="pl-5">
+                  <span className="font-semibold">{s.name}</span>
+                  {!s.isActive && (
+                    <Badge variant="secondary" className="ml-2">
+                      Inactive
+                    </Badge>
+                  )}
+                  <span className="block text-muted-foreground">{s.position}</span>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{s.totals.present}</TableCell>
+                <TableCell className="text-right tabular-nums">{s.totals.absent}</TableCell>
+                <TableCell className="text-right tabular-nums">{s.totals.leave}</TableCell>
+                <TableCell className="text-right tabular-nums">{s.totals.holiday}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatMinutes(s.totals.minutes)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  <span className={s.recorded < days ? "text-muted-foreground" : "font-semibold"}>
+                    {s.recorded}/{days}
+                  </span>
+                </TableCell>
+                <TableCell className="pr-5 text-right">
+                  <Button asChild variant="outline" size="sm">
+                    <Link
+                      href={`/admin/dtr?cutoff=${cutoff.start}&employee=${s.id}`}
+                      aria-label={`Open ${s.name}'s time record`}
+                    >
+                      Open
+                      <ArrowRightIcon aria-hidden />
+                    </Link>
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }

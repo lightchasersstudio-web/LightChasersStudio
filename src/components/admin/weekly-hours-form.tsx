@@ -81,8 +81,8 @@ function DayRow({ day, form }: { day: number; form: Form }) {
   }
 
   return (
-    <li className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start">
-      <div className="flex items-center justify-between gap-3 sm:w-44 sm:shrink-0 sm:pt-2.5">
+    <li className="flex flex-col gap-3 p-4 lg:flex-row lg:items-start">
+      <div className="flex items-center justify-between gap-3 lg:w-44 lg:shrink-0 lg:pt-2.5">
         <label className="flex items-center gap-3 font-semibold">
           <Controller
             control={control}
@@ -99,11 +99,11 @@ function DayRow({ day, form }: { day: number; form: Form }) {
           />
           {name}
         </label>
-        {!open && <span className="text-sm text-muted-foreground sm:hidden">Closed</span>}
+        {!open && <span className="text-sm text-muted-foreground lg:hidden">Closed</span>}
       </div>
 
-      <div className="flex-1 space-y-2">
-        {!open && <p className="hidden pt-2.5 text-sm text-muted-foreground sm:block">Closed</p>}
+      <div className="min-w-0 flex-1 space-y-2">
+        {!open && <p className="hidden pt-2.5 text-sm text-muted-foreground lg:block">Closed</p>}
         {open &&
           fields.map((f, i) => {
             const errs = form.formState.errors.days?.[day]?.windows?.[i];
@@ -113,7 +113,7 @@ function DayRow({ day, form }: { day: number; form: Form }) {
                   <Input
                     type="time"
                     aria-label={`${name} opens`}
-                    className="flex-1 sm:w-36 sm:flex-none"
+                    className="min-w-0 flex-1 lg:w-36 lg:flex-none"
                     aria-invalid={Boolean(errs?.start)}
                     {...form.register(`days.${day}.windows.${i}.start`)}
                   />
@@ -123,7 +123,7 @@ function DayRow({ day, form }: { day: number; form: Form }) {
                   <Input
                     type="time"
                     aria-label={`${name} closes`}
-                    className="flex-1 sm:w-36 sm:flex-none"
+                    className="min-w-0 flex-1 lg:w-36 lg:flex-none"
                     aria-invalid={Boolean(errs?.end)}
                     {...form.register(`days.${day}.windows.${i}.end`)}
                   />

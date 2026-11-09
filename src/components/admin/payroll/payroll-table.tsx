@@ -61,7 +61,89 @@ export function PayrollTable({
 
   return (
     <>
-      <div className="overflow-hidden rounded-3xl border bg-card">
+      {/* Phones: a card per person (the table is too wide). */}
+      <ul className="space-y-3 xl:hidden" aria-label="Payslips">
+        {payslips.map((p) => {
+          const recorded = p.days_present + p.days_absent + p.days_leave + p.days_holiday;
+          return (
+            <li key={p.employee_id} className="rounded-3xl border bg-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold break-words">{p.employee_name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {p.employee_position} · {p.salary_type === "monthly" ? "monthly" : "daily"}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs text-muted-foreground">Net pay</p>
+                  <p
+                    className={cn(
+                      "font-heading text-lg font-semibold tabular-nums",
+                      p.net_pay < 0 && "text-destructive",
+                    )}
+                  >
+                    {money(p.net_pay)}
+                  </p>
+                </div>
+              </div>
+              {recorded === 0 && (
+                <Badge variant="secondary" className="mt-2">
+                  <Link
+                    href={`/admin/dtr?cutoff=${cutoffStart}&employee=${p.employee_id}`}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    No time record
+                  </Link>
+                </Badge>
+              )}
+              <dl className="mt-3 grid grid-cols-3 gap-2 rounded-2xl bg-muted/60 p-3 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Days</dt>
+                  <dd className="font-semibold tabular-nums">{p.days_present}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Gross</dt>
+                  <dd className="font-semibold tabular-nums">{money(p.gross_pay)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Deductions</dt>
+                  <dd className="font-semibold tabular-nums">{money(p.total_deductions)}</dd>
+                </div>
+              </dl>
+              <div className="mt-3 flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setOpen(p)}
+                  aria-label={`View ${p.employee_name}'s payslip`}
+                >
+                  <EyeIcon aria-hidden />
+                  View payslip
+                </Button>
+                {saved && (
+                  <Button asChild variant="ghost">
+                    <a
+                      href={pdfHref(p.employee_id)}
+                      target="_blank"
+                      rel="noopener"
+                      aria-label={`${p.employee_name}'s payslip PDF`}
+                    >
+                      <FileDownIcon aria-hidden />
+                      PDF
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+        <li className="flex items-baseline justify-between rounded-3xl bg-muted/60 px-4 py-3 text-sm font-semibold">
+          <span>Total net pay ({payslips.length})</span>
+          <span className="tabular-nums">{money(totals.net_pay)}</span>
+        </li>
+      </ul>
+
+      <div className="hidden overflow-hidden rounded-3xl border bg-card xl:block">
         <Table>
           <TableHeader>
             <TableRow>

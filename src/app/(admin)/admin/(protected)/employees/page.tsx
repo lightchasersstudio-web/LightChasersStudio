@@ -116,7 +116,7 @@ async function Employees({ searchParams }: Pick<PageProps<"/admin/employees">, "
                 >
                   <EmployeeAvatar name={e.full_name} photoUrl={e.photoUrl} />
                   <span className="min-w-0">
-                    <span className="block truncate font-semibold">{e.full_name}</span>
+                    <span className="block font-semibold break-words">{e.full_name}</span>
                     <span className="block truncate text-sm text-muted-foreground">
                       {e.position}
                     </span>

@@ -57,14 +57,26 @@ async function signIn(page: Page) {
   await expect(page).toHaveURL(/\/admin$/);
 }
 
-test("time record: fill a cut-off, mark an absence, overnight shift, totals", async ({ page }) => {
+test("time record: fill a cut-off, mark an absence, overnight shift, totals", async ({
+  page,
+}, testInfo) => {
   test.setTimeout(60_000);
+  // Phones show a card per person instead of the overview table.
+  const phone = testInfo.project.name === "mobile";
+  const entry = () =>
+    (phone
+      ? page.getByRole("list", { name: "Time records" }).getByRole("listitem")
+      : page.getByRole("row")
+    ).filter({ hasText: NAME });
   await signIn(page);
   await page.goto(`/admin/dtr?cutoff=${CUTOFF}`);
-  await expect(page.getByText("Nov 1–15, 2026")).toBeVisible();
-  const summaryRow = page.getByRole("row").filter({ hasText: NAME });
-  await expect(summaryRow).toContainText("0/15");
-  await summaryRow.getByRole("link", { name: `Open ${NAME}'s time record` }).click();
+  await expect(page.getByText("Nov 1–15, 2026", { exact: true })).toBeVisible();
+  await expect(entry()).toContainText("0/15");
+  await (
+    phone
+      ? entry().getByRole("link")
+      : entry().getByRole("link", { name: `Open ${NAME}'s time record` })
+  ).click();
   await expect(page.getByRole("heading", { level: 2, name: NAME })).toBeVisible();
 
   await page.getByLabel("Usual time in").fill("08:00");
@@ -109,7 +121,7 @@ test("time record: fill a cut-off, mark an absence, overnight shift, totals", as
   await expect(page.getByText(`Time record saved for ${NAME}.`)).toBeVisible();
 
   await page.getByRole("link", { name: "All staff" }).click();
-  const row = page.getByRole("row").filter({ hasText: NAME });
+  const row = entry();
   await expect(row).toContainText("11/15");
   await expect(row).toContainText("88h");
 

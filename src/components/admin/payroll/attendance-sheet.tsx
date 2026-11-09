@@ -42,8 +42,8 @@ function ShiftNote({ minutes, shift }: { minutes: number; shift: number }) {
   if (!minutes || minutes === shift) return null;
   const short = minutes < shift;
   return (
-    <span className={cn("text-xs md:block", short ? "text-terracotta-ink" : "text-primary")}>
-      <span className="md:hidden"> · </span>
+    <span className={cn("text-xs xl:block", short ? "text-terracotta-ink" : "text-primary")}>
+      <span className="xl:hidden"> · </span>
       {formatMinutes(Math.abs(shift - minutes))} {short ? "short" : "overtime"}
     </span>
   );
@@ -146,8 +146,8 @@ export function AttendanceSheet({
       noValidate
       className="space-y-4"
     >
-      <div className="flex flex-col gap-3 rounded-3xl border bg-card p-4 sm:flex-row sm:items-end">
-        <div className="grid flex-1 grid-cols-2 gap-3 sm:max-w-xs">
+      <div className="flex flex-col gap-3 rounded-3xl border bg-card p-4 xl:flex-row xl:items-end">
+        <div className="grid grid-cols-2 gap-3 sm:max-w-sm xl:max-w-xs xl:flex-1">
           <div className="grid gap-1.5">
             <Label htmlFor="fill-in">Usual time in</Label>
             <Input
@@ -171,14 +171,14 @@ export function AttendanceSheet({
           <CalendarCheckIcon aria-hidden />
           Mark blank days present
         </Button>
-        <p className="text-sm text-muted-foreground sm:max-w-56">
+        <p className="text-sm text-muted-foreground xl:max-w-56">
           Fills Monday–Saturday days with nothing recorded yet. Sundays stay blank.
         </p>
       </div>
 
       <div className="overflow-hidden rounded-3xl border bg-card">
         <Table>
-          <TableHeader className="max-md:sr-only">
+          <TableHeader className="max-xl:sr-only">
             <TableRow>
               <TableHead className="pl-5">Day</TableHead>
               <TableHead>Status</TableHead>
@@ -200,14 +200,14 @@ export function AttendanceSheet({
                   key={field.id}
                   className={cn(
                     // Phones: each day is a small card (2 columns) instead of a wide row.
-                    "grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 md:table-row md:p-0",
+                    "grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 xl:table-row xl:p-0",
                     STATUS_TONE[d?.status ?? ""],
                   )}
                 >
-                  <TableCell className="self-center p-0 font-semibold md:py-2 md:pl-5">
+                  <TableCell className="self-center p-0 font-semibold xl:py-2 xl:pl-5">
                     <span className={cn(sunday && "text-muted-foreground")}>{dayLabel}</span>
                   </TableCell>
-                  <TableCell className="p-0 md:py-2">
+                  <TableCell className="p-0 xl:py-2">
                     <Controller
                       control={control}
                       name={`days.${i}.status`}
@@ -215,7 +215,7 @@ export function AttendanceSheet({
                         <NativeSelect
                           {...f}
                           aria-label={`Status, ${dayLabel}`}
-                          className="w-full md:w-36"
+                          className="w-full xl:w-36"
                           onChange={(e) => {
                             f.onChange(e);
                             if (e.target.value !== "present") {
@@ -238,14 +238,14 @@ export function AttendanceSheet({
                   {(["timeIn", "timeOut"] as const).map((name) => (
                     <TableCell
                       key={name}
-                      className={cn("p-0 md:py-2", !present && "max-md:hidden")}
+                      className={cn("p-0 xl:py-2", !present && "max-xl:hidden")}
                     >
                       <Controller
                         control={control}
                         name={`days.${i}.${name}`}
                         render={({ field: f, fieldState }) => (
                           <div>
-                            <span className="mb-1 block text-xs text-muted-foreground md:sr-only">
+                            <span className="mb-1 block text-xs text-muted-foreground xl:sr-only">
                               {name === "timeIn" ? "Time in" : "Time out"}
                             </span>
                             <Input
@@ -254,7 +254,7 @@ export function AttendanceSheet({
                               disabled={!present}
                               aria-label={`${name === "timeIn" ? "Time in" : "Time out"}, ${dayLabel}`}
                               aria-invalid={fieldState.invalid}
-                              className="md:w-32"
+                              className="xl:w-32"
                             />
                             {fieldState.error && (
                               <p role="alert" className="mt-1 text-xs text-destructive">
@@ -268,18 +268,18 @@ export function AttendanceSheet({
                   ))}
                   <TableCell
                     className={cn(
-                      "self-center p-0 text-sm tabular-nums md:py-2 md:pr-6 md:text-right",
-                      !present && "max-md:hidden",
+                      "self-center p-0 text-sm tabular-nums xl:py-2 xl:pr-6 xl:text-right",
+                      !present && "max-xl:hidden",
                     )}
                   >
-                    <span className="text-muted-foreground md:hidden">Hours: </span>
+                    <span className="text-muted-foreground xl:hidden">Hours: </span>
                     {present ? formatMinutes(minutesFor(d)) : "—"}
                     <ShiftNote minutes={present ? minutesFor(d) : 0} shift={shift} />
                   </TableCell>
                   <TableCell
                     className={cn(
-                      "col-span-2 p-0 md:py-2 md:pr-5",
-                      !d?.note && !d?.status && "max-md:hidden",
+                      "col-span-2 p-0 xl:py-2 xl:pr-5",
+                      !d?.note && !d?.status && "max-xl:hidden",
                     )}
                   >
                     <Controller
@@ -291,7 +291,7 @@ export function AttendanceSheet({
                           maxLength={200}
                           placeholder="Note"
                           aria-label={`Note, ${dayLabel}`}
-                          className="md:min-w-40"
+                          className="xl:min-w-40"
                         />
                       )}
                     />
@@ -300,9 +300,9 @@ export function AttendanceSheet({
               );
             })}
           </TableBody>
-          <TableFooter className="max-md:block">
-            <TableRow className="max-md:block">
-              <TableCell colSpan={6} className="px-4 py-3 md:px-5">
+          <TableFooter className="max-xl:block">
+            <TableRow className="max-xl:block">
+              <TableCell colSpan={6} className="px-4 py-3 xl:px-5">
                 <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
                   {DAY_STATUSES.map((s) => (
                     <div key={s.value} className="flex gap-1.5">

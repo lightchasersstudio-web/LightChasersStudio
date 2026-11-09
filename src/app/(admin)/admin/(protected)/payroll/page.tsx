@@ -76,7 +76,7 @@ async function Payroll({ searchParams }: Pick<PageProps<"/admin/payroll">, "sear
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <CutoffPicker cutoff={cutoff} current={current} href={href} />
         <div className="flex flex-wrap gap-2">
           {saved && !wantPreview && (

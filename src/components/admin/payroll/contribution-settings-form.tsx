@@ -98,8 +98,8 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
             <CardTitle>Work hours</CardTitle>
             <CardDescription>
               For everyone. Pay is worked out by the hour: with ₱30,000 a month, ÷ 30 days = ₱1,000
-              a day, ÷ 8 hours = ₱125 an hour, so a 4-hour day is ₱500 short. Each
-              employee&apos;s overtime pay is set on their own page.
+              a day, ÷ 8 hours = ₱125 an hour, so a 4-hour day is ₱500 short. Each employee&apos;s
+              overtime pay is set on their own page.
             </CardDescription>
           </CardHeader>
           <CardContent>

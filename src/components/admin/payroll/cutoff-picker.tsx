@@ -18,19 +18,22 @@ export function CutoffPicker({
   const next = shiftCutoff(cutoff, 1);
   return (
     <nav aria-label="Cut-off" className="flex flex-wrap items-center gap-2">
-      <Button asChild variant="outline" size="icon">
-        <Link href={href(prev.start)} aria-label={`Previous cut-off, ${cutoffLabel(prev)}`}>
-          <ChevronLeftIcon aria-hidden />
-        </Link>
-      </Button>
-      <p className="min-w-40 text-center font-heading text-lg font-semibold" aria-live="polite">
-        {cutoffLabel(cutoff)}
-      </p>
-      <Button asChild variant="outline" size="icon">
-        <Link href={href(next.start)} aria-label={`Next cut-off, ${cutoffLabel(next)}`}>
-          <ChevronRightIcon aria-hidden />
-        </Link>
-      </Button>
+      {/* The arrows and the dates stay on one line; "This cut-off" may wrap. */}
+      <div className="flex shrink-0 items-center gap-2">
+        <Button asChild variant="outline" size="icon">
+          <Link href={href(prev.start)} aria-label={`Previous cut-off, ${cutoffLabel(prev)}`}>
+            <ChevronLeftIcon aria-hidden />
+          </Link>
+        </Button>
+        <p className="min-w-40 text-center font-heading text-lg font-semibold" aria-live="polite">
+          {cutoffLabel(cutoff)}
+        </p>
+        <Button asChild variant="outline" size="icon">
+          <Link href={href(next.start)} aria-label={`Next cut-off, ${cutoffLabel(next)}`}>
+            <ChevronRightIcon aria-hidden />
+          </Link>
+        </Button>
+      </div>
       {cutoff.start !== current.start && (
         <Button asChild variant="ghost">
           <Link href={href(current.start)}>This cut-off</Link>

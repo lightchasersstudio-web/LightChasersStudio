@@ -95,22 +95,31 @@ async function signIn(page: Page) {
   await expect(page).toHaveURL(/\/admin$/);
 }
 
-test("payroll: preview, payslip, save, change, save again", async ({ page }) => {
+test("payroll: preview, payslip, save, change, save again", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
+  // Phones show a card per person instead of the table.
+  const phone = testInfo.project.name === "mobile";
+  const entry = (name: string) =>
+    (phone
+      ? page.getByRole("list", { name: "Payslips" }).getByRole("listitem")
+      : page.getByRole("row")
+    ).filter({ hasText: name });
   await signIn(page);
   await page.goto(`/admin/payroll?cutoff=${cutoff}`);
   await expect(page.getByText("Preview, not saved yet.")).toBeVisible();
 
-  const monthly = page.getByRole("row").filter({ hasText: MONTHLY });
+  const monthly = entry(MONTHLY);
   await expect(monthly).toContainText("₱15,400.00"); // half of ₱30,000 + ₱400 overtime
-  await expect(monthly).toContainText("incl. ₱400.00 overtime");
-  await expect(monthly).toContainText("₱1,500.00"); // 1 absent day + 4 h short
-  await expect(monthly).toContainText("4h short");
   await expect(monthly).toContainText("₱12,675.00"); // net
-  const daily = page.getByRole("row").filter({ hasText: DAILY });
+  const daily = entry(DAILY);
   await expect(daily).toContainText("₱7,150.00"); // 11 × ₱650
-  await expect(daily).toContainText("Not enrolled"); // SSS off
   await expect(daily).toContainText("₱6,806.25"); // − PhilHealth ₱243.75 − Pag-IBIG ₱100
+  if (!phone) {
+    await expect(monthly).toContainText("incl. ₱400.00 overtime");
+    await expect(monthly).toContainText("₱1,500.00"); // 1 absent day + 4 h short
+    await expect(monthly).toContainText("4h short");
+    await expect(daily).toContainText("Not enrolled"); // SSS off
+  }
 
   await monthly.getByRole("button", { name: `View ${MONTHLY}'s payslip` }).click();
   const slip = page.getByRole("dialog");
@@ -137,14 +146,14 @@ test("payroll: preview, payslip, save, change, save again", async ({ page }) => 
   expect(error).toBeNull();
   await page.reload();
   await expect(page.getByText(/things have changed since/)).toBeVisible();
-  await expect(page.getByRole("row").filter({ hasText: MONTHLY })).toContainText("₱12,675.00");
+  await expect(entry(MONTHLY)).toContainText("₱12,675.00");
   await page.getByRole("link", { name: "Show new figures" }).click();
-  await expect(page.getByRole("row").filter({ hasText: MONTHLY })).toContainText("₱13,675.00");
+  await expect(entry(MONTHLY)).toContainText("₱13,675.00");
   await page.getByRole("button", { name: "Save again" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Replace payslips" }).click();
   // Saving goes back to the saved view (no ?view=preview).
   await expect(page).not.toHaveURL(/view=preview/);
-  await expect(page.getByRole("row").filter({ hasText: MONTHLY })).toContainText("₱13,675.00");
+  await expect(entry(MONTHLY)).toContainText("₱13,675.00");
 
   const { data: period } = await sb
     .from("payroll_periods")
