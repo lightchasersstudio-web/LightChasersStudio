@@ -1,0 +1,119 @@
+import { createClient } from "@supabase/supabase-js";
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * Payroll → Time record against the DEV Supabase project. Needs an admin
+ * account (E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD) and the service role key
+ * (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY) to add and remove its
+ * test employee.
+ */
+const email = process.env.E2E_ADMIN_EMAIL;
+const password = process.env.E2E_ADMIN_PASSWORD;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+test.describe.configure({ mode: "serial" });
+test.skip(!email || !password || !url || !key, "needs admin login and the service role key");
+
+const RUN = `E2E Staff ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const NAME = `${RUN} Reyes`;
+// Nov 1–15, 2026: the 1st, 8th and 15th are Sundays.
+const CUTOFF = "2026-11-01";
+let employeeId = "";
+
+const admin = () => createClient(url!, key!, { auth: { persistSession: false } });
+
+test.beforeAll(async () => {
+  const { data, error } = await admin()
+    .from("employees")
+    .insert({
+      full_name: NAME,
+      position: "Assistant",
+      date_hired: "2026-01-05",
+      salary_type: "daily",
+      salary_rate: 650,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  employeeId = data.id;
+});
+
+test.afterAll(async () => {
+  const sb = admin();
+  const { data } = await sb.from("employees").select("id").like("full_name", `${RUN}%`);
+  const ids = (data ?? []).map((e) => e.id);
+  if (ids.length) {
+    await sb.from("payslips").delete().in("employee_id", ids);
+    await sb.from("employees").delete().in("id", ids);
+  }
+});
+
+async function signIn(page: Page) {
+  await page.goto("/admin/login");
+  await page.getByLabel("Email").fill(email!);
+  await page.getByLabel("Password").fill(password!);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+}
+
+test("time record: fill a cut-off, mark an absence, overnight shift, totals", async ({ page }) => {
+  test.setTimeout(60_000);
+  await signIn(page);
+  await page.goto(`/admin/dtr?cutoff=${CUTOFF}`);
+  await expect(page.getByText("Nov 1–15, 2026")).toBeVisible();
+  const summaryRow = page.getByRole("row").filter({ hasText: NAME });
+  await expect(summaryRow).toContainText("0/15");
+  await summaryRow.getByRole("link", { name: `Open ${NAME}'s time record` }).click();
+  await expect(page.getByRole("heading", { level: 2, name: NAME })).toBeVisible();
+
+  await page.getByLabel("Usual time in").fill("08:00");
+  await page.getByLabel("Usual time out").fill("17:00");
+  await page.getByRole("button", { name: "Mark blank days present" }).click();
+  await expect(page.getByText("Filled 12 days. Save to keep them.")).toBeVisible();
+  await expect(page.getByLabel("Status, Sun 1 Nov")).toHaveValue("");
+
+  await page.getByLabel("Status, Tue 3 Nov").selectOption("absent");
+  await expect(page.getByLabel("Time in, Tue 3 Nov")).toBeDisabled();
+  await page.getByLabel("Note, Tue 3 Nov").fill("Sick");
+
+  // An overnight event shoot: 6 PM to 1 AM = 7 hours.
+  await page.getByLabel("Time out, Wed 4 Nov").fill("");
+  await page.getByRole("button", { name: "Save time record" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Enter the time out." })).toBeVisible();
+  await page.getByLabel("Time in, Wed 4 Nov").fill("18:00");
+  await page.getByLabel("Time out, Wed 4 Nov").fill("01:00");
+
+  // 10 days × 9h + 7h = 97h
+  const totals = page.locator("tfoot");
+  await expect(totals).toContainText("Present11");
+  await expect(totals).toContainText("Absent1");
+  await expect(totals).toContainText("Hours worked97h");
+
+  await page.getByRole("button", { name: "Save time record" }).click();
+  await expect(page.getByText(`Time record saved for ${NAME}.`)).toBeVisible();
+
+  await page.reload();
+  await page.waitForLoadState("networkidle"); // let React hydrate before changing the form
+  await expect(page.getByLabel("Status, Tue 3 Nov")).toHaveValue("absent");
+  await expect(page.getByLabel("Note, Tue 3 Nov")).toHaveValue("Sick");
+  await expect(page.getByLabel("Time out, Wed 4 Nov")).toHaveValue("01:00");
+
+  // Clearing a day removes it.
+  await page.getByLabel("Status, Sat 14 Nov").selectOption({ label: "Not recorded" });
+  await page.getByRole("button", { name: "Save time record" }).click();
+  await expect(page.getByText(`Time record saved for ${NAME}.`)).toBeVisible();
+
+  await page.getByRole("link", { name: "All staff" }).click();
+  const row = page.getByRole("row").filter({ hasText: NAME });
+  await expect(row).toContainText("11/15");
+  await expect(row).toContainText("88h");
+
+  const { data } = await admin()
+    .from("attendance_logs")
+    .select("work_date, minutes_worked")
+    .eq("employee_id", employeeId)
+    .eq("work_date", "2026-11-04")
+    .single();
+  expect(data?.minutes_worked).toBe(420);
+});

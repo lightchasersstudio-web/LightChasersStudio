@@ -29,6 +29,7 @@ const SIMPLE: Record<string, string> = {
   "employee.benefit_on": "Turned on a contribution",
   "employee.benefit_off": "Turned off a contribution",
   "payroll.rates": "Changed the contribution rates",
+  "attendance.update": "Updated a time record",
   "faq.create": "Added a FAQ question",
   "faq.update": "Edited a FAQ question",
   "faq.publish": "Showed a FAQ question",
