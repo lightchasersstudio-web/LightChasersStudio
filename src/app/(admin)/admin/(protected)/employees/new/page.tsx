@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { EmployeeForm } from "@/components/admin/payroll/employee-form";
 import { FormSkeleton } from "@/components/admin/skeletons";
 import { requireAdmin } from "@/server/auth";
-import { getWorkDaysPerMonth } from "@/server/queries/employees";
+import { getContributionRates } from "@/server/queries/employees";
 
 export const metadata: Metadata = { title: "Add employee" };
 
@@ -22,5 +22,6 @@ export default function NewEmployeePage() {
 
 async function NewEmployee() {
   await requireAdmin();
-  return <EmployeeForm workDays={await getWorkDaysPerMonth()} />;
+  const rates = await getContributionRates();
+  return <EmployeeForm workDays={rates.workDaysPerMonth} />;
 }

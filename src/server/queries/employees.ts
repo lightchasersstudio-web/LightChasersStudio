@@ -1,5 +1,6 @@
 import "server-only";
 
+import { ratesFromRow, type ContributionRates } from "@/lib/payroll/contributions";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database.types";
 
@@ -67,13 +68,10 @@ export async function getEmployee(id: string): Promise<EmployeeDetail | null> {
   };
 }
 
-/** Working days in a month (Payroll settings), for daily ↔ monthly rates. */
-export async function getWorkDaysPerMonth(): Promise<number> {
+/** Contribution rates and working days per month (Payroll → Contribution rates). */
+export async function getContributionRates(): Promise<ContributionRates> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("contribution_settings")
-    .select("work_days_per_month")
-    .single();
+  const { data, error } = await supabase.from("contribution_settings").select("*").single();
   if (error) throw error;
-  return Number(data.work_days_per_month);
+  return ratesFromRow(data);
 }

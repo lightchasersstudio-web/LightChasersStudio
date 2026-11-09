@@ -11,6 +11,9 @@ const email = process.env.E2E_ADMIN_EMAIL;
 const password = process.env.E2E_ADMIN_PASSWORD;
 
 test.describe.configure({ mode: "serial" });
+
+// Unique per run: the desktop and phone projects run side by side.
+const RUN = `E2E Staff ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 test.skip(!email || !password, "set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD");
 
 // 1×1 PNG, enough for the browser-side resize + upload pipeline.
@@ -34,10 +37,7 @@ test.afterAll(async () => {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return;
   const sb = createClient(url, key, { auth: { persistSession: false } });
-  const { data } = await sb
-    .from("employees")
-    .select("id, photo_path")
-    .like("full_name", "E2E Staff%");
+  const { data } = await sb.from("employees").select("id, photo_path").like("full_name", `${RUN}%`);
   const ids = (data ?? []).map((e) => e.id);
   if (!ids.length) return;
   await sb.from("payslips").delete().in("employee_id", ids);
@@ -48,7 +48,7 @@ test.afterAll(async () => {
 
 test("employees: add with photo, edit salary, deactivate and reactivate", async ({ page }) => {
   test.setTimeout(60_000);
-  const name = `E2E Staff ${Date.now()}`;
+  const name = `${RUN} Cruz`;
 
   await page.goto("/admin/employees/new");
   await page.getByLabel("Full name").fill(name);
@@ -80,6 +80,30 @@ test("employees: add with photo, edit salary, deactivate and reactivate", async 
   await expect(page.getByText("₱16,900", { exact: true })).toBeVisible(); // × 26 days
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Employee saved.")).toBeVisible();
+
+  // Benefits follow the new salary: ₱650 × 26 = ₱16,900 → SSS MSC ₱17,000.
+  const benefitList = page.getByRole("list", { name: "Benefits" });
+  const benefits = benefitList.getByRole("listitem").filter({ hasText: "SSS" });
+  await expect(benefits).toContainText("₱425.00 per cut-off · ₱850.00 a month");
+  await expect(benefits).toContainText("Monthly Salary Credit ₱17,000.00");
+  const philhealth = benefitList.getByRole("listitem").filter({ hasText: "PhilHealth" });
+  await expect(philhealth).toContainText("₱211.25 per cut-off");
+  await philhealth.getByRole("switch", { name: "PhilHealth" }).click();
+  await expect(page.getByText(`PhilHealth off for ${name}.`)).toBeVisible();
+  await page.reload();
+  await expect(benefitList.getByRole("listitem").filter({ hasText: "PhilHealth" })).toContainText(
+    "Not enrolled",
+  );
+
+  // Rates page: a range that doesn't make sense isn't saved.
+  await page.goto("/admin/payroll/settings");
+  await expect(page.getByRole("row", { name: /SSS/ })).toContainText("₱500.00");
+  await page.getByLabel("Salary ceiling").fill("5000");
+  await page.getByRole("button", { name: "Save rates" }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "The ceiling can't be lower than the floor." }),
+  ).toBeVisible();
+  page.once("dialog", (d) => d.accept()); // unsaved changes: leave anyway
 
   await page.goto("/admin/employees");
   const row = page.getByRole("listitem").filter({ hasText: name });

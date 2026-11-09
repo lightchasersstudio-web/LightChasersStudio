@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { ArrowRightIcon, PlusIcon } from "lucide-react";
+import { ArrowRightIcon, PercentIcon, PlusIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -30,12 +30,20 @@ export default function EmployeesPage({ searchParams }: PageProps<"/admin/employ
         title="Employees"
         description="Staff details, salary and government numbers for payroll."
         actions={
-          <Button asChild size="lg">
-            <Link href="/admin/employees/new">
-              <PlusIcon aria-hidden />
-              Add employee
-            </Link>
-          </Button>
+          <>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/admin/payroll/settings">
+                <PercentIcon aria-hidden />
+                Contribution rates
+              </Link>
+            </Button>
+            <Button asChild size="lg">
+              <Link href="/admin/employees/new">
+                <PlusIcon aria-hidden />
+                Add employee
+              </Link>
+            </Button>
+          </>
         }
       />
       <Suspense fallback={<ListSkeleton rows={4} />}>

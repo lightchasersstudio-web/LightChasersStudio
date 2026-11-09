@@ -12,7 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { businessToday, tzDate } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
-import { getEmployee, getWorkDaysPerMonth } from "@/server/queries/employees";
+import { BenefitsCard } from "@/components/admin/payroll/benefits-card";
+import { monthlyContributions } from "@/lib/payroll/contributions";
+import { asSalaryType, salaryRates } from "@/lib/payroll/employees";
+import { getContributionRates, getEmployee } from "@/server/queries/employees";
 
 export const metadata: Metadata = { title: "Employee" };
 
@@ -48,8 +51,14 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
   await requireAdmin();
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
-  const [employee, workDays] = await Promise.all([getEmployee(id), getWorkDaysPerMonth()]);
+  const [employee, rates] = await Promise.all([getEmployee(id), getContributionRates()]);
   if (!employee) notFound();
+  const workDays = rates.workDaysPerMonth;
+  const { monthly } = salaryRates(
+    asSalaryType(employee.salary_type),
+    Number(employee.salary_rate),
+    workDays,
+  );
 
   return (
     <>
@@ -81,6 +90,19 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
       </header>
       {/* key: reset the form when navigating between employees */}
       <EmployeeForm key={employee.id} employee={employee} workDays={workDays} />
+      <BenefitsCard
+        // key: new figures after a salary change, fresh switches for another employee
+        key={`${employee.id}-${monthly}`}
+        employeeId={employee.id}
+        name={employee.full_name}
+        enabled={{
+          sss: employee.benefits?.sss_enabled ?? true,
+          philhealth: employee.benefits?.philhealth_enabled ?? true,
+          pagibig: employee.benefits?.pagibig_enabled ?? true,
+        }}
+        contributions={monthlyContributions(monthly, rates)}
+        monthlySalary={monthly}
+      />
     </>
   );
 }
