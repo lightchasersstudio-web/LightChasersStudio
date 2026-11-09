@@ -11,7 +11,6 @@ import { handleResult } from "@/components/admin/form-utils";
 import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FieldGroup } from "@/components/ui/field";
 import {
   cutoffShare,
   DEFAULT_RATES,
@@ -39,6 +38,7 @@ function toForm(r: ContributionRates): ContributionSettingsFormInput {
     pagibigRate: pct(r.pagibigEmployeeRate),
     pagibigCap: amountToInput(r.pagibigSalaryCap),
     workDays: String(r.workDaysPerMonth),
+    hoursPerDay: String(r.hoursPerDay),
   };
 }
 
@@ -71,6 +71,7 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
         pagibigEmployeeRate: parsed.data.pagibig_employee_rate,
         pagibigSalaryCap: parsed.data.pagibig_salary_cap,
         workDaysPerMonth: parsed.data.work_days_per_month,
+        hoursPerDay: parsed.data.hours_per_day,
       })
     : null;
 
@@ -196,19 +197,29 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
 
         <Card>
           <CardHeader>
-            <CardTitle>Working days</CardTitle>
+            <CardTitle>Days and hours</CardTitle>
+            <CardDescription>
+              How pay is worked out by the hour. With ₱30,000 a month: ÷ 30 days = ₱1,000 a day, ÷ 8
+              hours = ₱125 an hour, so a 4-hour day is ₱500 short.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <FieldGroup>
+            <div className="grid gap-5 sm:grid-cols-2">
               <TextField
                 control={control}
                 name="workDays"
-                label="Working days in a month"
+                label="Days in a month"
                 inputMode="decimal"
-                className="max-w-xs"
-                description="Daily rate = monthly salary ÷ this (for absences). A daily-paid employee's monthly salary = daily rate × this (for contributions). 26 = Monday to Saturday."
+                description="Daily rate = monthly salary ÷ this. A daily-paid employee's monthly salary (for contributions) = daily rate × this."
               />
-            </FieldGroup>
+              <TextField
+                control={control}
+                name="hoursPerDay"
+                label="Hours in a shift"
+                inputMode="decimal"
+                description="Hourly rate = daily rate ÷ this. Less time than this is deducted (undertime); more is overtime."
+              />
+            </div>
           </CardContent>
         </Card>
       </div>

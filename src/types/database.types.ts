@@ -575,6 +575,7 @@ export type Database = {
       }
       contribution_settings: {
         Row: {
+          hours_per_day: number
           id: boolean
           pagibig_employee_rate: number
           pagibig_salary_cap: number
@@ -590,6 +591,7 @@ export type Database = {
         }
         ComputedFields: never
         Insert: {
+          hours_per_day?: number
           id?: boolean
           pagibig_employee_rate?: number
           pagibig_salary_cap?: number
@@ -604,6 +606,7 @@ export type Database = {
           work_days_per_month?: number
         }
         Update: {
+          hours_per_day?: number
           id?: boolean
           pagibig_employee_rate?: number
           pagibig_salary_cap?: number
@@ -661,6 +664,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          overtime_rate: number | null
           pagibig_no: string | null
           philhealth_no: string | null
           phone: string | null
@@ -680,6 +684,7 @@ export type Database = {
           full_name: string
           id?: string
           is_active?: boolean
+          overtime_rate?: number | null
           pagibig_no?: string | null
           philhealth_no?: string | null
           phone?: string | null
@@ -698,6 +703,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          overtime_rate?: number | null
           pagibig_no?: string | null
           philhealth_no?: string | null
           phone?: string | null
@@ -877,17 +883,24 @@ export type Database = {
           employee_name: string
           employee_position: string
           gross_pay: number
+          hourly_rate: number
           id: string
           minutes_worked: number
           monthly_salary: number
           net_pay: number
+          overtime_minutes: number
+          overtime_pay: number
+          overtime_rate: number | null
           pagibig_deduction: number | null
           payroll_period_id: string
           philhealth_deduction: number | null
+          regular_minutes: number
           salary_rate: number
           salary_type: string
           sss_deduction: number | null
           total_deductions: number
+          undertime_deduction: number
+          undertime_minutes: number
         }
         ComputedFields: never
         Insert: {
@@ -903,17 +916,24 @@ export type Database = {
           employee_name: string
           employee_position: string
           gross_pay: number
+          hourly_rate?: number
           id?: string
           minutes_worked?: number
           monthly_salary: number
           net_pay: number
+          overtime_minutes?: number
+          overtime_pay?: number
+          overtime_rate?: number | null
           pagibig_deduction?: number | null
           payroll_period_id: string
           philhealth_deduction?: number | null
+          regular_minutes?: number
           salary_rate: number
           salary_type: string
           sss_deduction?: number | null
           total_deductions: number
+          undertime_deduction?: number
+          undertime_minutes?: number
         }
         Update: {
           absence_deduction?: number
@@ -928,17 +948,24 @@ export type Database = {
           employee_name?: string
           employee_position?: string
           gross_pay?: number
+          hourly_rate?: number
           id?: string
           minutes_worked?: number
           monthly_salary?: number
           net_pay?: number
+          overtime_minutes?: number
+          overtime_pay?: number
+          overtime_rate?: number | null
           pagibig_deduction?: number | null
           payroll_period_id?: string
           philhealth_deduction?: number | null
+          regular_minutes?: number
           salary_rate?: number
           salary_type?: string
           sss_deduction?: number | null
           total_deductions?: number
+          undertime_deduction?: number
+          undertime_minutes?: number
         }
         Relationships: [
           {

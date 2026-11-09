@@ -135,6 +135,14 @@ function EmployeePage({
             value={formatAmountExact(monthly)}
           />
         )}
+        <Field
+          label={`Hourly rate (÷ ${rates.hoursPerDay} hours)`}
+          value={formatAmountExact(Math.round((daily * 100) / rates.hoursPerDay) / 100)}
+        />
+        <Field
+          label="Overtime pay per hour"
+          value={e.overtime_rate === null ? "Not paid" : formatAmountExact(Number(e.overtime_rate))}
+        />
       </Section>
 
       <View wrap={false}>

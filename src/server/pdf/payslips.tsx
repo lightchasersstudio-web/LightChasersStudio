@@ -5,6 +5,14 @@ import { Document, Page, Text, View } from "@react-pdf/renderer";
 import { formatMinutes } from "@/lib/payroll/cutoff";
 import { formatAmountExact } from "@/lib/payroll/money";
 import type { Payslip } from "@/lib/payroll/payslip";
+import {
+  absencesLine,
+  basicPayLine,
+  contributionLine,
+  overtimeLine,
+  totalDeductionsLine,
+  undertimeLine,
+} from "@/lib/payroll/payslip-lines";
 import { C, PdfFooter, PdfHeader, s, type Brand } from "@/server/pdf/kit";
 
 function Line({
@@ -31,9 +39,6 @@ function Line({
   );
 }
 
-const deduction = (v: number | null) =>
-  v === null ? { value: "Not enrolled", muted: true } : { value: `−${formatAmountExact(v)}` };
-
 function PayslipPage({
   brand,
   slip,
@@ -45,7 +50,6 @@ function PayslipPage({
   period: string;
   saved: string;
 }) {
-  const unpaid = slip.days_absent + slip.days_leave + slip.days_holiday;
   return (
     <Page size="A4" style={s.page}>
       <PdfHeader brand={brand} title="Payslip" subtitle={`Pay period: ${period}`} />
@@ -61,13 +65,16 @@ function PayslipPage({
             {slip.salary_type === "monthly" ? "Monthly salary" : "Daily rate"}
           </Text>
           <Text style={s.bold}>{formatAmountExact(slip.salary_rate)}</Text>
-          <Text style={s.small}>Semi-monthly pay</Text>
+          <Text style={s.small}>
+            {formatAmountExact(slip.hourly_rate)} an hour · semi-monthly pay
+          </Text>
         </View>
       </View>
 
       <View
         style={{
           flexDirection: "row",
+          gap: 10,
           backgroundColor: C.ivory,
           borderRadius: 8,
           padding: 10,
@@ -81,6 +88,8 @@ function PayslipPage({
             ["Leave", String(slip.days_leave)],
             ["Holiday", String(slip.days_holiday)],
             ["Hours worked", formatMinutes(slip.minutes_worked)],
+            ["Short", formatMinutes(slip.undertime_minutes)],
+            ["Overtime", formatMinutes(slip.overtime_minutes)],
           ] as const
         ).map(([label, value]) => (
           <View key={label} style={{ flex: 1 }}>
@@ -93,36 +102,21 @@ function PayslipPage({
       <View style={{ flexDirection: "row", gap: 24 }}>
         <View style={{ flex: 1 }}>
           <Text style={s.h2}>Earnings</Text>
-          <Line
-            label="Basic pay"
-            hint={
-              slip.salary_type === "monthly"
-                ? `Half of ${formatAmountExact(slip.monthly_salary)} monthly`
-                : `${slip.days_present} days × ${formatAmountExact(slip.daily_rate)}`
-            }
-            value={formatAmountExact(slip.basic_pay)}
-          />
+          {[basicPayLine(slip), overtimeLine(slip)].map(
+            (line) => line && <Line key={line.label} {...line} />,
+          )}
           <Line label="Gross pay" value={formatAmountExact(slip.gross_pay)} strong />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={s.h2}>Deductions</Text>
-          {slip.salary_type === "monthly" && (
-            <Line
-              label="Absences"
-              hint={`${unpaid} unpaid ${unpaid === 1 ? "day" : "days"} × ${formatAmountExact(slip.daily_rate)}`}
-              value={
-                slip.absence_deduction ? `−${formatAmountExact(slip.absence_deduction)}` : "₱0.00"
-              }
-            />
-          )}
-          <Line label="SSS" {...deduction(slip.sss_deduction)} />
-          <Line label="PhilHealth" {...deduction(slip.philhealth_deduction)} />
-          <Line label="Pag-IBIG" {...deduction(slip.pagibig_deduction)} />
-          <Line
-            label="Total deductions"
-            value={slip.total_deductions ? `−${formatAmountExact(slip.total_deductions)}` : "₱0.00"}
-            strong
-          />
+          {[
+            absencesLine(slip),
+            undertimeLine(slip),
+            contributionLine("SSS", slip.sss_deduction),
+            contributionLine("PhilHealth", slip.philhealth_deduction),
+            contributionLine("Pag-IBIG", slip.pagibig_deduction),
+          ].map((line) => line && <Line key={line.label} {...line} />)}
+          <Line {...totalDeductionsLine(slip)} strong />
         </View>
       </View>
 

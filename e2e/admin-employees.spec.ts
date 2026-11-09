@@ -62,7 +62,8 @@ test("employees: add with photo, edit salary, deactivate and reactivate", async 
   await page.getByLabel("SSS no.").fill("34-123");
   await page.getByLabel("Monthly salary").fill("20000");
   await expect(page.getByText("₱10,000", { exact: true })).toBeVisible(); // per cut-off
-  await expect(page.getByText("₱769.23", { exact: true })).toBeVisible(); // ÷ 26 days
+  await expect(page.getByText("₱666.67", { exact: true })).toBeVisible(); // ÷ 30 days
+  await expect(page.getByText("₱83.33", { exact: true })).toBeVisible(); // ÷ 8 hours
   await page.getByRole("button", { name: "Add employee" }).click();
   await expect(
     page.getByRole("alert").filter({ hasText: "The SSS no. has 10 digits, like 34-1234567-8." }),
@@ -77,23 +78,26 @@ test("employees: add with photo, edit salary, deactivate and reactivate", async 
   // Switch to a daily rate.
   await page.getByLabel("Paid by").selectOption("daily");
   await page.getByLabel("Daily rate").fill("650");
-  await expect(page.getByText("₱16,900", { exact: true })).toBeVisible(); // × 26 days
+  await expect(page.getByText("₱19,500", { exact: true })).toBeVisible(); // × 30 days
+  await expect(page.getByText("₱81.25", { exact: true })).toBeVisible(); // ÷ 8 hours
+  await page.getByLabel("Overtime pay per hour").fill("100");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Employee saved.")).toBeVisible();
 
-  // Benefits follow the new salary: ₱650 × 26 = ₱16,900 → SSS MSC ₱17,000.
+  // Benefits follow the new salary: ₱650 × 30 = ₱19,500 → SSS MSC ₱19,500.
   const benefitList = page.getByRole("list", { name: "Benefits" });
   const benefits = benefitList.getByRole("listitem").filter({ hasText: "SSS" });
-  await expect(benefits).toContainText("₱425.00 per cut-off · ₱850.00 a month");
-  await expect(benefits).toContainText("Monthly Salary Credit ₱17,000.00");
+  await expect(benefits).toContainText("₱487.50 per cut-off · ₱975.00 a month");
+  await expect(benefits).toContainText("Monthly Salary Credit ₱19,500.00");
   const philhealth = benefitList.getByRole("listitem").filter({ hasText: "PhilHealth" });
-  await expect(philhealth).toContainText("₱211.25 per cut-off");
+  await expect(philhealth).toContainText("₱243.75 per cut-off");
   await philhealth.getByRole("switch", { name: "PhilHealth" }).click();
   await expect(page.getByText(`PhilHealth off for ${name}.`)).toBeVisible();
   await page.reload();
   await expect(benefitList.getByRole("listitem").filter({ hasText: "PhilHealth" })).toContainText(
     "Not enrolled",
   );
+  await expect(page.getByLabel("Overtime pay per hour")).toHaveValue("100");
 
   // Rates page: a range that doesn't make sense isn't saved.
   await page.goto("/admin/payroll/settings");

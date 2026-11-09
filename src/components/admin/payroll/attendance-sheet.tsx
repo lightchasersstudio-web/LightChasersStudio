@@ -37,6 +37,18 @@ import type { AttendanceLog } from "@/server/queries/attendance";
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/** "4h short" / "2h overtime" under a day's hours, against a shift. */
+function ShiftNote({ minutes, shift }: { minutes: number; shift: number }) {
+  if (!minutes || minutes === shift) return null;
+  const short = minutes < shift;
+  return (
+    <span className={cn("text-xs md:block", short ? "text-terracotta-ink" : "text-primary")}>
+      <span className="md:hidden"> · </span>
+      {formatMinutes(Math.abs(shift - minutes))} {short ? "short" : "overtime"}
+    </span>
+  );
+}
+
 const STATUS_TONE: Record<string, string> = {
   present: "",
   absent: "bg-destructive/5",
@@ -50,13 +62,17 @@ export function AttendanceSheet({
   cutoff,
   dates,
   logs,
+  hoursPerDay,
 }: {
   employeeId: string;
   employeeName: string;
   cutoff: string;
   dates: string[];
   logs: AttendanceLog[];
+  /** A shift: less is undertime, more is overtime. */
+  hoursPerDay: number;
 }) {
+  const shift = Math.round(hoursPerDay * 60);
   const byDate = new Map(logs.map((l) => [l.date, l]));
   const defaults: AttendanceSheetInput = {
     employeeId,
@@ -82,7 +98,7 @@ export function AttendanceSheet({
   useUnsavedChangesWarning(form.formState.isDirty);
 
   const [fillIn, setFillIn] = useState("09:00");
-  const [fillOut, setFillOut] = useState("18:00");
+  const [fillOut, setFillOut] = useState("17:00");
 
   const minutesFor = (d: AttendanceSheetInput["days"][number] | undefined) =>
     d?.status === "present" && TIME.test(d.timeIn) && TIME.test(d.timeOut) && d.timeIn !== d.timeOut
@@ -93,6 +109,12 @@ export function AttendanceSheet({
       isDayStatus(d.status) ? [{ status: d.status, minutes: minutesFor(d) }] : [],
     ),
   );
+  // Against a shift, on present days with both times in.
+  const presentMinutes = (days ?? []).flatMap((d) =>
+    d.status === "present" && minutesFor(d) > 0 ? [minutesFor(d)] : [],
+  );
+  const shortMinutes = presentMinutes.reduce((s, m) => s + Math.max(0, shift - m), 0);
+  const overtimeMinutes = presentMinutes.reduce((s, m) => s + Math.max(0, m - shift), 0);
 
   function fillBlank() {
     if (!TIME.test(fillIn) || !TIME.test(fillOut) || fillIn === fillOut) {
@@ -252,6 +274,7 @@ export function AttendanceSheet({
                   >
                     <span className="text-muted-foreground md:hidden">Hours: </span>
                     {present ? formatMinutes(minutesFor(d)) : "—"}
+                    <ShiftNote minutes={present ? minutesFor(d) : 0} shift={shift} />
                   </TableCell>
                   <TableCell
                     className={cn(
@@ -290,6 +313,14 @@ export function AttendanceSheet({
                   <div className="flex gap-1.5">
                     <dt className="text-muted-foreground">Hours worked</dt>
                     <dd className="font-semibold tabular-nums">{formatMinutes(totals.minutes)}</dd>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <dt className="text-muted-foreground">Short</dt>
+                    <dd className="font-semibold tabular-nums">{formatMinutes(shortMinutes)}</dd>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <dt className="text-muted-foreground">Overtime</dt>
+                    <dd className="font-semibold tabular-nums">{formatMinutes(overtimeMinutes)}</dd>
                   </div>
                 </dl>
               </TableCell>

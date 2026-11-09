@@ -33,6 +33,7 @@ import {
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
 import { getAttendance, getCutoffSummary, getPayrollSavedAt } from "@/server/queries/attendance";
+import { getContributionRates } from "@/server/queries/employees";
 
 export const metadata: Metadata = { title: "Time record" };
 
@@ -109,7 +110,10 @@ async function Sheet({
   cutoff: Cutoff;
   employee: { id: string; name: string; isActive: boolean };
 }) {
-  const logs = await getAttendance(employee.id, cutoff);
+  const [logs, rates] = await Promise.all([
+    getAttendance(employee.id, cutoff),
+    getContributionRates(),
+  ]);
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
@@ -129,6 +133,7 @@ async function Sheet({
         cutoff={cutoff.start}
         dates={cutoffDates(cutoff)}
         logs={logs}
+        hoursPerDay={rates.hoursPerDay}
       />
     </>
   );

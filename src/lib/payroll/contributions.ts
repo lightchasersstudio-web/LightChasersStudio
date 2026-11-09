@@ -11,7 +11,10 @@ export type ContributionRates = {
   philhealthCeiling: number;
   pagibigEmployeeRate: number;
   pagibigSalaryCap: number;
+  /** Days in a month: daily rate = monthly ÷ this. */
   workDaysPerMonth: number;
+  /** Hours in a shift: hourly rate = daily ÷ this; more is overtime, less is undertime. */
+  hoursPerDay: number;
 };
 
 /** The 2026 defaults (same as the migration), for tests and empty states. */
@@ -25,7 +28,8 @@ export const DEFAULT_RATES: ContributionRates = {
   philhealthCeiling: 100000,
   pagibigEmployeeRate: 0.02,
   pagibigSalaryCap: 10000,
-  workDaysPerMonth: 26,
+  workDaysPerMonth: 30,
+  hoursPerDay: 8,
 };
 
 type Numeric = number | string;
@@ -41,6 +45,7 @@ export function ratesFromRow(row: {
   pagibig_employee_rate: Numeric;
   pagibig_salary_cap: Numeric;
   work_days_per_month: Numeric;
+  hours_per_day: Numeric;
 }): ContributionRates {
   return {
     sssEmployeeRate: Number(row.sss_employee_rate),
@@ -53,6 +58,7 @@ export function ratesFromRow(row: {
     pagibigEmployeeRate: Number(row.pagibig_employee_rate),
     pagibigSalaryCap: Number(row.pagibig_salary_cap),
     workDaysPerMonth: Number(row.work_days_per_month),
+    hoursPerDay: Number(row.hours_per_day),
   };
 }
 

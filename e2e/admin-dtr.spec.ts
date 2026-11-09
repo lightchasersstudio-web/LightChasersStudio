@@ -89,6 +89,10 @@ test("time record: fill a cut-off, mark an absence, overnight shift, totals", as
   await expect(totals).toContainText("Present11");
   await expect(totals).toContainText("Absent1");
   await expect(totals).toContainText("Hours worked97h");
+  // Against an 8-hour shift: 10 days of 9 h = 10 h overtime; the 7-hour night = 1 h short.
+  await expect(totals).toContainText("Short1h");
+  await expect(totals).toContainText("Overtime10h");
+  await expect(page.getByRole("row", { name: /Mon 2 Nov/ })).toContainText("1h overtime");
 
   await page.getByRole("button", { name: "Save time record" }).click();
   await expect(page.getByText(`Time record saved for ${NAME}.`)).toBeVisible();

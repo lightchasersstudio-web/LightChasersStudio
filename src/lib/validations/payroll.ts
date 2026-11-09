@@ -37,7 +37,16 @@ export const contributionSettingsSchema = z
       const clean = v.trim();
       const n = Number(clean);
       if (!/^\d{1,2}(\.\d{1,2})?$/.test(clean) || n < 1 || n > 31) {
-        ctx.addIssue({ code: "custom", message: "Enter the number of working days, 1 to 31." });
+        ctx.addIssue({ code: "custom", message: "Enter the number of days, 1 to 31." });
+        return z.NEVER;
+      }
+      return n;
+    }),
+    hoursPerDay: z.string().transform((v, ctx) => {
+      const clean = v.trim();
+      const n = Number(clean);
+      if (!/^\d{1,2}(\.\d{1,2})?$/.test(clean) || n < 1 || n > 24) {
+        ctx.addIssue({ code: "custom", message: "Enter the hours in a shift, 1 to 24." });
         return z.NEVER;
       }
       return n;
@@ -70,6 +79,7 @@ export const contributionSettingsSchema = z
     pagibig_employee_rate: v.pagibigRate,
     pagibig_salary_cap: v.pagibigCap,
     work_days_per_month: v.workDays,
+    hours_per_day: v.hoursPerDay,
   }));
 
 export type ContributionSettingsFormInput = z.input<typeof contributionSettingsSchema>;

@@ -17,6 +17,7 @@ const base: EmployeeFormInput = {
   pagibigNo: "",
   salaryType: "monthly",
   salaryRate: "18,000",
+  overtimeRate: "",
 };
 
 describe("employeeSchema", () => {
@@ -34,6 +35,7 @@ describe("employeeSchema", () => {
       pagibig_no: null,
       salary_type: "monthly",
       salary_rate: 18000,
+      overtime_rate: null,
     });
   });
 
@@ -46,6 +48,7 @@ describe("employeeSchema", () => {
       email: "Ana@Example.com",
       salaryType: "daily",
       salaryRate: "650.50",
+      overtimeRate: "125",
     });
     expect(row).toMatchObject({
       sss_no: "3412345678",
@@ -54,6 +57,7 @@ describe("employeeSchema", () => {
       email: "ana@example.com",
       salary_type: "daily",
       salary_rate: 650.5,
+      overtime_rate: 125,
     });
   });
 
@@ -64,10 +68,11 @@ describe("employeeSchema", () => {
       salaryRate: "0",
       email: "nope",
       photoPath: "../evil.png",
+      overtimeRate: "lots",
     });
     expect(result.success).toBe(false);
     const paths = result.error!.issues.map((i) => i.path.join("."));
-    expect(paths.sort()).toEqual(["email", "photoPath", "salaryRate", "sssNo"]);
+    expect(paths.sort()).toEqual(["email", "overtimeRate", "photoPath", "salaryRate", "sssNo"]);
     expect(result.error!.issues.find((i) => i.path[0] === "sssNo")?.message).toMatch(/10 digits/);
   });
 });

@@ -1,6 +1,14 @@
 import { formatMinutes } from "@/lib/payroll/cutoff";
 import { formatAmountExact } from "@/lib/payroll/money";
 import type { Payslip } from "@/lib/payroll/payslip";
+import {
+  absencesLine,
+  basicPayLine,
+  contributionLine,
+  overtimeLine,
+  totalDeductionsLine,
+  undertimeLine,
+} from "@/lib/payroll/payslip-lines";
 import { cn } from "@/lib/utils";
 
 function Line({
@@ -29,12 +37,15 @@ function Line({
   );
 }
 
-const contribution = (v: number | null) =>
-  v === null ? { value: "Not enrolled", muted: true } : { value: `−${formatAmountExact(v)}` };
-
 /** The full breakdown of one payslip (dialog on the payroll page). */
 export function PayslipDetail({ slip }: { slip: Payslip }) {
-  const unpaid = slip.days_absent + slip.days_leave + slip.days_holiday;
+  const time = [
+    `${formatMinutes(slip.minutes_worked)} worked`,
+    slip.undertime_minutes ? `${formatMinutes(slip.undertime_minutes)} short` : null,
+    slip.overtime_minutes ? `${formatMinutes(slip.overtime_minutes)} overtime` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <div className="space-y-5 text-sm">
       <dl className="grid grid-cols-2 gap-3 rounded-2xl bg-muted/60 p-4 sm:grid-cols-4">
@@ -53,22 +64,16 @@ export function PayslipDetail({ slip }: { slip: Payslip }) {
         ))}
         <div className="col-span-2 sm:col-span-4">
           <dt className="sr-only">Hours worked</dt>
-          <dd className="text-muted-foreground">{formatMinutes(slip.minutes_worked)} worked</dd>
+          <dd className="text-muted-foreground">{time}</dd>
         </div>
       </dl>
 
       <section>
         <h3 className="mb-1 font-semibold">Earnings</h3>
         <dl className="divide-y">
-          <Line
-            label="Basic pay"
-            hint={
-              slip.salary_type === "monthly"
-                ? `Half of ${formatAmountExact(slip.monthly_salary)} monthly`
-                : `${slip.days_present} days × ${formatAmountExact(slip.daily_rate)}`
-            }
-            value={formatAmountExact(slip.basic_pay)}
-          />
+          {[basicPayLine(slip), overtimeLine(slip)].map(
+            (line) => line && <Line key={line.label} {...line} />,
+          )}
           <Line label="Gross pay" value={formatAmountExact(slip.gross_pay)} strong />
         </dl>
       </section>
@@ -76,23 +81,14 @@ export function PayslipDetail({ slip }: { slip: Payslip }) {
       <section>
         <h3 className="mb-1 font-semibold">Deductions</h3>
         <dl className="divide-y">
-          {slip.salary_type === "monthly" && (
-            <Line
-              label="Absences"
-              hint={`${unpaid} unpaid ${unpaid === 1 ? "day" : "days"} × ${formatAmountExact(slip.daily_rate)}`}
-              value={
-                slip.absence_deduction ? `−${formatAmountExact(slip.absence_deduction)}` : "₱0.00"
-              }
-            />
-          )}
-          <Line label="SSS" {...contribution(slip.sss_deduction)} />
-          <Line label="PhilHealth" {...contribution(slip.philhealth_deduction)} />
-          <Line label="Pag-IBIG" {...contribution(slip.pagibig_deduction)} />
-          <Line
-            label="Total deductions"
-            value={slip.total_deductions ? `−${formatAmountExact(slip.total_deductions)}` : "₱0.00"}
-            strong
-          />
+          {[
+            absencesLine(slip),
+            undertimeLine(slip),
+            contributionLine("SSS", slip.sss_deduction),
+            contributionLine("PhilHealth", slip.philhealth_deduction),
+            contributionLine("Pag-IBIG", slip.pagibig_deduction),
+          ].map((line) => line && <Line key={line.label} {...line} />)}
+          <Line {...totalDeductionsLine(slip)} strong />
         </dl>
       </section>
 

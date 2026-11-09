@@ -15,7 +15,8 @@ const form: ContributionSettingsFormInput = {
   philhealthCeiling: "100000",
   pagibigRate: "2",
   pagibigCap: "10000",
-  workDays: "26",
+  workDays: "30",
+  hoursPerDay: "8",
 };
 
 describe("contributionSettingsSchema", () => {
@@ -30,7 +31,8 @@ describe("contributionSettingsSchema", () => {
       philhealth_ceiling: 100000,
       pagibig_employee_rate: 0.02,
       pagibig_salary_cap: 10000,
-      work_days_per_month: 26,
+      work_days_per_month: 30,
+      hours_per_day: 8,
     });
     expect(
       contributionSettingsSchema.parse({ ...form, sssRate: "4.75", workDays: "21.75" }),
@@ -45,10 +47,11 @@ describe("contributionSettingsSchema", () => {
       pagibigRate: "120",
       sssMscStep: "0",
       workDays: "40",
+      hoursPerDay: "25",
     });
     expect(result.success).toBe(false);
     expect(result.error!.issues.map((i) => i.path[0]).sort()).toEqual(
-      ["pagibigRate", "sssMscStep", "workDays"].sort(),
+      ["hoursPerDay", "pagibigRate", "sssMscStep", "workDays"].sort(),
     );
     // Range checks run once every field is valid.
     const ranges = contributionSettingsSchema.safeParse({

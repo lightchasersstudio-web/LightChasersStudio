@@ -23,7 +23,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatAmountExact } from "@/lib/payroll/money";
+import { formatMinutes } from "@/lib/payroll/cutoff";
+import { formatAmountExact, toCents, toPesos } from "@/lib/payroll/money";
 import { payrollTotals, type Payslip } from "@/lib/payroll/payslip";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +68,7 @@ export function PayrollTable({
               <TableHead className="pl-5">Employee</TableHead>
               <TableHead className="text-right">Days</TableHead>
               <TableHead className="text-right">Gross pay</TableHead>
-              <TableHead className="text-right">Absences</TableHead>
+              <TableHead className="text-right">Time off</TableHead>
               <TableHead className="text-right">SSS</TableHead>
               <TableHead className="text-right">PhilHealth</TableHead>
               <TableHead className="text-right">Pag-IBIG</TableHead>
@@ -107,9 +108,26 @@ export function PayrollTable({
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className={num}>{money(p.gross_pay)}</TableCell>
                   <TableCell className={num}>
-                    {p.absence_deduction ? money(p.absence_deduction) : "—"}
+                    {money(p.gross_pay)}
+                    {p.overtime_pay > 0 && (
+                      <span className="block text-xs text-muted-foreground">
+                        incl. {money(p.overtime_pay)} overtime
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className={num}>
+                    {/* Absences + undertime */}
+                    {p.absence_deduction + p.undertime_deduction
+                      ? money(
+                          toPesos(toCents(p.absence_deduction) + toCents(p.undertime_deduction)),
+                        )
+                      : "—"}
+                    {p.undertime_minutes > 0 && (
+                      <span className="block text-xs text-muted-foreground">
+                        {formatMinutes(p.undertime_minutes)} short
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className={num}>
                     <Contribution value={p.sss_deduction} />
@@ -162,7 +180,11 @@ export function PayrollTable({
               <TableCell className="pl-5">Total ({payslips.length})</TableCell>
               <TableCell />
               <TableCell className={num}>{money(totals.gross_pay)}</TableCell>
-              <TableCell className={num}>{money(totals.absence_deduction)}</TableCell>
+              <TableCell className={num}>
+                {money(
+                  toPesos(toCents(totals.absence_deduction) + toCents(totals.undertime_deduction)),
+                )}
+              </TableCell>
               <TableCell className={num}>{money(totals.sss)}</TableCell>
               <TableCell className={num}>{money(totals.philhealth)}</TableCell>
               <TableCell className={num}>{money(totals.pagibig)}</TableCell>

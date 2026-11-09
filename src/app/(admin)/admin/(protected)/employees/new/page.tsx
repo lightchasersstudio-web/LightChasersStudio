@@ -23,5 +23,5 @@ export default function NewEmployeePage() {
 async function NewEmployee() {
   await requireAdmin();
   const rates = await getContributionRates();
-  return <EmployeeForm workDays={rates.workDaysPerMonth} />;
+  return <EmployeeForm workDays={rates.workDaysPerMonth} hoursPerDay={rates.hoursPerDay} />;
 }

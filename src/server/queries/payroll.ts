@@ -15,7 +15,9 @@ export async function computePayroll(cutoff: Cutoff): Promise<Payslip[]> {
   const [employees, logs, settings] = await Promise.all([
     supabase
       .from("employees")
-      .select("id, full_name, position, salary_type, salary_rate, benefits:employee_benefits(*)")
+      .select(
+        "id, full_name, position, salary_type, salary_rate, overtime_rate, benefits:employee_benefits(*)",
+      )
       .eq("is_active", true)
       .order("full_name"),
     supabase
@@ -46,6 +48,7 @@ export async function computePayroll(cutoff: Cutoff): Promise<Payslip[]> {
         position: e.position,
         salaryType: asSalaryType(e.salary_type),
         salaryRate: Number(e.salary_rate),
+        overtimeRate: e.overtime_rate === null ? null : Number(e.overtime_rate),
       },
       benefits: {
         sss: e.benefits?.sss_enabled ?? true,
@@ -104,13 +107,20 @@ export async function getSavedPayroll(cutoff: Cutoff): Promise<SavedPayroll | nu
         salary_rate: num(p.salary_rate),
         daily_rate: num(p.daily_rate),
         monthly_salary: num(p.monthly_salary),
+        hourly_rate: num(p.hourly_rate),
+        overtime_rate: numOrNull(p.overtime_rate),
         days_present: p.days_present,
         days_absent: p.days_absent,
         days_leave: p.days_leave,
         days_holiday: p.days_holiday,
         minutes_worked: p.minutes_worked,
+        regular_minutes: p.regular_minutes,
+        undertime_minutes: p.undertime_minutes,
+        overtime_minutes: p.overtime_minutes,
         basic_pay: num(p.basic_pay),
+        overtime_pay: num(p.overtime_pay),
         absence_deduction: num(p.absence_deduction),
+        undertime_deduction: num(p.undertime_deduction),
         sss_deduction: numOrNull(p.sss_deduction),
         philhealth_deduction: numOrNull(p.philhealth_deduction),
         pagibig_deduction: numOrNull(p.pagibig_deduction),

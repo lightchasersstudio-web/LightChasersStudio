@@ -49,6 +49,19 @@ export const employeeSchema = z
       }
       return amount;
     }),
+    // Pesos per overtime hour; "" = overtime isn't paid.
+    overtimeRate: z.string().transform((v, ctx) => {
+      if (v.trim() === "") return null;
+      const amount = parseAmount(v);
+      if (amount === null || amount > 1_000_000) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter an amount per hour, like 150, or leave it empty.",
+        });
+        return z.NEVER;
+      }
+      return amount;
+    }),
   })
   .transform((v) => ({
     full_name: v.fullName,
@@ -63,6 +76,7 @@ export const employeeSchema = z
     pagibig_no: v.pagibigNo,
     salary_type: v.salaryType,
     salary_rate: v.salaryRate,
+    overtime_rate: v.overtimeRate,
   }));
 
 export type EmployeeFormInput = z.input<typeof employeeSchema>;

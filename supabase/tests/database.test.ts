@@ -2108,7 +2108,8 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         });
         const settings = await c.query("select * from public.contribution_settings");
         expect(Number(settings.rows[0]!.sss_employee_rate)).toBe(0.05);
-        expect(Number(settings.rows[0]!.work_days_per_month)).toBe(26);
+        expect(Number(settings.rows[0]!.work_days_per_month)).toBe(30);
+        expect(Number(settings.rows[0]!.hours_per_day)).toBe(8);
 
         for (const [role, uid] of [
           ["authenticated", userId],
@@ -2239,6 +2240,26 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         expect(await fails("2026-12-01", "2026-12-15", [{ ...slip, net_pay: 1 }])).toMatch(
           /payslips_totals/,
         );
+        // Overtime counts in gross pay; undertime in the deductions.
+        expect(await fails("2026-12-01", "2026-12-15", [{ ...slip, overtime_pay: 250 }])).toMatch(
+          /payslips_totals/,
+        );
+        const hourly = {
+          ...slip,
+          overtime_pay: 250,
+          undertime_deduction: 125,
+          gross_pay: 10250,
+          total_deductions: 1744.23,
+          net_pay: 8505.77,
+        };
+        const dec = (await save("2026-12-01", "2026-12-15", [hourly])).rows[0]!.id;
+        const { rows: saved } = await c.query(
+          "select overtime_pay, undertime_deduction, hourly_rate from public.payslips where payroll_period_id = $1",
+          [dec],
+        );
+        expect(saved).toEqual([
+          { overtime_pay: "250.00", undertime_deduction: "125.00", hourly_rate: "0.00" },
+        ]);
       });
     });
   });

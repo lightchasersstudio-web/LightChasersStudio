@@ -97,7 +97,12 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
         </div>
       </header>
       {/* key: reset the form when navigating between employees */}
-      <EmployeeForm key={employee.id} employee={employee} workDays={workDays} />
+      <EmployeeForm
+        key={employee.id}
+        employee={employee}
+        workDays={workDays}
+        hoursPerDay={rates.hoursPerDay}
+      />
       <BenefitsCard
         // key: new figures after a salary change, fresh switches for another employee
         key={`${employee.id}-${monthly}`}

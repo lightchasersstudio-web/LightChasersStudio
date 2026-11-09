@@ -30,9 +30,11 @@ import type { EmployeeWithPhoto } from "@/server/queries/employees";
 export function EmployeeForm({
   employee,
   workDays,
+  hoursPerDay,
 }: {
   employee?: EmployeeWithPhoto;
   workDays: number;
+  hoursPerDay: number;
 }) {
   const router = useRouter();
   const form = useForm<EmployeeFormInput, unknown, z.output<typeof employeeSchema>>({
@@ -51,6 +53,8 @@ export function EmployeeForm({
           pagibigNo: formatGovId("pagibig", employee.pagibig_no) ?? "",
           salaryType: asSalaryType(employee.salary_type),
           salaryRate: amountToInput(Number(employee.salary_rate)),
+          overtimeRate:
+            employee.overtime_rate === null ? "" : amountToInput(Number(employee.overtime_rate)),
         }
       : {
           fullName: "",
@@ -65,6 +69,7 @@ export function EmployeeForm({
           pagibigNo: "",
           salaryType: "monthly",
           salaryRate: "",
+          overtimeRate: "",
         },
   });
   const { control } = form;
@@ -88,6 +93,7 @@ export function EmployeeForm({
   const type = asSalaryType(salaryType);
   const rate = parseAmount(salaryRate ?? "");
   const rates = rate ? salaryRates(type, rate, workDays) : null;
+  const hourly = rates ? Math.round((rates.daily * 100) / hoursPerDay) / 100 : null;
 
   return (
     <form
@@ -251,8 +257,26 @@ export function EmployeeForm({
                     </dd>
                   </>
                 )}
+                {hourly !== null && (
+                  <>
+                    <dt className="text-muted-foreground">Hourly rate (÷ {hoursPerDay} hours)</dt>
+                    <dd className="text-right font-semibold tabular-nums">
+                      {formatAmount(hourly)}
+                    </dd>
+                  </>
+                )}
               </dl>
             )}
+            <TextField
+              control={control}
+              name="overtimeRate"
+              label="Overtime pay per hour"
+              prefix="₱"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="Not paid"
+              description={`For time past ${hoursPerDay} hours in a day. Leave empty if overtime isn't paid.`}
+            />
           </FieldGroup>
         </CardContent>
       </Card>
