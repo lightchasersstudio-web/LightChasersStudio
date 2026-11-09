@@ -1,6 +1,12 @@
 import { TZDate } from "@date-fns/tz";
 import { format } from "date-fns";
-import { CircleCheckIcon, InfoIcon, PercentIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  CircleCheckIcon,
+  FileDownIcon,
+  InfoIcon,
+  PercentIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -72,14 +78,25 @@ async function Payroll({ searchParams }: Pick<PageProps<"/admin/payroll">, "sear
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <CutoffPicker cutoff={cutoff} current={current} href={href} />
-        {fresh.length > 0 && (!saved || changed || wantPreview) && (
-          <SavePayrollButton
-            cutoff={cutoff.start}
-            cutoffLabel={label}
-            replaces={saved !== null}
-            count={fresh.length}
-          />
-        )}
+        <div className="flex flex-wrap gap-2">
+          {saved && !wantPreview && (
+            <Button asChild variant="outline" size="lg">
+              {/* A route handler: a plain link opens the PDF in a new tab. */}
+              <a href={`/admin/payroll/pdf?cutoff=${cutoff.start}`} target="_blank" rel="noopener">
+                <FileDownIcon aria-hidden />
+                All payslips (PDF)
+              </a>
+            </Button>
+          )}
+          {fresh.length > 0 && (!saved || changed || wantPreview) && (
+            <SavePayrollButton
+              cutoff={cutoff.start}
+              cutoffLabel={label}
+              replaces={saved !== null}
+              count={fresh.length}
+            />
+          )}
+        </div>
       </div>
 
       <Status cutoff={cutoff} saved={saved} changed={changed} preview={wantPreview} />
@@ -98,6 +115,7 @@ async function Payroll({ searchParams }: Pick<PageProps<"/admin/payroll">, "sear
             payslips={showing}
             cutoffLabel={label}
             cutoffStart={cutoff.start}
+            saved={saved !== null && !wantPreview}
           />
         </>
       )}

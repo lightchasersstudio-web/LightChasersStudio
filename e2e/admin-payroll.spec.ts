@@ -155,3 +155,47 @@ test("payroll: preview, payslip, save, change, save again", async ({ page }) => 
     ].sort(),
   );
 });
+
+test("PDFs: payslips (all and one) and employee details, admins only", async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await signIn(page);
+  await page.goto(`/admin/payroll?cutoff=${cutoff}`);
+  const pdfs = {
+    payslips: `/admin/payroll/pdf?cutoff=${cutoff}`,
+    payslip: `/admin/payroll/pdf?cutoff=${cutoff}&employee=${ids[MONTHLY]}`,
+    employee: `/admin/employees/${ids[DAILY]}/pdf`,
+    staff: `/admin/employees/pdf`,
+  };
+  await expect(page.getByRole("link", { name: "All payslips (PDF)" })).toHaveAttribute(
+    "href",
+    pdfs.payslips,
+  );
+  await expect(page.getByRole("link", { name: `${MONTHLY}'s payslip PDF` })).toHaveAttribute(
+    "href",
+    pdfs.payslip,
+  );
+
+  for (const [name, href] of Object.entries(pdfs)) {
+    const res = await page.request.get(href);
+    expect(res.status(), name).toBe(200);
+    expect(res.headers()["content-type"], name).toBe("application/pdf");
+    const body = await res.body();
+    expect(body.subarray(0, 5).toString(), name).toBe("%PDF-");
+    // Set PDF_OUT to keep copies for a look.
+    if (process.env.PDF_OUT) {
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(`${process.env.PDF_OUT}/${name}-${testInfo.project.name}.pdf`, body);
+    }
+  }
+
+  // Unsaved cut-off: nothing to print. Signed out: no PDF.
+  expect((await page.request.get("/admin/payroll/pdf?cutoff=2031-03-01")).status()).toBe(404);
+  const stranger = await browser.newContext();
+  const res = await stranger.request.get(pdfs.payslips, { maxRedirects: 0 });
+  expect(res.headers()["content-type"] ?? "").not.toBe("application/pdf");
+  expect([307, 401]).toContain(res.status());
+  await stranger.close();
+});

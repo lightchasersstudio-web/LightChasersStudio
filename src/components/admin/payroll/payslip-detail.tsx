@@ -90,7 +90,7 @@ export function PayslipDetail({ slip }: { slip: Payslip }) {
           <Line label="Pag-IBIG" {...contribution(slip.pagibig_deduction)} />
           <Line
             label="Total deductions"
-            value={`−${formatAmountExact(slip.total_deductions)}`}
+            value={slip.total_deductions ? `−${formatAmountExact(slip.total_deductions)}` : "₱0.00"}
             strong
           />
         </dl>

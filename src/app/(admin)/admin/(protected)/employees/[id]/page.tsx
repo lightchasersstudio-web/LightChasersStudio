@@ -1,4 +1,5 @@
 import { differenceInCalendarMonths, format } from "date-fns";
+import { FileDownIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -9,6 +10,7 @@ import { EmployeeAvatar } from "@/components/admin/payroll/employee-avatar";
 import { EmployeeForm } from "@/components/admin/payroll/employee-form";
 import { EmployeeStatusButton } from "@/components/admin/payroll/employee-status-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { businessToday, tzDate } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
@@ -81,6 +83,12 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <a href={`/admin/employees/${employee.id}/pdf`} target="_blank" rel="noopener">
+              <FileDownIcon aria-hidden />
+              Details PDF
+            </a>
+          </Button>
           <EmployeeStatusButton
             id={employee.id}
             name={employee.full_name}

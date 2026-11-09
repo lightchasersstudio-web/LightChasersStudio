@@ -1,6 +1,6 @@
 "use client";
 
-import { EyeIcon } from "lucide-react";
+import { EyeIcon, FileDownIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -44,12 +44,17 @@ export function PayrollTable({
   payslips,
   cutoffLabel,
   cutoffStart,
+  saved = false,
 }: {
   payslips: Payslip[];
   cutoffLabel: string;
   cutoffStart: string;
+  /** Saved payslips: offer each one as a PDF. */
+  saved?: boolean;
 }) {
   const [open, setOpen] = useState<Payslip | null>(null);
+  const pdfHref = (employeeId: string) =>
+    `/admin/payroll/pdf?cutoff=${cutoffStart}&employee=${employeeId}`;
   const totals = payrollTotals(payslips);
   const num = "text-right tabular-nums";
 
@@ -122,15 +127,31 @@ export function PayrollTable({
                     {money(p.net_pay)}
                   </TableCell>
                   <TableCell className="pr-5 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setOpen(p)}
-                      aria-label={`View ${p.employee_name}'s payslip`}
-                    >
-                      <EyeIcon aria-hidden />
-                      View
-                    </Button>
+                    <div className="flex justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setOpen(p)}
+                        aria-label={`View ${p.employee_name}'s payslip`}
+                      >
+                        <EyeIcon aria-hidden />
+                        View
+                      </Button>
+                      {saved && (
+                        <Button asChild variant="ghost" size="sm">
+                          {/* A route handler: a plain link opens the PDF in a new tab. */}
+                          <a
+                            href={pdfHref(p.employee_id)}
+                            target="_blank"
+                            rel="noopener"
+                            aria-label={`${p.employee_name}'s payslip PDF`}
+                          >
+                            <FileDownIcon aria-hidden />
+                            PDF
+                          </a>
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -164,6 +185,14 @@ export function PayrollTable({
                 </DialogDescription>
               </DialogHeader>
               <PayslipDetail slip={open} />
+              {saved && (
+                <Button asChild variant="outline">
+                  <a href={pdfHref(open.employee_id)} target="_blank" rel="noopener">
+                    <FileDownIcon aria-hidden />
+                    Download payslip PDF
+                  </a>
+                </Button>
+              )}
             </>
           )}
         </DialogContent>

@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { ArrowRightIcon, PercentIcon, PlusIcon } from "lucide-react";
+import { ArrowRightIcon, FileDownIcon, PercentIcon, PlusIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -61,24 +61,39 @@ async function Employees({ searchParams }: Pick<PageProps<"/admin/employees">, "
 
   return (
     <>
-      <nav aria-label="Filter employees" className="mb-5 flex gap-2">
-        {(["active", "inactive"] as const).map((s) => (
-          <Link
-            key={s}
-            href={s === "active" ? "/admin/employees" : "/admin/employees?status=inactive"}
-            aria-current={status === s ? "page" : undefined}
-            className={cn(
-              "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-              status === s
-                ? "border-primary bg-primary text-primary-foreground"
-                : "bg-card hover:bg-muted",
-            )}
-          >
-            {s === "active" ? "Active" : "Inactive"}
-            <span className="tabular-nums opacity-80">{counts[s]}</span>
-          </Link>
-        ))}
-      </nav>
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <nav aria-label="Filter employees" className="flex gap-2">
+          {(["active", "inactive"] as const).map((s) => (
+            <Link
+              key={s}
+              href={s === "active" ? "/admin/employees" : "/admin/employees?status=inactive"}
+              aria-current={status === s ? "page" : undefined}
+              className={cn(
+                "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                status === s
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "bg-card hover:bg-muted",
+              )}
+            >
+              {s === "active" ? "Active" : "Inactive"}
+              <span className="tabular-nums opacity-80">{counts[s]}</span>
+            </Link>
+          ))}
+        </nav>
+        {employees.length > 0 && (
+          <Button asChild variant="outline" className="sm:ml-auto">
+            {/* A route handler, not a page: a plain link that opens the PDF in a new tab. */}
+            <a
+              href={`/admin/employees/pdf${status === "inactive" ? "?status=inactive" : ""}`}
+              target="_blank"
+              rel="noopener"
+            >
+              <FileDownIcon aria-hidden />
+              All {status} staff (PDF)
+            </a>
+          </Button>
+        )}
+      </div>
 
       {employees.length === 0 ? (
         <EmptyList

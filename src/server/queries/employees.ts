@@ -68,6 +68,18 @@ export async function getEmployee(id: string): Promise<EmployeeDetail | null> {
   };
 }
 
+/** Active (or inactive) staff with their benefits, A–Z, for the staff details PDF. */
+export async function listEmployeeDetails(status: EmployeeStatusFilter): Promise<EmployeeDetail[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("employees")
+    .select("*, benefits:employee_benefits(*)")
+    .eq("is_active", status === "active")
+    .order("full_name");
+  if (error) throw error;
+  return data.map(({ benefits, ...e }) => ({ ...e, benefits, photoUrl: null }));
+}
+
 /** Contribution rates and working days per month (Payroll → Contribution rates). */
 export async function getContributionRates(): Promise<ContributionRates> {
   const supabase = await createClient();
