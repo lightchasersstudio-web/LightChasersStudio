@@ -69,10 +69,17 @@ test("employees: add with photo, edit salary, deactivate and reactivate", async 
     page.getByRole("alert").filter({ hasText: "The SSS no. has 10 digits, like 34-1234567-8." }),
   ).toBeVisible();
 
+  // A category is required.
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Pick a category: Events, Photobooth or Studio." }),
+  ).toBeVisible();
+
   await page.getByLabel("SSS no.").fill("3412345678");
+  await page.getByLabel("Category").selectOption("events");
   await page.getByRole("button", { name: "Add employee" }).click();
   await expect(page).toHaveURL(/\/admin\/employees\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.getByLabel("Category")).toHaveValue("events");
   await expect(page.getByLabel("SSS no.")).toHaveValue("34-1234567-8");
 
   // Switch to a daily rate.

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, getDay, parseISO } from "date-fns";
-import { CalendarCheckIcon, Loader2Icon } from "lucide-react";
+import { CalendarCheckIcon, Loader2Icon, PencilIcon } from "lucide-react";
 import { useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
@@ -27,9 +27,13 @@ import {
   DAY_STATUSES,
   dayTotals,
   formatMinutes,
+  hasTimes,
   isDayStatus,
+  isShift,
   minutesWorked,
 } from "@/lib/payroll/cutoff";
+import { isTimeOutEdited, SHIFT_START, shiftTimeOut } from "@/lib/payroll/daily-pay";
+import { amountToInput, formatAmount, parseAmount } from "@/lib/payroll/money";
 import { cn } from "@/lib/utils";
 import { attendanceSheetSchema, type AttendanceSheetInput } from "@/lib/validations/attendance";
 import { saveAttendance } from "@/server/actions/attendance";
@@ -37,7 +41,7 @@ import type { AttendanceLog } from "@/server/queries/attendance";
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** "4h short" / "2h overtime" under a day's hours, against a shift. */
+/** "4h short" / "2h overtime" under a present day's hours, against a shift. */
 function ShiftNote({ minutes, shift }: { minutes: number; shift: number }) {
   if (!minutes || minutes === shift) return null;
   const short = minutes < shift;
@@ -51,6 +55,9 @@ function ShiftNote({ minutes, shift }: { minutes: number; shift: number }) {
 
 const STATUS_TONE: Record<string, string> = {
   present: "",
+  am: "",
+  pm: "",
+  rest_day: "bg-muted/60",
   absent: "bg-destructive/5",
   leave: "bg-blush/50",
   holiday: "bg-sage/15",
@@ -63,6 +70,7 @@ export function AttendanceSheet({
   dates,
   logs,
   hoursPerDay,
+  currentRate,
 }: {
   employeeId: string;
   employeeName: string;
@@ -71,8 +79,11 @@ export function AttendanceSheet({
   logs: AttendanceLog[];
   /** A shift: less is undertime, more is overtime. */
   hoursPerDay: number;
+  /** The employee's daily rate today: new days start with it. */
+  currentRate: number;
 }) {
   const shift = Math.round(hoursPerDay * 60);
+  const currentRateInput = amountToInput(currentRate);
   const byDate = new Map(logs.map((l) => [l.date, l]));
   const defaults: AttendanceSheetInput = {
     employeeId,
@@ -84,6 +95,8 @@ export function AttendanceSheet({
         status: l?.status ?? "",
         timeIn: l?.timeIn ?? "",
         timeOut: l?.timeOut ?? "",
+        // Recorded days keep the rate they were saved with.
+        rate: l ? amountToInput(l.dailyRate) : currentRateInput,
         note: l?.note ?? "",
       };
     }),
@@ -101,7 +114,7 @@ export function AttendanceSheet({
   const [fillOut, setFillOut] = useState("17:00");
 
   const minutesFor = (d: AttendanceSheetInput["days"][number] | undefined) =>
-    d?.status === "present" && TIME.test(d.timeIn) && TIME.test(d.timeOut) && d.timeIn !== d.timeOut
+    d && hasTimes(d.status) && TIME.test(d.timeIn) && TIME.test(d.timeOut) && d.timeIn !== d.timeOut
       ? minutesWorked(d.timeIn, d.timeOut)
       : 0;
   const totals = dayTotals(
@@ -109,12 +122,26 @@ export function AttendanceSheet({
       isDayStatus(d.status) ? [{ status: d.status, minutes: minutesFor(d) }] : [],
     ),
   );
-  // Against a shift, on present days with both times in.
+  // Against a shift, on present days with both times in (AM/PM are full days).
   const presentMinutes = (days ?? []).flatMap((d) =>
     d.status === "present" && minutesFor(d) > 0 ? [minutesFor(d)] : [],
   );
   const shortMinutes = presentMinutes.reduce((s, m) => s + Math.max(0, shift - m), 0);
   const overtimeMinutes = presentMinutes.reduce((s, m) => s + Math.max(0, m - shift), 0);
+
+  const set = (path: Parameters<typeof form.setValue>[0], value: string) =>
+    form.setValue(path, value, { shouldDirty: true });
+
+  /**
+   * Picking AM or PM always fills that shift's times (AM 9:30–5:30, PM
+   * 2:00–10:00), whatever the day had before; the admin can edit them after.
+   */
+  function startShift(i: number, status: "am" | "pm") {
+    const timeIn = SHIFT_START[status];
+    set(`days.${i}.timeIn`, timeIn);
+    set(`days.${i}.timeOut`, shiftTimeOut(timeIn) ?? "");
+    form.clearErrors([`days.${i}.timeIn`, `days.${i}.timeOut`]);
+  }
 
   function fillBlank() {
     if (!TIME.test(fillIn) || !TIME.test(fillOut) || fillIn === fillOut) {
@@ -124,9 +151,9 @@ export function AttendanceSheet({
     let filled = 0;
     form.getValues("days").forEach((d, i) => {
       if (d.status !== "" || getDay(parseISO(d.date)) === 0) return; // skip Sundays
-      form.setValue(`days.${i}.status`, "present", { shouldDirty: true });
-      form.setValue(`days.${i}.timeIn`, fillIn, { shouldDirty: true });
-      form.setValue(`days.${i}.timeOut`, fillOut, { shouldDirty: true });
+      set(`days.${i}.status`, "present");
+      set(`days.${i}.timeIn`, fillIn);
+      set(`days.${i}.timeOut`, fillOut);
       filled += 1;
     });
     toast(filled ? `Filled ${filled} days. Save to keep them.` : "No blank Monday–Saturday left.");
@@ -141,7 +168,7 @@ export function AttendanceSheet({
   return (
     <form
       onSubmit={form.handleSubmit(onSubmit, () =>
-        toast.error("Some days need a time in and time out."),
+        toast.error("Some days need a time in, time out or rate."),
       )}
       noValidate
       className="space-y-4"
@@ -171,8 +198,9 @@ export function AttendanceSheet({
           <CalendarCheckIcon aria-hidden />
           Mark blank days present
         </Button>
-        <p className="text-sm text-muted-foreground xl:max-w-56">
-          Fills Monday–Saturday days with nothing recorded yet. Sundays stay blank.
+        <p className="text-sm text-muted-foreground xl:max-w-64">
+          Fills Monday–Saturday days with nothing recorded yet. Sundays stay blank. AM and PM shifts
+          are 8 hours: pick one and the time out fills in for you.
         </p>
       </div>
 
@@ -185,6 +213,7 @@ export function AttendanceSheet({
               <TableHead>Time in</TableHead>
               <TableHead>Time out</TableHead>
               <TableHead className="pr-6 text-right">Hours</TableHead>
+              <TableHead>Daily rate</TableHead>
               <TableHead className="pr-5">Note</TableHead>
             </TableRow>
           </TableHeader>
@@ -193,8 +222,11 @@ export function AttendanceSheet({
               const d = days?.[i];
               const date = parseISO(field.date);
               const dayLabel = format(date, "EEE d MMM");
-              const present = d?.status === "present";
+              const timed = hasTimes(d?.status ?? "");
               const sunday = getDay(date) === 0;
+              const edited = d ? isTimeOutEdited(d.status, d.timeIn, d.timeOut) : false;
+              const rate = parseAmount(d?.rate ?? "");
+              const specialRate = timed && rate !== null && rate !== currentRate;
               return (
                 <TableRow
                   key={field.id}
@@ -218,10 +250,16 @@ export function AttendanceSheet({
                           className="w-full xl:w-36"
                           onChange={(e) => {
                             f.onChange(e);
-                            if (e.target.value !== "present") {
-                              form.setValue(`days.${i}.timeIn`, "", { shouldDirty: true });
-                              form.setValue(`days.${i}.timeOut`, "", { shouldDirty: true });
+                            const next = e.target.value;
+                            if (isShift(next)) {
+                              startShift(i, next);
+                            } else if (!hasTimes(next)) {
+                              set(`days.${i}.timeIn`, "");
+                              set(`days.${i}.timeOut`, "");
                               form.clearErrors([`days.${i}.timeIn`, `days.${i}.timeOut`]);
+                            }
+                            if (next && form.getValues(`days.${i}.rate`).trim() === "") {
+                              set(`days.${i}.rate`, currentRateInput);
                             }
                           }}
                         >
@@ -236,10 +274,7 @@ export function AttendanceSheet({
                     />
                   </TableCell>
                   {(["timeIn", "timeOut"] as const).map((name) => (
-                    <TableCell
-                      key={name}
-                      className={cn("p-0 xl:py-2", !present && "max-xl:hidden")}
-                    >
+                    <TableCell key={name} className={cn("p-0 xl:py-2", !timed && "max-xl:hidden")}>
                       <Controller
                         control={control}
                         name={`days.${i}.${name}`}
@@ -251,11 +286,26 @@ export function AttendanceSheet({
                             <Input
                               {...f}
                               type="time"
-                              disabled={!present}
+                              disabled={!timed}
                               aria-label={`${name === "timeIn" ? "Time in" : "Time out"}, ${dayLabel}`}
                               aria-invalid={fieldState.invalid}
                               className="xl:w-32"
+                              onChange={(e) => {
+                                f.onChange(e);
+                                // AM/PM: a new time in moves the time out with it.
+                                const status = form.getValues(`days.${i}.status`);
+                                const out = shiftTimeOut(e.target.value);
+                                if (name === "timeIn" && isShift(status) && out) {
+                                  set(`days.${i}.timeOut`, out);
+                                }
+                              }}
                             />
+                            {name === "timeOut" && edited && (
+                              <span className="mt-1 flex items-center gap-1 text-xs text-terracotta-ink">
+                                <PencilIcon className="size-3" aria-hidden />
+                                Edited (not 8 hours)
+                              </span>
+                            )}
                             {fieldState.error && (
                               <p role="alert" className="mt-1 text-xs text-destructive">
                                 {fieldState.error.message}
@@ -269,12 +319,57 @@ export function AttendanceSheet({
                   <TableCell
                     className={cn(
                       "self-center p-0 text-sm tabular-nums xl:py-2 xl:pr-6 xl:text-right",
-                      !present && "max-xl:hidden",
+                      !timed && "max-xl:hidden",
                     )}
                   >
                     <span className="text-muted-foreground xl:hidden">Hours: </span>
-                    {present ? formatMinutes(minutesFor(d)) : "—"}
-                    <ShiftNote minutes={present ? minutesFor(d) : 0} shift={shift} />
+                    {timed ? formatMinutes(minutesFor(d)) : "—"}
+                    {d?.status === "present" && <ShiftNote minutes={minutesFor(d)} shift={shift} />}
+                    {isShift(d?.status ?? "") && (
+                      <span className="text-xs text-muted-foreground xl:block">
+                        <span className="xl:hidden"> · </span>full day
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className={cn("p-0 xl:py-2", !timed && "max-xl:hidden")}>
+                    <Controller
+                      control={control}
+                      name={`days.${i}.rate`}
+                      render={({ field: f, fieldState }) => (
+                        <div className={cn(!timed && "xl:invisible")}>
+                          <span className="mb-1 block text-xs text-muted-foreground xl:sr-only">
+                            Daily rate
+                          </span>
+                          <div className="relative">
+                            <span
+                              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground"
+                              aria-hidden
+                            >
+                              ₱
+                            </span>
+                            <Input
+                              {...f}
+                              inputMode="decimal"
+                              autoComplete="off"
+                              disabled={!timed}
+                              aria-label={`Daily rate, ${dayLabel}`}
+                              aria-invalid={fieldState.invalid}
+                              className="pl-7 tabular-nums xl:w-28"
+                            />
+                          </div>
+                          {specialRate && !fieldState.error && (
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              Usual {formatAmount(currentRate)}
+                            </span>
+                          )}
+                          {fieldState.error && (
+                            <p role="alert" className="mt-1 text-xs text-destructive">
+                              {fieldState.error.message}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    />
                   </TableCell>
                   <TableCell
                     className={cn(
@@ -302,7 +397,7 @@ export function AttendanceSheet({
           </TableBody>
           <TableFooter className="max-xl:block">
             <TableRow className="max-xl:block">
-              <TableCell colSpan={6} className="px-4 py-3 xl:px-5">
+              <TableCell colSpan={7} className="px-4 py-3 xl:px-5">
                 <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
                   {DAY_STATUSES.map((s) => (
                     <div key={s.value} className="flex gap-1.5">

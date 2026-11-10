@@ -77,6 +77,7 @@ export type Database = {
       attendance_logs: {
         Row: {
           created_at: string
+          daily_rate: number
           employee_id: string
           id: string
           minutes_worked: number | null
@@ -84,12 +85,14 @@ export type Database = {
           status: string
           time_in: string | null
           time_out: string | null
+          time_out_edited: boolean | null
           updated_at: string
           work_date: string
         }
         ComputedFields: never
         Insert: {
           created_at?: string
+          daily_rate?: number
           employee_id: string
           id?: string
           minutes_worked?: never
@@ -97,11 +100,13 @@ export type Database = {
           status: string
           time_in?: string | null
           time_out?: string | null
+          time_out_edited?: never
           updated_at?: string
           work_date: string
         }
         Update: {
           created_at?: string
+          daily_rate?: number
           employee_id?: string
           id?: string
           minutes_worked?: never
@@ -109,6 +114,7 @@ export type Database = {
           status?: string
           time_in?: string | null
           time_out?: string | null
+          time_out_edited?: never
           updated_at?: string
           work_date?: string
         }
@@ -658,8 +664,11 @@ export type Database = {
       employees: {
         Row: {
           address: string | null
+          category: string | null
           created_at: string
           date_hired: string
+          deleted_at: string | null
+          deleted_by: string | null
           email: string | null
           full_name: string
           id: string
@@ -678,8 +687,11 @@ export type Database = {
         ComputedFields: never
         Insert: {
           address?: string | null
+          category?: string | null
           created_at?: string
           date_hired: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           full_name: string
           id?: string
@@ -697,8 +709,11 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          category?: string | null
           created_at?: string
           date_hired?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           email?: string | null
           full_name?: string
           id?: string

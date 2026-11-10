@@ -31,10 +31,12 @@ import {
   currentCutoff,
   cutoffDates,
   cutoffLabel,
+  daysWorked,
   formatMinutes,
   parseCutoff,
   type Cutoff,
 } from "@/lib/payroll/cutoff";
+import { asSalaryType, salaryRates } from "@/lib/payroll/employees";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
 import { getAttendance, getCutoffSummary, getPayrollSavedAt } from "@/server/queries/attendance";
@@ -48,7 +50,7 @@ export default function DtrPage({ searchParams }: PageProps<"/admin/dtr">) {
       <PageHeader
         eyebrow="who worked when"
         title="Time record"
-        description="Daily time record per cut-off. Mark each day present, absent, leave or holiday; hours are worked out from the time in and out."
+        description="Daily time record per cut-off. Mark each day present, AM or PM shift, rest day, absent, leave or holiday; hours are worked out from the time in and out."
         actions={
           <Button asChild variant="outline" size="lg">
             <Link href="/admin/payroll/settings">
@@ -121,7 +123,7 @@ async function Sheet({
   employee,
 }: {
   cutoff: Cutoff;
-  employee: { id: string; name: string; isActive: boolean };
+  employee: { id: string; name: string; isActive: boolean; salaryType: string; salaryRate: number };
 }) {
   const [logs, rates] = await Promise.all([
     getAttendance(employee.id, cutoff),
@@ -147,6 +149,13 @@ async function Sheet({
         dates={cutoffDates(cutoff)}
         logs={logs}
         hoursPerDay={rates.hoursPerDay}
+        currentRate={
+          salaryRates(
+            asSalaryType(employee.salaryType),
+            employee.salaryRate,
+            rates.workDaysPerMonth,
+          ).daily
+        }
       />
     </>
   );
@@ -209,8 +218,8 @@ function Summary({
                   </span>
                 </span>
                 <span>
-                  <span className="block text-xs text-muted-foreground">Present</span>
-                  <span className="font-semibold tabular-nums">{s.totals.present}</span>
+                  <span className="block text-xs text-muted-foreground">Worked</span>
+                  <span className="font-semibold tabular-nums">{daysWorked(s.totals)}</span>
                 </span>
                 <span>
                   <span className="block text-xs text-muted-foreground">Hours</span>
@@ -218,9 +227,18 @@ function Summary({
                     {formatMinutes(s.totals.minutes)}
                   </span>
                 </span>
-                {s.totals.absent + s.totals.leave + s.totals.holiday > 0 && (
+                {s.totals.am +
+                  s.totals.pm +
+                  s.totals.rest_day +
+                  s.totals.absent +
+                  s.totals.leave +
+                  s.totals.holiday >
+                  0 && (
                   <span className="col-span-3 text-xs text-muted-foreground">
                     {[
+                      s.totals.am && `${s.totals.am} AM`,
+                      s.totals.pm && `${s.totals.pm} PM`,
+                      s.totals.rest_day && `${s.totals.rest_day} rest`,
                       s.totals.absent && `${s.totals.absent} absent`,
                       s.totals.leave && `${s.totals.leave} leave`,
                       s.totals.holiday && `${s.totals.holiday} holiday`,
@@ -241,6 +259,8 @@ function Summary({
             <TableRow>
               <TableHead className="pl-5">Employee</TableHead>
               <TableHead className="text-right">Present</TableHead>
+              <TableHead className="text-right">AM / PM</TableHead>
+              <TableHead className="text-right">Rest</TableHead>
               <TableHead className="text-right">Absent</TableHead>
               <TableHead className="text-right">Leave</TableHead>
               <TableHead className="text-right">Holiday</TableHead>
@@ -264,6 +284,10 @@ function Summary({
                   <span className="block text-muted-foreground">{s.position}</span>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{s.totals.present}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {s.totals.am} / {s.totals.pm}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{s.totals.rest_day}</TableCell>
                 <TableCell className="text-right tabular-nums">{s.totals.absent}</TableCell>
                 <TableCell className="text-right tabular-nums">{s.totals.leave}</TableCell>
                 <TableCell className="text-right tabular-nums">{s.totals.holiday}</TableCell>

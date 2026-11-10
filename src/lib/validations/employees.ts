@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { GOV_IDS, type GovId } from "@/lib/payroll/employees";
+import { GOV_IDS, isEmployeeCategory, type GovId } from "@/lib/payroll/employees";
 import { parseAmount } from "@/lib/payroll/money";
 import { STORAGE_PATH } from "@/lib/storage";
 import { dateString, optionalText } from "@/lib/validations/shared";
@@ -22,6 +22,14 @@ export const employeeSchema = z
   .object({
     fullName: z.string().trim().min(2, "Enter the full name.").max(120),
     position: z.string().trim().min(2, "Enter the position, e.g. Photographer.").max(80),
+    // Required on every save; staff added before categories existed have none yet.
+    category: z.string().transform((v, ctx) => {
+      if (!isEmployeeCategory(v)) {
+        ctx.addIssue({ code: "custom", message: "Pick a category: Events, Photobooth or Studio." });
+        return z.NEVER;
+      }
+      return v;
+    }),
     dateHired: dateString,
     phone: z
       .string()
@@ -71,6 +79,7 @@ export const employeeSchema = z
   .transform((v) => ({
     full_name: v.fullName,
     position: v.position,
+    category: v.category,
     date_hired: v.dateHired,
     phone: v.phone,
     email: v.email,

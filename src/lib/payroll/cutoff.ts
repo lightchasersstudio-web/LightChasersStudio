@@ -58,6 +58,9 @@ export function cutoffLabel(c: Cutoff): string {
 
 export const DAY_STATUSES = [
   { value: "present", label: "Present" },
+  { value: "am", label: "AM shift" },
+  { value: "pm", label: "PM shift" },
+  { value: "rest_day", label: "Rest day" },
   { value: "absent", label: "Absent" },
   { value: "leave", label: "Leave" },
   { value: "holiday", label: "Holiday" },
@@ -65,6 +68,17 @@ export const DAY_STATUSES = [
 export type DayStatus = (typeof DAY_STATUSES)[number]["value"];
 
 export const isDayStatus = (v: unknown): v is DayStatus => DAY_STATUSES.some((s) => s.value === v);
+
+export const dayStatusLabel = (status: DayStatus): string =>
+  DAY_STATUSES.find((s) => s.value === status)?.label ?? status;
+
+/** AM and PM: fixed 8-hour shifts paid as a full day. */
+export const isShift = (status: string): status is "am" | "pm" =>
+  status === "am" || status === "pm";
+
+/** Days with a time in and out (and that count as worked). */
+export const hasTimes = (status: string): status is "present" | "am" | "pm" =>
+  status === "present" || isShift(status);
 
 /**
  * Minutes between "HH:MM" times, as the database works it out: a time out
@@ -85,8 +99,20 @@ export function formatMinutes(minutes: number): string {
 
 export type DayTotals = Record<DayStatus, number> & { minutes: number };
 
+/** Days worked: present plus AM and PM shifts. */
+export const daysWorked = (t: DayTotals): number => t.present + t.am + t.pm;
+
 export function dayTotals(days: { status: DayStatus; minutes: number }[]): DayTotals {
-  const totals: DayTotals = { present: 0, absent: 0, leave: 0, holiday: 0, minutes: 0 };
+  const totals: DayTotals = {
+    present: 0,
+    am: 0,
+    pm: 0,
+    rest_day: 0,
+    absent: 0,
+    leave: 0,
+    holiday: 0,
+    minutes: 0,
+  };
   for (const d of days) {
     totals[d.status] += 1;
     totals.minutes += d.minutes;

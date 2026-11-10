@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { cutoffDates, parseCutoff, type DayStatus } from "@/lib/payroll/cutoff";
+import { cutoffDates, hasTimes, parseCutoff, type DayStatus } from "@/lib/payroll/cutoff";
+import { parseAmount } from "@/lib/payroll/money";
 import { dateString } from "@/lib/validations/shared";
 
 const time = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -9,13 +10,28 @@ const time = /^([01]\d|2[0-3]):[0-5]\d$/;
 const daySchema = z
   .object({
     date: dateString,
-    status: z.enum(["", "present", "absent", "leave", "holiday"] satisfies ("" | DayStatus)[]),
+    status: z.enum(["", "present", "am", "pm", "rest_day", "absent", "leave", "holiday"] satisfies (
+      "" | DayStatus
+    )[]),
     timeIn: z.string(),
     timeOut: z.string(),
+    /** Pesos for this day; "" = the employee's current daily rate. */
+    rate: z.string(),
     note: z.string().trim().max(200, "Keep the note under 200 characters."),
   })
   .superRefine((d, ctx) => {
-    if (d.status !== "present") return;
+    if (d.status === "") return;
+    if (d.rate.trim() !== "") {
+      const rate = parseAmount(d.rate);
+      if (rate === null || rate < 0 || rate > 1_000_000) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["rate"],
+          message: "Enter the day's rate, like 650.",
+        });
+      }
+    }
+    if (!hasTimes(d.status)) return;
     if (!time.test(d.timeIn)) {
       ctx.addIssue({ code: "custom", path: ["timeIn"], message: "Enter the time in." });
     }
@@ -69,8 +85,10 @@ export const attendanceSheetSchema = z
           employee_id: v.employeeId,
           work_date: d.date,
           status: d.status as DayStatus,
-          time_in: d.status === "present" ? d.timeIn : null,
-          time_out: d.status === "present" ? d.timeOut : null,
+          time_in: hasTimes(d.status) ? d.timeIn : null,
+          time_out: hasTimes(d.status) ? d.timeOut : null,
+          // null = the employee's current daily rate (filled in by the database).
+          daily_rate: d.rate.trim() === "" ? null : parseAmount(d.rate),
           note: d.note || null,
         })),
       cleared: v.days.filter((d) => d.status === "").map((d) => d.date),

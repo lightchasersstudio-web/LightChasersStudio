@@ -2182,6 +2182,106 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("AM/PM shifts, rest days and the daily rate saved on each record", async () => {
+      await inRollback(async (c) => {
+        // The sample day: Studio AM, Events PM past midnight, Photobooth rest day.
+        const add = async (name: string, category: string, type: string, rate: number) => {
+          const { rows } = await c.query(
+            `insert into public.employees (full_name, position, date_hired, salary_type, salary_rate, category)
+             values ($1, 'Staff', '2026-01-05', $2, $3, $4) returning id`,
+            [name, type, rate, category],
+          );
+          return rows[0]!.id as string;
+        };
+        const bea = await add("Bea Studio", "studio", "daily", 650);
+        const carlo = await add("Carlo Events", "events", "monthly", 24015); // ÷ 30 = ₱800.50
+        const dina = await add("Dina Booth", "photobooth", "daily", 700);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out) values
+           ($1, '2026-11-10', 'am', '08:00', '16:00'),
+           ($2, '2026-11-10', 'pm', '18:00', '02:00'),
+           ($3, '2026-11-10', 'rest_day', null, null)`,
+          [bea, carlo, dina],
+        );
+        const day = async () =>
+          (
+            await c.query(
+              `select e.full_name, l.status, l.minutes_worked, l.daily_rate, l.time_out_edited
+               from public.attendance_logs l join public.employees e on e.id = l.employee_id
+               where l.work_date = '2026-11-10' and l.employee_id = any($1) order by e.full_name`,
+              [[bea, carlo, dina]],
+            )
+          ).rows.map((r) => [
+            r.full_name,
+            r.status,
+            r.minutes_worked,
+            Number(r.daily_rate),
+            r.time_out_edited,
+          ]);
+        expect(await day()).toEqual([
+          ["Bea Studio", "am", 480, 650, false],
+          ["Carlo Events", "pm", 480, 800.5, false],
+          ["Dina Booth", "rest_day", 0, 700, false],
+        ]);
+
+        // A raise later doesn't touch the saved day; a changed time out is flagged.
+        await c.query("update public.employees set salary_rate = 900 where id = $1", [bea]);
+        await c.query(
+          "update public.attendance_logs set time_out = '15:00' where employee_id = $1",
+          [bea],
+        );
+        expect((await day())[0]).toEqual(["Bea Studio", "am", 420, 650, true]);
+
+        // AM/PM need both times; rest days take none; employees take only the 3 categories.
+        expect(
+          await expectFailure(
+            c,
+            `insert into public.attendance_logs (employee_id, work_date, status) values ($1, '2026-11-11', 'pm')`,
+            [bea],
+          ),
+        ).toMatch(/attendance_logs_times/);
+        expect(
+          await expectFailure(
+            c,
+            `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out)
+             values ($1, '2026-11-11', 'rest_day', '08:00', '16:00')`,
+            [bea],
+          ),
+        ).toMatch(/attendance_logs_times/);
+        expect(
+          await expectFailure(
+            c,
+            "update public.employees set category = 'weddings' where id = $1",
+            [bea],
+          ),
+        ).toMatch(/employees_category_check/);
+      });
+    });
+
+    it("a deleted employee is never active, and keeps their records", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status) values ($1, '2026-11-10', 'rest_day')`,
+          [id],
+        );
+        expect(
+          await expectFailure(c, "update public.employees set deleted_at = now() where id = $1", [
+            id,
+          ]),
+        ).toMatch(/employees_deleted_inactive/);
+        await c.query(
+          "update public.employees set deleted_at = now(), is_active = false where id = $1",
+          [id],
+        );
+        const { rows } = await c.query(
+          "select count(*)::int as n from public.attendance_logs where employee_id = $1",
+          [id],
+        );
+        expect(rows[0]!.n).toBe(1);
+      });
+    });
+
     it("save_payroll replaces a cut-off's payslips and only accepts real cut-offs", async () => {
       await inRollback(async (c) => {
         const id = await addEmployee(c);

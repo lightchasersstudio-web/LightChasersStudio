@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FieldGroup } from "@/components/ui/field";
 import {
   asSalaryType,
+  EMPLOYEE_CATEGORIES,
   formatGovId,
   GOV_IDS,
   SALARY_TYPES,
@@ -44,6 +45,7 @@ export function EmployeeForm({
       ? {
           fullName: employee.full_name,
           position: employee.position,
+          category: employee.category ?? "",
           dateHired: employee.date_hired,
           phone: employee.phone ?? "",
           email: employee.email ?? "",
@@ -61,6 +63,7 @@ export function EmployeeForm({
       : {
           fullName: "",
           position: "",
+          category: "",
           dateHired: businessToday(),
           phone: "",
           email: "",
@@ -141,6 +144,20 @@ export function EmployeeForm({
                 />
                 <TextField control={control} name="dateHired" label="Date hired" type="date" />
               </div>
+              <SelectField
+                control={control}
+                name="category"
+                label="Category"
+                description={
+                  employee && !employee.category
+                    ? "Not set yet. Pick one so they show in the right group of the daily payroll."
+                    : "Groups staff in the daily payroll report."
+                }
+                options={[
+                  { value: "", label: "Choose a category" },
+                  ...EMPLOYEE_CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
+                ]}
+              />
             </FieldGroup>
           </CardContent>
         </Card>
@@ -241,7 +258,9 @@ export function EmployeeForm({
                 inputMode="decimal"
                 autoComplete="off"
                 description={
-                  employee ? "Changes apply to payrolls you save from now on." : undefined
+                  employee
+                    ? "Days already in the time record keep the daily rate they were saved with."
+                    : undefined
                 }
               />
               {rates && (

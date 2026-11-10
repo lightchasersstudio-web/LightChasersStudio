@@ -7,6 +7,7 @@ import { employeeSchema, type EmployeeFormInput } from "@/lib/validations/employ
 const base: EmployeeFormInput = {
   fullName: "  Ana Cruz ",
   position: "Photographer",
+  category: "studio",
   dateHired: "2026-01-05",
   phone: "",
   email: "",
@@ -26,6 +27,7 @@ describe("employeeSchema", () => {
     expect(employeeSchema.parse(base)).toEqual({
       full_name: "Ana Cruz",
       position: "Photographer",
+      category: "studio",
       date_hired: "2026-01-05",
       phone: null,
       email: null,
@@ -38,6 +40,14 @@ describe("employeeSchema", () => {
       salary_rate: 18000,
       overtime_rate: null,
     });
+  });
+
+  it("requires a category", () => {
+    const r = employeeSchema.safeParse({ ...base, category: "" });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]?.path).toEqual(["category"]);
+    expect(employeeSchema.safeParse({ ...base, category: "weddings" }).success).toBe(false);
+    expect(employeeSchema.parse({ ...base, category: "events" }).category).toBe("events");
   });
 
   it("accepts government numbers with dashes and stores digits", () => {

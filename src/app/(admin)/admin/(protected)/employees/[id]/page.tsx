@@ -1,5 +1,5 @@
 import { differenceInCalendarMonths, format } from "date-fns";
-import { FileDownIcon } from "lucide-react";
+import { FileDownIcon, Trash2Icon } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -7,6 +7,12 @@ import { z } from "zod";
 
 import { FormSkeleton } from "@/components/admin/skeletons";
 import { EmployeeAvatar } from "@/components/admin/payroll/employee-avatar";
+import { EmployeeCategoryBadge } from "@/components/admin/payroll/employee-category-badge";
+import {
+  EmployeeDeleteButton,
+  EmployeeRestoreButton,
+} from "@/components/admin/payroll/employee-delete-button";
+import { EmployeeHistory } from "@/components/admin/payroll/employee-history";
 import { EmployeeForm } from "@/components/admin/payroll/employee-form";
 import { EmployeeStatusButton } from "@/components/admin/payroll/employee-status-button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +23,7 @@ import { requireAdmin } from "@/server/auth";
 import { BenefitsCard } from "@/components/admin/payroll/benefits-card";
 import { monthlyContributions } from "@/lib/payroll/contributions";
 import { asSalaryType, salaryRates } from "@/lib/payroll/employees";
+import { getEmployeeHistory } from "@/server/queries/employee-history";
 import { getContributionRates, getEmployee } from "@/server/queries/employees";
 
 export const metadata: Metadata = { title: "Employee" };
@@ -55,6 +62,11 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
   if (!z.uuid().safeParse(id).success) notFound();
   const [employee, rates] = await Promise.all([getEmployee(id), getContributionRates()]);
   if (!employee) notFound();
+  const deleted = employee.deleted_at !== null;
+  const history = await getEmployeeHistory(employee.id, {
+    overtimeRate: employee.overtime_rate === null ? null : Number(employee.overtime_rate),
+    hoursPerDay: rates.hoursPerDay,
+  });
   const workDays = rates.workDaysPerMonth;
   const { monthly } = salaryRates(
     asSalaryType(employee.salary_type),
@@ -73,8 +85,15 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold break-words sm:text-3xl">{employee.full_name}</h1>
-              {!employee.is_active && <Badge variant="secondary">Inactive</Badge>}
+              <h1 className="text-2xl font-semibold break-words sm:text-3xl">
+                {employee.full_name}
+              </h1>
+              <EmployeeCategoryBadge category={employee.category} />
+              {deleted ? (
+                <Badge variant="destructive">Deleted</Badge>
+              ) : (
+                !employee.is_active && <Badge variant="secondary">Inactive</Badge>
+              )}
             </div>
             <p className="text-muted-foreground">
               {employee.position} · since {format(tzDate(employee.date_hired), "d MMM yyyy")} (
@@ -89,33 +108,58 @@ async function Employee({ params }: Pick<PageProps<"/admin/employees/[id]">, "pa
               Details PDF
             </a>
           </Button>
-          <EmployeeStatusButton
-            id={employee.id}
-            name={employee.full_name}
-            isActive={employee.is_active}
-          />
+          {deleted ? (
+            <EmployeeRestoreButton id={employee.id} name={employee.full_name} />
+          ) : (
+            <>
+              <EmployeeStatusButton
+                id={employee.id}
+                name={employee.full_name}
+                isActive={employee.is_active}
+              />
+              <EmployeeDeleteButton id={employee.id} name={employee.full_name} />
+            </>
+          )}
         </div>
       </header>
-      {/* key: reset the form when navigating between employees */}
-      <EmployeeForm
-        key={employee.id}
-        employee={employee}
-        workDays={workDays}
-        hoursPerDay={rates.hoursPerDay}
-      />
-      <BenefitsCard
-        // key: new figures after a salary change, fresh switches for another employee
-        key={`${employee.id}-${monthly}`}
-        employeeId={employee.id}
-        name={employee.full_name}
-        enabled={{
-          sss: employee.benefits?.sss_enabled ?? true,
-          philhealth: employee.benefits?.philhealth_enabled ?? true,
-          pagibig: employee.benefits?.pagibig_enabled ?? true,
-        }}
-        contributions={monthlyContributions(monthly, rates)}
-        monthlySalary={monthly}
-      />
+      {deleted && (
+        <>
+          <p className="mb-6 flex gap-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+            <Trash2Icon className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+            <span>
+              Deleted on {format(new Date(employee.deleted_at!), "d MMM yyyy")}. They no longer
+              appear in the time record, payroll or reports. Their history below is kept; restore
+              them to make changes.
+            </span>
+          </p>
+          <EmployeeHistory employeeId={employee.id} history={history} deleted />
+        </>
+      )}
+      {!deleted && (
+        <>
+          {/* key: reset the form when navigating between employees */}
+          <EmployeeForm
+            key={employee.id}
+            employee={employee}
+            workDays={workDays}
+            hoursPerDay={rates.hoursPerDay}
+          />
+          <BenefitsCard
+            // key: new figures after a salary change, fresh switches for another employee
+            key={`${employee.id}-${monthly}`}
+            employeeId={employee.id}
+            name={employee.full_name}
+            enabled={{
+              sss: employee.benefits?.sss_enabled ?? true,
+              philhealth: employee.benefits?.philhealth_enabled ?? true,
+              pagibig: employee.benefits?.pagibig_enabled ?? true,
+            }}
+            contributions={monthlyContributions(monthly, rates)}
+            monthlySalary={monthly}
+          />
+          <EmployeeHistory employeeId={employee.id} history={history} deleted={false} />
+        </>
+      )}
     </>
   );
 }

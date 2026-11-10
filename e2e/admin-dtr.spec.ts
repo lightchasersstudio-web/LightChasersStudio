@@ -29,6 +29,7 @@ test.beforeAll(async () => {
     .insert({
       full_name: NAME,
       position: "Assistant",
+      category: "studio",
       date_hired: "2026-01-05",
       salary_type: "daily",
       salary_rate: 650,
