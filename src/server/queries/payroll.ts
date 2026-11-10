@@ -19,10 +19,11 @@ export async function computePayroll(cutoff: Cutoff): Promise<Payslip[]> {
         "id, full_name, position, salary_type, salary_rate, overtime_rate, benefits:employee_benefits(*)",
       )
       .eq("is_active", true)
+      .is("deleted_at", null)
       .order("full_name"),
     supabase
       .from("attendance_logs")
-      .select("employee_id, status, minutes_worked")
+      .select("employee_id, status, minutes_worked, daily_rate")
       .gte("work_date", cutoff.start)
       .lte("work_date", cutoff.end),
     supabase.from("contribution_settings").select("*").single(),
@@ -32,11 +33,15 @@ export async function computePayroll(cutoff: Cutoff): Promise<Payslip[]> {
   if (settings.error) throw settings.error;
 
   const rates = ratesFromRow(settings.data);
-  const days = new Map<string, { status: DayStatus; minutes: number }[]>();
+  const days = new Map<string, { status: DayStatus; minutes: number; dailyRate: number }[]>();
   for (const l of logs.data) {
     if (!isDayStatus(l.status)) continue;
     const list = days.get(l.employee_id) ?? [];
-    list.push({ status: l.status, minutes: l.minutes_worked ?? 0 });
+    list.push({
+      status: l.status,
+      minutes: l.minutes_worked ?? 0,
+      dailyRate: Number(l.daily_rate),
+    });
     days.set(l.employee_id, list);
   }
 

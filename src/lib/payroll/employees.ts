@@ -6,6 +6,23 @@ export const SALARY_TYPES = [
 ] as const;
 export type SalaryType = (typeof SALARY_TYPES)[number]["value"];
 
+/** What an employee mainly works on (daily payroll report). */
+export const EMPLOYEE_CATEGORIES = [
+  { value: "events", label: "Events" },
+  { value: "photobooth", label: "Photobooth" },
+  { value: "studio", label: "Studio" },
+] as const;
+export type EmployeeCategory = (typeof EMPLOYEE_CATEGORIES)[number]["value"];
+
+export const isEmployeeCategory = (v: unknown): v is EmployeeCategory =>
+  EMPLOYEE_CATEGORIES.some((c) => c.value === v);
+
+/** Staff added before categories existed have none yet. */
+export const UNCATEGORIZED = "Uncategorized";
+
+export const categoryLabel = (category: string | null): string =>
+  EMPLOYEE_CATEGORIES.find((c) => c.value === category)?.label ?? UNCATEGORIZED;
+
 export const asSalaryType = (value: string): SalaryType =>
   value === "daily" ? "daily" : "monthly";
 

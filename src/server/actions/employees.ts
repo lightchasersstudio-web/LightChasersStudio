@@ -36,11 +36,12 @@ export async function updateEmployee(id: string, input: unknown): Promise<Action
     if (!employeeIdSchema.safeParse({ id }).success) return fail("Employee not found.");
     const { data: before, error: readError } = await ctx.supabase
       .from("employees")
-      .select("photo_path, salary_type, salary_rate")
+      .select("photo_path, salary_type, salary_rate, deleted_at")
       .eq("id", id)
       .maybeSingle();
     if (readError) throw readError;
     if (!before) return fail("Employee not found.");
+    if (before.deleted_at) return fail("This employee was deleted. Restore them to make changes.");
 
     const { error } = await ctx.supabase.from("employees").update(row).eq("id", id);
     if (error) throw error;
@@ -62,12 +63,57 @@ export async function updateEmployee(id: string, input: unknown): Promise<Action
   });
 }
 
+/**
+ * Deletes an employee: hidden from Employees, the time record, payroll and
+ * the daily payroll report. Their time records and saved payslips are kept
+ * for Employees → Deleted, and restoreEmployee() brings them back.
+ */
+export async function deleteEmployee(input: unknown): Promise<ActionResult> {
+  return adminAction(employeeIdSchema, input, async ({ id }, ctx) => {
+    const { data, error } = await ctx.supabase
+      .from("employees")
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_by: ctx.admin.userId,
+        is_active: false,
+      })
+      .eq("id", id)
+      .is("deleted_at", null)
+      .select("full_name")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return fail("Employee not found.");
+    await audit(ctx, "employee.delete", "employee", id, { name: data.full_name });
+    refresh();
+    return ok(undefined);
+  });
+}
+
+/** Brings a deleted employee back as active, with every record they had. */
+export async function restoreEmployee(input: unknown): Promise<ActionResult> {
+  return adminAction(employeeIdSchema, input, async ({ id }, ctx) => {
+    const { data, error } = await ctx.supabase
+      .from("employees")
+      .update({ deleted_at: null, deleted_by: null, is_active: true })
+      .eq("id", id)
+      .not("deleted_at", "is", null)
+      .select("full_name")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return fail("Employee not found.");
+    await audit(ctx, "employee.restore", "employee", id, { name: data.full_name });
+    refresh();
+    return ok(undefined);
+  });
+}
+
 export async function setEmployeeActive(input: unknown): Promise<ActionResult> {
   return adminAction(setEmployeeActiveSchema, input, async ({ id, isActive }, ctx) => {
     const { data, error } = await ctx.supabase
       .from("employees")
       .update({ is_active: isActive })
       .eq("id", id)
+      .is("deleted_at", null)
       .select("full_name")
       .maybeSingle();
     if (error) throw error;

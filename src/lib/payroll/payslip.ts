@@ -4,7 +4,8 @@ import {
   type Benefit,
   type ContributionRates,
 } from "@/lib/payroll/contributions";
-import { dayTotals, type DayStatus } from "@/lib/payroll/cutoff";
+import { dayTotals, daysWorked, hasTimes, type DayStatus } from "@/lib/payroll/cutoff";
+import { computeDailyPay } from "@/lib/payroll/daily-pay";
 import { salaryRates, type SalaryType } from "@/lib/payroll/employees";
 import { toCents, toPesos } from "@/lib/payroll/money";
 
@@ -19,8 +20,11 @@ export type PayslipInput = {
     overtimeRate: number | null;
   };
   benefits: Record<Benefit, boolean>;
-  /** One entry per recorded day; minutes = time between time in and time out. */
-  days: { status: DayStatus; minutes: number }[];
+  /**
+   * One entry per recorded day; minutes = time between time in and time out;
+   * dailyRate = the record's own rate (default: the employee's current one).
+   */
+  days: { status: DayStatus; minutes: number; dailyRate?: number }[];
   rates: ContributionRates;
   half: 1 | 2;
 };
@@ -68,7 +72,10 @@ export type Payslip = {
  * - Monthly: basic = half the monthly salary. Each absent / leave / holiday
  *   day deducts a daily rate; each present day shorter than a shift deducts
  *   the missing time at the hourly rate (undertime). Together never more than basic.
- * - Daily: basic = daily rate × days present, minus undertime the same way.
+ * - Daily: each worked day through computeDailyPay, at the rate saved on that
+ *   day's record: basic = the day rates, minus undertime the same way.
+ * - AM / PM shifts are full days (no undertime or overtime); rest days are
+ *   neither paid nor absences.
  * - Overtime: time past a shift on a present day, paid at the employee's own
  *   overtime rate per hour (nothing when they have none).
  * - SSS / PhilHealth / Pag-IBIG: half the monthly employee share, from the
@@ -90,24 +97,37 @@ export function computePayslip({ employee, benefits, days, rates, half }: Paysli
   let regular = 0;
   let undertime = 0;
   let overtime = 0;
+  // Daily staff: summed day by day, at each record's own rate.
+  const byDay = { basic: 0, undertime: 0, overtime: 0 };
   for (const d of days) {
-    if (d.status !== "present") continue;
+    if (!hasTimes(d.status)) continue;
+    const pay = computeDailyPay({
+      status: d.status,
+      minutes: d.minutes,
+      dailyRate: d.dailyRate ?? daily,
+      shiftMinutes,
+      overtimeRate: employee.overtimeRate,
+    });
     regular += Math.min(d.minutes, shiftMinutes);
-    undertime += Math.max(0, shiftMinutes - d.minutes);
-    overtime += Math.max(0, d.minutes - shiftMinutes);
+    undertime += pay.undertimeMinutes;
+    overtime += pay.overtimeMinutes;
+    byDay.basic += pay.basicCents;
+    byDay.undertime += pay.undertimeCents;
+    byDay.overtime += pay.overtimeCents;
   }
 
-  const basicCents =
-    employee.salaryType === "monthly"
-      ? toCents(cutoffShare(monthly, half))
-      : dailyCents * t.present;
-  const rawAbsence = employee.salaryType === "monthly" ? dailyCents * unpaidDays : 0;
-  const rawUndertime = Math.round((dailyCents * undertime) / shiftMinutes);
+  const isMonthly = employee.salaryType === "monthly";
+  const basicCents = isMonthly ? toCents(cutoffShare(monthly, half)) : byDay.basic;
+  const rawAbsence = isMonthly ? dailyCents * unpaidDays : 0;
+  const rawUndertime = isMonthly
+    ? Math.round((dailyCents * undertime) / shiftMinutes)
+    : byDay.undertime;
   // Time off never takes more than the basic pay.
   const absenceCents = Math.min(basicCents, rawAbsence);
   const undertimeCents = Math.min(basicCents - absenceCents, rawUndertime);
-  const overtimeCents =
-    employee.overtimeRate === null
+  const overtimeCents = !isMonthly
+    ? byDay.overtime
+    : employee.overtimeRate === null
       ? 0
       : Math.round((toCents(employee.overtimeRate) * overtime) / 60);
 
@@ -135,7 +155,7 @@ export function computePayslip({ employee, benefits, days, rates, half }: Paysli
     monthly_salary: monthly,
     hourly_rate: toPesos(Math.round(dailyCents / rates.hoursPerDay)),
     overtime_rate: employee.overtimeRate,
-    days_present: t.present,
+    days_present: daysWorked(t),
     days_absent: t.absent,
     days_leave: t.leave,
     days_holiday: t.holiday,

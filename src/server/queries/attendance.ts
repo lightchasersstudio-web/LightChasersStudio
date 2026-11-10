@@ -1,14 +1,24 @@
 import "server-only";
 
-import { dayTotals, isDayStatus, type Cutoff, type DayTotals } from "@/lib/payroll/cutoff";
+import {
+  dayTotals,
+  isDayStatus,
+  type Cutoff,
+  type DayStatus,
+  type DayTotals,
+} from "@/lib/payroll/cutoff";
 import { createClient } from "@/lib/supabase/server";
 
 export type AttendanceLog = {
   date: string;
-  status: "present" | "absent" | "leave" | "holiday";
+  status: DayStatus;
   timeIn: string | null;
   timeOut: string | null;
   minutes: number;
+  /** Pesos, saved with the record. */
+  dailyRate: number;
+  /** An AM/PM time out changed from time in + 8 hours. */
+  timeOutEdited: boolean;
   note: string | null;
 };
 
@@ -17,7 +27,9 @@ export async function getAttendance(employeeId: string, cutoff: Cutoff): Promise
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("attendance_logs")
-    .select("work_date, status, time_in, time_out, minutes_worked, note")
+    .select(
+      "work_date, status, time_in, time_out, minutes_worked, daily_rate, time_out_edited, note",
+    )
     .eq("employee_id", employeeId)
     .gte("work_date", cutoff.start)
     .lte("work_date", cutoff.end)
@@ -32,6 +44,8 @@ export async function getAttendance(employeeId: string, cutoff: Cutoff): Promise
             timeIn: r.time_in?.slice(0, 5) ?? null,
             timeOut: r.time_out?.slice(0, 5) ?? null,
             minutes: r.minutes_worked ?? 0,
+            dailyRate: Number(r.daily_rate),
+            timeOutEdited: r.time_out_edited ?? false,
             note: r.note,
           },
         ]
@@ -44,19 +58,26 @@ export type CutoffSummaryRow = {
   name: string;
   position: string;
   isActive: boolean;
+  salaryType: string;
+  salaryRate: number;
   /** Days with something recorded. */
   recorded: number;
   totals: DayTotals;
 };
 
 /**
- * Everyone's totals for a cut-off: active staff, plus anyone inactive who
- * still has records in it.
+ * Active staff's totals for a cut-off (owner decision 2026-11-09: deactivated
+ * staff don't show in the time record; their records are kept).
  */
 export async function getCutoffSummary(cutoff: Cutoff): Promise<CutoffSummaryRow[]> {
   const supabase = await createClient();
   const [employees, logs] = await Promise.all([
-    supabase.from("employees").select("id, full_name, position, is_active").order("full_name"),
+    supabase
+      .from("employees")
+      .select("id, full_name, position, is_active, salary_type, salary_rate")
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("full_name"),
     supabase
       .from("attendance_logs")
       .select("employee_id, status, minutes_worked")
@@ -73,19 +94,19 @@ export async function getCutoffSummary(cutoff: Cutoff): Promise<CutoffSummaryRow
     list.push({ status: l.status, minutes: l.minutes_worked ?? 0 });
     byEmployee.set(l.employee_id, list);
   }
-  return employees.data
-    .filter((e) => e.is_active || byEmployee.has(e.id))
-    .map((e) => {
-      const days = byEmployee.get(e.id) ?? [];
-      return {
-        id: e.id,
-        name: e.full_name,
-        position: e.position,
-        isActive: e.is_active,
-        recorded: days.length,
-        totals: dayTotals(days),
-      };
-    });
+  return employees.data.map((e) => {
+    const days = byEmployee.get(e.id) ?? [];
+    return {
+      id: e.id,
+      name: e.full_name,
+      position: e.position,
+      isActive: e.is_active,
+      salaryType: e.salary_type,
+      salaryRate: Number(e.salary_rate),
+      recorded: days.length,
+      totals: dayTotals(days),
+    };
+  });
 }
 
 /** When the payroll for this cut-off was saved, if it was. */

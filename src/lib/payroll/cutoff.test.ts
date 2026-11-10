@@ -5,6 +5,7 @@ import {
   cutoffFor,
   cutoffLabel,
   dayTotals,
+  daysWorked,
   formatMinutes,
   minutesWorked,
   parseCutoff,
@@ -58,6 +59,27 @@ describe("hours", () => {
         { status: "absent", minutes: 0 },
         { status: "holiday", minutes: 0 },
       ]),
-    ).toEqual({ present: 2, absent: 1, leave: 0, holiday: 1, minutes: 780 });
+    ).toEqual({
+      present: 2,
+      am: 0,
+      pm: 0,
+      rest_day: 0,
+      absent: 1,
+      leave: 0,
+      holiday: 1,
+      minutes: 780,
+    });
+  });
+
+  it("counts AM and PM shifts as days worked, rest days on their own", () => {
+    const t = dayTotals([
+      { status: "present", minutes: 480 },
+      { status: "am", minutes: 480 },
+      { status: "pm", minutes: 480 },
+      { status: "rest_day", minutes: 0 },
+    ]);
+    expect(daysWorked(t)).toBe(3);
+    expect(t.rest_day).toBe(1);
+    expect(t.absent).toBe(0);
   });
 });

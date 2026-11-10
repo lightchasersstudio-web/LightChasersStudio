@@ -8,7 +8,10 @@ const all = { sss: true, philhealth: true, pagibig: true };
 const H = 60;
 const days = (...spec: [DayStatus, number, number?][]) =>
   spec.flatMap(([status, n, minutes = 8 * H]) =>
-    Array.from({ length: n }, () => ({ status, minutes: status === "present" ? minutes : 0 })),
+    Array.from({ length: n }, () => ({
+      status,
+      minutes: ["present", "am", "pm"].includes(status) ? minutes : 0,
+    })),
   );
 
 // The owner's example: ₱30,000 a month ÷ 30 days = ₱1,000 a day ÷ 8 hours = ₱125 an hour.
@@ -110,6 +113,43 @@ describe("computePayslip (by the hour)", () => {
       total_deductions: 1156.25,
       net_pay: 5993.75,
     });
+  });
+
+  it("AM/PM shifts are full days; rest days are neither paid nor absences", () => {
+    const daily = {
+      ...monthly,
+      employee: { ...monthly.employee, salaryType: "daily" as const, salaryRate: 650 },
+    };
+    // An AM shift cut short still pays the full day.
+    const p = computePayslip({
+      ...daily,
+      days: days(["am", 1], ["pm", 1, 5 * H], ["rest_day", 2]),
+    });
+    expect(p).toMatchObject({
+      days_present: 2,
+      days_absent: 0,
+      basic_pay: 1300,
+      undertime_deduction: 0,
+      overtime_pay: 0,
+      absence_deduction: 0,
+    });
+    // Monthly staff: rest days take nothing off.
+    const m = computePayslip({ ...monthly, days: days(["am", 10], ["rest_day", 2]) });
+    expect(m.absence_deduction).toBe(0);
+    expect(m.basic_pay).toBe(15000);
+  });
+
+  it("daily staff are paid each day's saved rate, not today's salary", () => {
+    const p = computePayslip({
+      ...monthly,
+      employee: { ...monthly.employee, salaryType: "daily", salaryRate: 800, overtimeRate: null },
+      days: [
+        { status: "am", minutes: 480, dailyRate: 650 }, // before a raise
+        { status: "pm", minutes: 480, dailyRate: 1000 }, // special event day
+        { status: "present", minutes: 480 }, // no saved rate: today's ₱800
+      ],
+    });
+    expect(p.basic_pay).toBe(2450);
   });
 
   it("undertime is worked out to the minute", () => {

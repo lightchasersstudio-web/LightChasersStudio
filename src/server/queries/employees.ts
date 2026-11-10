@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ratesFromRow, type ContributionRates } from "@/lib/payroll/contributions";
+import type { EmployeeCategory } from "@/lib/payroll/employees";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database.types";
 
@@ -22,16 +23,28 @@ async function photoUrls(paths: string[]): Promise<Map<string, string>> {
   return urls;
 }
 
-export type EmployeeStatusFilter = "active" | "inactive";
+/** "deleted" = Employees → Deleted (history only). */
+export type EmployeeStatusFilter = "active" | "inactive" | "deleted";
+/** A category, "none" (not set yet) or null (all). */
+export type EmployeeCategoryFilter = EmployeeCategory | "none" | null;
 
 /** Active (or inactive) staff, A–Z, with photo links. Callers check requireAdmin(). */
-export async function listEmployees(status: EmployeeStatusFilter): Promise<EmployeeWithPhoto[]> {
+export async function listEmployees(
+  status: EmployeeStatusFilter,
+  category: EmployeeCategoryFilter = null,
+): Promise<EmployeeWithPhoto[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("employees")
-    .select("*")
-    .eq("is_active", status === "active")
-    .order("full_name");
+  let query = supabase.from("employees").select("*");
+  query =
+    status === "deleted"
+      ? query.not("deleted_at", "is", null).order("deleted_at", { ascending: false })
+      : query
+          .is("deleted_at", null)
+          .eq("is_active", status === "active")
+          .order("full_name");
+  if (category === "none") query = query.is("category", null);
+  else if (category) query = query.eq("category", category);
+  const { data, error } = await query;
   if (error) throw error;
   const urls = await photoUrls(data.flatMap((e) => (e.photo_path ? [e.photo_path] : [])));
   return data.map((e) => ({
@@ -40,12 +53,26 @@ export async function listEmployees(status: EmployeeStatusFilter): Promise<Emplo
   }));
 }
 
-export async function countEmployees(): Promise<{ active: number; inactive: number }> {
+export async function countEmployees(): Promise<{
+  active: number;
+  inactive: number;
+  deleted: number;
+  /** Active staff with no category yet. */
+  uncategorized: number;
+}> {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("employees").select("is_active");
+  const { data, error } = await supabase
+    .from("employees")
+    .select("is_active, category, deleted_at");
   if (error) throw error;
-  const active = data.filter((e) => e.is_active).length;
-  return { active, inactive: data.length - active };
+  const kept = data.filter((e) => !e.deleted_at);
+  const active = kept.filter((e) => e.is_active).length;
+  return {
+    active,
+    inactive: kept.length - active,
+    deleted: data.length - kept.length,
+    uncategorized: kept.filter((e) => e.is_active && !e.category).length,
+  };
 }
 
 export type EmployeeDetail = EmployeeWithPhoto & { benefits: EmployeeBenefits | null };
@@ -74,6 +101,7 @@ export async function listEmployeeDetails(status: EmployeeStatusFilter): Promise
   const { data, error } = await supabase
     .from("employees")
     .select("*, benefits:employee_benefits(*)")
+    .is("deleted_at", null)
     .eq("is_active", status === "active")
     .order("full_name");
   if (error) throw error;
