@@ -50,7 +50,7 @@ export default function DtrPage({ searchParams }: PageProps<"/admin/dtr">) {
       <PageHeader
         eyebrow="who worked when"
         title="Time record"
-        description="Daily time record per cut-off. Mark each day present, AM or PM shift, rest day, absent, leave or holiday; hours are worked out from the time in and out."
+        description="Daily time record per cut-off. Mark each day present, AM, PM or AM/PM shift, rest day, absent, leave or holiday; hours are worked out from the time in and out."
         actions={
           <Button asChild variant="outline" size="lg">
             <Link href="/admin/payroll/settings">
@@ -149,6 +149,7 @@ async function Sheet({
         dates={cutoffDates(cutoff)}
         logs={logs}
         hoursPerDay={rates.hoursPerDay}
+        amPmRate={rates.amPmRate}
         currentRate={
           salaryRates(
             asSalaryType(employee.salaryType),
@@ -229,6 +230,7 @@ function Summary({
                 </span>
                 {s.totals.am +
                   s.totals.pm +
+                  s.totals.am_pm +
                   s.totals.rest_day +
                   s.totals.absent +
                   s.totals.leave +
@@ -238,6 +240,7 @@ function Summary({
                     {[
                       s.totals.am && `${s.totals.am} AM`,
                       s.totals.pm && `${s.totals.pm} PM`,
+                      s.totals.am_pm && `${s.totals.am_pm} AM/PM`,
                       s.totals.rest_day && `${s.totals.rest_day} rest`,
                       s.totals.absent && `${s.totals.absent} absent`,
                       s.totals.leave && `${s.totals.leave} leave`,
@@ -259,7 +262,7 @@ function Summary({
             <TableRow>
               <TableHead className="pl-5">Employee</TableHead>
               <TableHead className="text-right">Present</TableHead>
-              <TableHead className="text-right">AM / PM</TableHead>
+              <TableHead className="text-right">AM · PM · AM/PM</TableHead>
               <TableHead className="text-right">Rest</TableHead>
               <TableHead className="text-right">Absent</TableHead>
               <TableHead className="text-right">Leave</TableHead>
@@ -285,7 +288,7 @@ function Summary({
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{s.totals.present}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {s.totals.am} / {s.totals.pm}
+                  {s.totals.am} · {s.totals.pm} · {s.totals.am_pm}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{s.totals.rest_day}</TableCell>
                 <TableCell className="text-right tabular-nums">{s.totals.absent}</TableCell>

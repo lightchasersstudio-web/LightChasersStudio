@@ -15,6 +15,8 @@ export type ContributionRates = {
   workDaysPerMonth: number;
   /** Hours in a shift: hourly rate = daily ÷ this; more is overtime, less is undertime. */
   hoursPerDay: number;
+  /** Pesos filled in as the day's rate for an AM/PM shift. */
+  amPmRate: number;
 };
 
 /** The 2026 defaults (same as the migration), for tests and empty states. */
@@ -30,6 +32,7 @@ export const DEFAULT_RATES: ContributionRates = {
   pagibigSalaryCap: 10000,
   workDaysPerMonth: 30,
   hoursPerDay: 8,
+  amPmRate: 650,
 };
 
 type Numeric = number | string;
@@ -46,6 +49,7 @@ export function ratesFromRow(row: {
   pagibig_salary_cap: Numeric;
   work_days_per_month: Numeric;
   hours_per_day: Numeric;
+  am_pm_rate: Numeric;
 }): ContributionRates {
   return {
     sssEmployeeRate: Number(row.sss_employee_rate),
@@ -59,6 +63,7 @@ export function ratesFromRow(row: {
     pagibigSalaryCap: Number(row.pagibig_salary_cap),
     workDaysPerMonth: Number(row.work_days_per_month),
     hoursPerDay: Number(row.hours_per_day),
+    amPmRate: Number(row.am_pm_rate),
   };
 }
 

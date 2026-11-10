@@ -63,6 +63,7 @@ describe("hours", () => {
       present: 2,
       am: 0,
       pm: 0,
+      am_pm: 0,
       rest_day: 0,
       absent: 1,
       leave: 0,

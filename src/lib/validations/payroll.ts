@@ -51,6 +51,7 @@ export const contributionSettingsSchema = z
       }
       return n;
     }),
+    amPmRate: amount.refine((v) => v <= 1_000_000, "Enter an amount like 650."),
   })
   .superRefine((v, ctx) => {
     if (v.sssMscMax < v.sssMscMin) {
@@ -80,6 +81,7 @@ export const contributionSettingsSchema = z
     pagibig_salary_cap: v.pagibigCap,
     work_days_per_month: v.workDays,
     hours_per_day: v.hoursPerDay,
+    am_pm_rate: v.amPmRate,
   }));
 
 export type ContributionSettingsFormInput = z.input<typeof contributionSettingsSchema>;

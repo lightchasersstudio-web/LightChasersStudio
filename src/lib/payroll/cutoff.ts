@@ -60,6 +60,7 @@ export const DAY_STATUSES = [
   { value: "present", label: "Present" },
   { value: "am", label: "AM shift" },
   { value: "pm", label: "PM shift" },
+  { value: "am_pm", label: "AM/PM shift" },
   { value: "rest_day", label: "Rest day" },
   { value: "absent", label: "Absent" },
   { value: "leave", label: "Leave" },
@@ -72,12 +73,14 @@ export const isDayStatus = (v: unknown): v is DayStatus => DAY_STATUSES.some((s)
 export const dayStatusLabel = (status: DayStatus): string =>
   DAY_STATUSES.find((s) => s.value === status)?.label ?? status;
 
-/** AM and PM: fixed 8-hour shifts paid as a full day. */
-export const isShift = (status: string): status is "am" | "pm" =>
-  status === "am" || status === "pm";
+export type ShiftStatus = "am" | "pm" | "am_pm";
+
+/** AM, PM (8 hours) and AM/PM (12½ hours): fixed shifts paid as a full day. */
+export const isShift = (status: string): status is ShiftStatus =>
+  status === "am" || status === "pm" || status === "am_pm";
 
 /** Days with a time in and out (and that count as worked). */
-export const hasTimes = (status: string): status is "present" | "am" | "pm" =>
+export const hasTimes = (status: string): status is "present" | ShiftStatus =>
   status === "present" || isShift(status);
 
 /**
@@ -100,13 +103,14 @@ export function formatMinutes(minutes: number): string {
 export type DayTotals = Record<DayStatus, number> & { minutes: number };
 
 /** Days worked: present plus AM and PM shifts. */
-export const daysWorked = (t: DayTotals): number => t.present + t.am + t.pm;
+export const daysWorked = (t: DayTotals): number => t.present + t.am + t.pm + t.am_pm;
 
 export function dayTotals(days: { status: DayStatus; minutes: number }[]): DayTotals {
   const totals: DayTotals = {
     present: 0,
     am: 0,
     pm: 0,
+    am_pm: 0,
     rest_day: 0,
     absent: 0,
     leave: 0,

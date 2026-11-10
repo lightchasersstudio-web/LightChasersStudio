@@ -39,6 +39,7 @@ function toForm(r: ContributionRates): ContributionSettingsFormInput {
     pagibigCap: amountToInput(r.pagibigSalaryCap),
     workDays: String(r.workDaysPerMonth),
     hoursPerDay: String(r.hoursPerDay),
+    amPmRate: amountToInput(r.amPmRate),
   };
 }
 
@@ -72,6 +73,7 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
         pagibigSalaryCap: parsed.data.pagibig_salary_cap,
         workDaysPerMonth: parsed.data.work_days_per_month,
         hoursPerDay: parsed.data.hours_per_day,
+        amPmRate: parsed.data.am_pm_rate,
       })
     : null;
 
@@ -117,6 +119,15 @@ export function ContributionSettingsForm({ rates }: { rates: ContributionRates }
                 label="Hours in a shift"
                 inputMode="decimal"
                 description="Hourly rate = daily rate ÷ this. Less time in a day is deducted (undertime); more is overtime."
+              />
+              <TextField
+                control={control}
+                name="amPmRate"
+                label="AM/PM shift rate"
+                prefix="₱"
+                inputMode="decimal"
+                autoComplete="off"
+                description="Filled in as the day's pay when an AM/PM shift (9:30 AM–10:00 PM) is picked in the time record. You can still change it on each day."
               />
             </div>
           </CardContent>

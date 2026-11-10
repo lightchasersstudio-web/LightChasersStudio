@@ -10,9 +10,17 @@ const time = /^([01]\d|2[0-3]):[0-5]\d$/;
 const daySchema = z
   .object({
     date: dateString,
-    status: z.enum(["", "present", "am", "pm", "rest_day", "absent", "leave", "holiday"] satisfies (
-      "" | DayStatus
-    )[]),
+    status: z.enum([
+      "",
+      "present",
+      "am",
+      "pm",
+      "am_pm",
+      "rest_day",
+      "absent",
+      "leave",
+      "holiday",
+    ] satisfies ("" | DayStatus)[]),
     timeIn: z.string(),
     timeOut: z.string(),
     /** Pesos for this day; "" = the employee's current daily rate. */
