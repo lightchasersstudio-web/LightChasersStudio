@@ -1,7 +1,7 @@
 import { ArrowRightIcon, CalendarCheckIcon, CameraIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 
-import { BookingFinder } from "@/components/booking/booking-finder";
+import { BookingFinderDialog } from "@/components/booking/booking-finder";
 import { BookCta } from "@/components/public/book-cta";
 import { BrandLogo } from "@/components/public/brand-logo";
 import { CATEGORY_ICONS } from "@/components/public/category-icons";
@@ -151,6 +151,8 @@ export default async function HomePage() {
                 </Link>
               </Button>
             </div>
+            {/* Find a booking: a pop-up, so it doesn't compete with "Book now". */}
+            <BookingFinderDialog className="mt-3" />
           </div>
 
           <div className="relative mx-auto flex w-full max-w-md flex-col items-center py-6 md:max-w-none">
@@ -159,14 +161,6 @@ export default async function HomePage() {
             <HeroDeck photos={heroPhotos} />
           </div>
         </div>
-      </section>
-
-      {/* Find a booking (reference, or email → references sent to that inbox) */}
-      <section
-        aria-label="Find your booking"
-        className="relative z-10 mx-auto -mt-10 max-w-3xl px-4 sm:px-6"
-      >
-        <BookingFinder />
       </section>
 
       {/* Workshop sign-up */}
