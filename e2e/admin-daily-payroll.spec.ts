@@ -26,6 +26,12 @@ const RUN = `E2E Staff ${Date.now().toString(36)}${Math.random().toString(36).sl
 const DAY = format(addDays(new Date(2033, 0, 6), Math.floor(Math.random() * 300)), "yyyy-MM-dd");
 const DAY_LABEL = format(new Date(`${DAY}T00:00:00`), "EEE d MMM");
 const CUTOFF = `${DAY.slice(0, 8)}${Number(DAY.slice(8)) <= 15 ? "01" : "16"}`;
+// Another day in the same cut-off, for the AM/PM shift.
+const OTHER = format(
+  addDays(new Date(`${DAY}T00:00:00`), ["01", "16"].includes(DAY.slice(8)) ? 1 : -1),
+  "yyyy-MM-dd",
+);
+const OTHER_LABEL = format(new Date(`${OTHER}T00:00:00`), "EEE d MMM");
 const STAFF = {
   bea: { name: `${RUN} Bea`, category: "studio", salary_type: "daily", salary_rate: 650 },
   carlo: { name: `${RUN} Carlo`, category: "events", salary_type: "monthly", salary_rate: 24015 },
@@ -121,8 +127,32 @@ test("AM/PM shifts fill the time out; the daily payroll adds up the day", async 
   // Bea left at 3 PM: the time out stays editable and is marked.
   await openSheet(page, "bea");
   await timeOut().fill("15:00");
-  await expect(page.getByText("Edited (not 8 hours)")).toBeVisible();
+  await expect(page.getByText("Edited (not the usual times)")).toBeVisible();
   await save(page, "bea");
+
+  // Carlo works both shifts another day: AM/PM fills 9:30 AM–10:00 PM and the
+  // ₱650 AM/PM rate; another shift puts his own rate back; the rate stays editable.
+  await openSheet(page, "carlo");
+  const other = (f: string) => page.getByLabel(`${f}, ${OTHER_LABEL}`);
+  await other("Status").selectOption("am_pm");
+  await expect(other("Time in")).toHaveValue("09:30");
+  await expect(other("Time out")).toHaveValue("22:00");
+  await expect(other("Daily rate")).toHaveValue("650");
+  await other("Status").selectOption("pm");
+  await expect(other("Daily rate")).toHaveValue("800.50");
+  await other("Status").selectOption("am_pm");
+  await expect(other("Daily rate")).toHaveValue("650");
+  await other("Daily rate").fill("700");
+  await save(page, "carlo");
+  await page.goto(`/admin/reports?payDate=${OTHER}#payroll`);
+  const otherDay = page
+    .locator("section#payroll")
+    .getByRole("row")
+    .filter({ hasText: STAFF.carlo.name });
+  await expect(otherDay).toContainText("AM/PM shift");
+  await expect(otherDay).toContainText("9:30 AM");
+  await expect(otherDay).toContainText("10:00 PM");
+  await expect(otherDay).toContainText("₱700.00");
 
   // A raise afterwards doesn't change the day already recorded.
   await admin().from("employees").update({ salary_rate: 900 }).eq("id", ids.bea);

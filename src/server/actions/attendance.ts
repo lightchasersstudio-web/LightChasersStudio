@@ -20,7 +20,10 @@ export async function saveAttendance(input: unknown): Promise<ActionResult> {
           .select("full_name, salary_type, salary_rate, deleted_at")
           .eq("id", employeeId)
           .maybeSingle(),
-        ctx.supabase.from("contribution_settings").select("work_days_per_month").single(),
+        ctx.supabase
+          .from("contribution_settings")
+          .select("work_days_per_month, am_pm_rate")
+          .single(),
       ]);
       if (readError) throw readError;
       if (settings.error) throw settings.error;
@@ -36,7 +39,12 @@ export async function saveAttendance(input: unknown): Promise<ActionResult> {
 
       if (upserts.length) {
         const { error } = await ctx.supabase.from("attendance_logs").upsert(
-          upserts.map((u) => ({ ...u, daily_rate: u.daily_rate ?? daily })),
+          upserts.map((u) => ({
+            ...u,
+            // AM/PM: the AM/PM rate from Payroll settings; others: today's daily rate.
+            daily_rate:
+              u.daily_rate ?? (u.status === "am_pm" ? Number(settings.data.am_pm_rate) : daily),
+          })),
           { onConflict: "employee_id,work_date" },
         );
         if (error) throw error;

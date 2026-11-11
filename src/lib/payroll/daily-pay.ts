@@ -1,37 +1,39 @@
-import type { DayStatus } from "@/lib/payroll/cutoff";
+import { isShift, type DayStatus, type ShiftStatus } from "@/lib/payroll/cutoff";
 import { toCents } from "@/lib/payroll/money";
 
 // One day's pay, the single place the per-day rules live (owner request
 // 2026-11-10). Used by the daily payroll report and by daily-paid payslips.
 
-/** AM and PM shifts are always 8 hours. */
-export const SHIFT_HOURS = 8;
-
 /**
- * Suggested time in when AM or PM is picked (the admin can change it), owner
- * decision 2026-11-10: AM 9:30 AM–5:30 PM, PM 2:00 PM–10:00 PM.
+ * The fixed shifts (owner decisions 2026-11-10): picking one fills these times
+ * (the admin can change them). AM 9:30 AM–5:30 PM, PM 2:00 PM–10:00 PM,
+ * AM/PM 9:30 AM–10:00 PM for staff who work both.
  */
-export const SHIFT_START: Record<"am" | "pm", string> = { am: "09:30", pm: "14:00" };
+export const SHIFTS: Record<ShiftStatus, { start: string; minutes: number }> = {
+  am: { start: "09:30", minutes: 8 * 60 },
+  pm: { start: "14:00", minutes: 8 * 60 },
+  am_pm: { start: "09:30", minutes: 12 * 60 + 30 },
+};
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /**
- * "HH:MM" + 8 hours, wrapping past midnight ("20:00" → "04:00", the next day).
- * Null when the time isn't valid.
+ * "HH:MM" + the shift's length (AM/PM 8 hours, AM/PM both 12½), wrapping past
+ * midnight ("20:00" + 8 h → "04:00", the next day). Null when the time isn't valid.
  */
-export function shiftTimeOut(timeIn: string): string | null {
+export function shiftTimeOut(timeIn: string, shift: ShiftStatus = "am"): string | null {
   const m = HHMM.exec(timeIn);
   if (!m) return null;
-  const minutes = (Number(m[1]) * 60 + Number(m[2]) + SHIFT_HOURS * 60) % 1440;
+  const minutes = (Number(m[1]) * 60 + Number(m[2]) + SHIFTS[shift].minutes) % 1440;
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-/** An AM/PM time out that isn't time in + 8 hours (matches the DB's time_out_edited). */
-export const isTimeOutEdited = (status: string, timeIn: string, timeOut: string): boolean =>
-  (status === "am" || status === "pm") &&
-  shiftTimeOut(timeIn) !== null &&
-  timeOut !== "" &&
-  shiftTimeOut(timeIn) !== timeOut;
+/** A shift's time out that isn't time in + its length (matches the DB's time_out_edited). */
+export function isTimeOutEdited(status: string, timeIn: string, timeOut: string): boolean {
+  if (!isShift(status) || timeOut === "") return false;
+  const expected = shiftTimeOut(timeIn, status);
+  return expected !== null && expected !== timeOut;
+}
 
 export type DayPayInput = {
   status: DayStatus;
@@ -65,14 +67,15 @@ const NOTHING: DayPay = {
 };
 
 /**
- * - AM / PM shift: the full daily rate, however long the day ran.
+ * - AM, PM or AM/PM shift: the day's rate, however long the day ran (AM/PM
+ *   starts at the AM/PM rate from Payroll settings, ₱650).
  * - Present (unchanged rule): the daily rate, less the time short of a
  *   regular day at the hourly rate, plus time past it at the overtime rate.
  * - Rest day, absent, leave, holiday: nothing.
  */
 export function computeDailyPay(d: DayPayInput): DayPay {
   const rateCents = toCents(d.dailyRate);
-  if (d.status === "am" || d.status === "pm") {
+  if (isShift(d.status)) {
     return { ...NOTHING, basicCents: rateCents, payCents: rateCents };
   }
   if (d.status !== "present") return NOTHING;

@@ -581,6 +581,7 @@ export type Database = {
       }
       contribution_settings: {
         Row: {
+          am_pm_rate: number
           hours_per_day: number
           id: boolean
           pagibig_employee_rate: number
@@ -597,6 +598,7 @@ export type Database = {
         }
         ComputedFields: never
         Insert: {
+          am_pm_rate?: number
           hours_per_day?: number
           id?: boolean
           pagibig_employee_rate?: number
@@ -612,6 +614,7 @@ export type Database = {
           work_days_per_month?: number
         }
         Update: {
+          am_pm_rate?: number
           hours_per_day?: number
           id?: boolean
           pagibig_employee_rate?: number

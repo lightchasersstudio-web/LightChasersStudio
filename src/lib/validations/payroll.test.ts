@@ -17,6 +17,7 @@ const form: ContributionSettingsFormInput = {
   pagibigCap: "10000",
   workDays: "30",
   hoursPerDay: "8",
+  amPmRate: "650",
 };
 
 describe("contributionSettingsSchema", () => {
@@ -33,6 +34,7 @@ describe("contributionSettingsSchema", () => {
       pagibig_salary_cap: 10000,
       work_days_per_month: 30,
       hours_per_day: 8,
+      am_pm_rate: 650,
     });
     expect(
       contributionSettingsSchema.parse({ ...form, sssRate: "4.75", workDays: "21.75" }),

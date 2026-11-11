@@ -2258,6 +2258,36 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("AM/PM shift: 9:30 AM–10:00 PM, the AM/PM rate when none is given", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c); // monthly ₱20,000 → ₱666.67 a day
+        const amPmRate = Number(
+          (await c.query("select am_pm_rate from public.contribution_settings")).rows[0]!
+            .am_pm_rate,
+        );
+        expect(amPmRate).toBe(650);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out) values
+           ($1, '2026-11-10', 'am_pm', '09:30', '22:00'),
+           ($1, '2026-11-11', 'am_pm', '09:30', '20:00'),
+           ($1, '2026-11-12', 'am', '09:30', '17:30')`,
+          [id],
+        );
+        const { rows } = await c.query(
+          `select status, minutes_worked, daily_rate, time_out_edited from public.attendance_logs
+           where employee_id = $1 order by work_date`,
+          [id],
+        );
+        expect(
+          rows.map((r) => [r.status, r.minutes_worked, Number(r.daily_rate), r.time_out_edited]),
+        ).toEqual([
+          ["am_pm", 750, 650, false],
+          ["am_pm", 630, 650, true],
+          ["am", 480, 666.67, false],
+        ]);
+      });
+    });
+
     it("a deleted employee is never active, and keeps their records", async () => {
       await inRollback(async (c) => {
         const id = await addEmployee(c);

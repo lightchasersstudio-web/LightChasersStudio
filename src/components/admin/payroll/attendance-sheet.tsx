@@ -31,8 +31,9 @@ import {
   isDayStatus,
   isShift,
   minutesWorked,
+  type ShiftStatus,
 } from "@/lib/payroll/cutoff";
-import { isTimeOutEdited, SHIFT_START, shiftTimeOut } from "@/lib/payroll/daily-pay";
+import { isTimeOutEdited, SHIFTS, shiftTimeOut } from "@/lib/payroll/daily-pay";
 import { amountToInput, formatAmount, parseAmount } from "@/lib/payroll/money";
 import { cn } from "@/lib/utils";
 import { attendanceSheetSchema, type AttendanceSheetInput } from "@/lib/validations/attendance";
@@ -57,6 +58,7 @@ const STATUS_TONE: Record<string, string> = {
   present: "",
   am: "",
   pm: "",
+  am_pm: "",
   rest_day: "bg-muted/60",
   absent: "bg-destructive/5",
   leave: "bg-blush/50",
@@ -71,6 +73,7 @@ export function AttendanceSheet({
   logs,
   hoursPerDay,
   currentRate,
+  amPmRate,
 }: {
   employeeId: string;
   employeeName: string;
@@ -81,9 +84,12 @@ export function AttendanceSheet({
   hoursPerDay: number;
   /** The employee's daily rate today: new days start with it. */
   currentRate: number;
+  /** Payroll settings → AM/PM shift rate: filled in when AM/PM is picked. */
+  amPmRate: number;
 }) {
   const shift = Math.round(hoursPerDay * 60);
   const currentRateInput = amountToInput(currentRate);
+  const amPmRateInput = amountToInput(amPmRate);
   const byDate = new Map(logs.map((l) => [l.date, l]));
   const defaults: AttendanceSheetInput = {
     employeeId,
@@ -133,13 +139,13 @@ export function AttendanceSheet({
     form.setValue(path, value, { shouldDirty: true });
 
   /**
-   * Picking AM or PM always fills that shift's times (AM 9:30–5:30, PM
-   * 2:00–10:00), whatever the day had before; the admin can edit them after.
+   * Picking a shift always fills its times (AM 9:30–5:30, PM 2:00–10:00,
+   * AM/PM 9:30–10:00), whatever the day had before; the admin can edit them after.
    */
-  function startShift(i: number, status: "am" | "pm") {
-    const timeIn = SHIFT_START[status];
+  function startShift(i: number, status: ShiftStatus) {
+    const timeIn = SHIFTS[status].start;
     set(`days.${i}.timeIn`, timeIn);
-    set(`days.${i}.timeOut`, shiftTimeOut(timeIn) ?? "");
+    set(`days.${i}.timeOut`, shiftTimeOut(timeIn, status) ?? "");
     form.clearErrors([`days.${i}.timeIn`, `days.${i}.timeOut`]);
   }
 
@@ -199,8 +205,8 @@ export function AttendanceSheet({
           Mark blank days present
         </Button>
         <p className="text-sm text-muted-foreground xl:max-w-64">
-          Fills Monday–Saturday days with nothing recorded yet. Sundays stay blank. AM and PM shifts
-          are 8 hours: pick one and the time out fills in for you.
+          Fills Monday–Saturday days with nothing recorded yet. Sundays stay blank. AM (9:30–5:30),
+          PM (2:00–10:00) and AM/PM (9:30–10:00, ₱{amountToInput(amPmRate)}) fill in their times.
         </p>
       </div>
 
@@ -249,6 +255,7 @@ export function AttendanceSheet({
                           aria-label={`Status, ${dayLabel}`}
                           className="w-full xl:w-36"
                           onChange={(e) => {
+                            const previous = f.value;
                             f.onChange(e);
                             const next = e.target.value;
                             if (isShift(next)) {
@@ -258,7 +265,15 @@ export function AttendanceSheet({
                               set(`days.${i}.timeOut`, "");
                               form.clearErrors([`days.${i}.timeIn`, `days.${i}.timeOut`]);
                             }
-                            if (next && form.getValues(`days.${i}.rate`).trim() === "") {
+                            // AM/PM puts in the AM/PM rate (₱650); leaving it puts the
+                            // employee's own rate back unless it was changed by hand.
+                            const rate = form.getValues(`days.${i}.rate`).trim();
+                            if (next === "am_pm") {
+                              set(`days.${i}.rate`, amPmRateInput);
+                            } else if (
+                              next &&
+                              (rate === "" || (previous === "am_pm" && rate === amPmRateInput))
+                            ) {
                               set(`days.${i}.rate`, currentRateInput);
                             }
                           }}
@@ -292,10 +307,12 @@ export function AttendanceSheet({
                               className="xl:w-32"
                               onChange={(e) => {
                                 f.onChange(e);
-                                // AM/PM: a new time in moves the time out with it.
+                                // Shifts: a new time in moves the time out with it.
                                 const status = form.getValues(`days.${i}.status`);
-                                const out = shiftTimeOut(e.target.value);
-                                if (name === "timeIn" && isShift(status) && out) {
+                                const out = isShift(status)
+                                  ? shiftTimeOut(e.target.value, status)
+                                  : null;
+                                if (name === "timeIn" && out) {
                                   set(`days.${i}.timeOut`, out);
                                 }
                               }}
@@ -303,7 +320,7 @@ export function AttendanceSheet({
                             {name === "timeOut" && edited && (
                               <span className="mt-1 flex items-center gap-1 text-xs text-terracotta-ink">
                                 <PencilIcon className="size-3" aria-hidden />
-                                Edited (not 8 hours)
+                                Edited (not the usual times)
                               </span>
                             )}
                             {fieldState.error && (
