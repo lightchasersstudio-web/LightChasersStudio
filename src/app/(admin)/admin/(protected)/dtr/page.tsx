@@ -1,11 +1,4 @@
-import { TZDate } from "@date-fns/tz";
-import { format } from "date-fns";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  SlidersHorizontalIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, SlidersHorizontalIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -15,7 +8,10 @@ import { EmptyList } from "@/components/admin/lists/pager";
 import { PageHeader } from "@/components/admin/page-header";
 import { AttendanceSheet } from "@/components/admin/payroll/attendance-sheet";
 import { CutoffPicker } from "@/components/admin/payroll/cutoff-picker";
+import { DtrViewTabs } from "@/components/admin/payroll/dtr-view-tabs";
 import { EmployeePicker } from "@/components/admin/payroll/employee-picker";
+import { PayrollSavedNotice } from "@/components/admin/payroll/payroll-saved-notice";
+import { PayrollSteps } from "@/components/admin/payroll/payroll-steps";
 import { ListSkeleton } from "@/components/admin/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,19 +26,21 @@ import {
 import {
   currentCutoff,
   cutoffDates,
-  cutoffLabel,
   daysWorked,
   formatMinutes,
   parseCutoff,
   type Cutoff,
 } from "@/lib/payroll/cutoff";
 import { asSalaryType, salaryRates } from "@/lib/payroll/employees";
-import { BUSINESS_TZ } from "@/lib/utils/business-date";
+import { businessToday } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
-import { getAttendance, getCutoffSummary, getPayrollSavedAt } from "@/server/queries/attendance";
+import { getAttendance, type getCutoffSummary } from "@/server/queries/attendance";
 import { getContributionRates } from "@/server/queries/employees";
+import { getPayrollFlow } from "@/server/queries/payroll-flow";
 
 export const metadata: Metadata = { title: "Time record" };
+
+type StaffLink = { name: string; href: string };
 
 export default function DtrPage({ searchParams }: PageProps<"/admin/dtr">) {
   return (
@@ -50,7 +48,7 @@ export default function DtrPage({ searchParams }: PageProps<"/admin/dtr">) {
       <PageHeader
         eyebrow="who worked when"
         title="Time record"
-        description="Daily time record per cut-off. Mark each day present, AM, PM or AM/PM shift, rest day, absent, leave or holiday; hours are worked out from the time in and out."
+        description="Who worked when. Fill in the whole team day by day, or one person's whole cut-off; hours are worked out from the time in and out."
         actions={
           <Button asChild variant="outline" size="lg">
             <Link href="/admin/payroll/settings">
@@ -77,16 +75,23 @@ async function Dtr({ searchParams }: Pick<PageProps<"/admin/dtr">, "searchParams
       ? params.employee
       : null;
 
-  const [summary, savedAt] = await Promise.all([
-    getCutoffSummary(cutoff),
-    getPayrollSavedAt(cutoff),
-  ]);
-  const selected = employeeId ? summary.find((s) => s.id === employeeId) : undefined;
+  const { summary, flow } = await getPayrollFlow(cutoff);
+  // "By day" opens today when it's in this cut-off, else the cut-off's first day.
+  const today = businessToday();
+  const dayViewDate = today >= cutoff.start && today <= cutoff.end ? today : cutoff.start;
+  const selectedIndex = employeeId ? summary.findIndex((s) => s.id === employeeId) : -1;
+  const selected = selectedIndex >= 0 ? summary[selectedIndex] : undefined;
   const href = (start: string) =>
     `/admin/dtr?cutoff=${start}${selected ? `&employee=${selected.id}` : ""}`;
+  const neighbour = (i: number) => {
+    const s = summary[i];
+    return s ? { name: s.name, href: `/admin/dtr?cutoff=${cutoff.start}&employee=${s.id}` } : null;
+  };
 
   return (
     <div className="space-y-6">
+      <PayrollSteps cutoff={cutoff} flow={flow} page="record" />
+      <DtrViewTabs view="person" date={dayViewDate} cutoffStart={cutoff.start} />
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <CutoffPicker cutoff={cutoff} current={current} href={href} />
         {selected && (
@@ -98,19 +103,16 @@ async function Dtr({ searchParams }: Pick<PageProps<"/admin/dtr">, "searchParams
         )}
       </div>
 
-      {savedAt && (
-        <p className="flex gap-2 rounded-2xl border border-terracotta/40 bg-blush/40 p-4 text-sm">
-          <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
-          <span>
-            The payroll for {cutoffLabel(cutoff)} was saved on{" "}
-            {format(new TZDate(savedAt, BUSINESS_TZ), "d MMM yyyy, h:mm a")}. If you change the time
-            record, make the payroll again so the payslips match.
-          </span>
-        </p>
-      )}
+      <PayrollSavedNotice cutoff={cutoff} flow={flow} />
 
       {selected ? (
-        <Sheet cutoff={cutoff} employee={selected} />
+        <Sheet
+          cutoff={cutoff}
+          employee={selected}
+          position={{ index: selectedIndex + 1, of: summary.length }}
+          prev={neighbour(selectedIndex - 1)}
+          next={neighbour(selectedIndex + 1)}
+        />
       ) : (
         <Summary cutoff={cutoff} summary={summary} />
       )}
@@ -121,9 +123,15 @@ async function Dtr({ searchParams }: Pick<PageProps<"/admin/dtr">, "searchParams
 async function Sheet({
   cutoff,
   employee,
+  position,
+  prev,
+  next,
 }: {
   cutoff: Cutoff;
   employee: { id: string; name: string; isActive: boolean; salaryType: string; salaryRate: number };
+  position: { index: number; of: number };
+  prev: StaffLink | null;
+  next: StaffLink | null;
 }) {
   const [logs, rates] = await Promise.all([
     getAttendance(employee.id, cutoff),
@@ -140,6 +148,9 @@ async function Sheet({
         </Button>
         <h2 className="text-2xl font-semibold">{employee.name}</h2>
         {!employee.isActive && <Badge variant="secondary">Inactive</Badge>}
+        <span className="text-sm text-muted-foreground">
+          {position.index} of {position.of}
+        </span>
       </div>
       <AttendanceSheet
         key={`${employee.id}-${cutoff.start}`}
@@ -150,6 +161,9 @@ async function Sheet({
         logs={logs}
         hoursPerDay={rates.hoursPerDay}
         amPmRate={rates.amPmRate}
+        prev={prev}
+        next={next}
+        payrollHref={`/admin/payroll?cutoff=${cutoff.start}`}
         currentRate={
           salaryRates(
             asSalaryType(employee.salaryType),

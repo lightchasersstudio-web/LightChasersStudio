@@ -145,7 +145,7 @@ test("payroll: preview, payslip, save, change, save again", async ({ page }, tes
     .eq("status", "absent");
   expect(error).toBeNull();
   await page.reload();
-  await expect(page.getByText(/things have changed since/)).toBeVisible();
+  await expect(page.getByText(/The saved payroll is out of date/)).toBeVisible();
   await expect(entry(MONTHLY)).toContainText("₱12,675.00");
   await page.getByRole("link", { name: "Show new figures" }).click();
   await expect(entry(MONTHLY)).toContainText("₱13,675.00");

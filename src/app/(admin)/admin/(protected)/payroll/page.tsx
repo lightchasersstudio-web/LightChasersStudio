@@ -1,6 +1,8 @@
 import { TZDate } from "@date-fns/tz";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import {
+  ArrowRightIcon,
+  CalendarX2Icon,
   CircleCheckIcon,
   FileDownIcon,
   InfoIcon,
@@ -14,16 +16,19 @@ import { Suspense } from "react";
 import { EmptyList } from "@/components/admin/lists/pager";
 import { PageHeader } from "@/components/admin/page-header";
 import { CutoffPicker } from "@/components/admin/payroll/cutoff-picker";
+import { PayrollSteps } from "@/components/admin/payroll/payroll-steps";
 import { PayrollTable } from "@/components/admin/payroll/payroll-table";
 import { SavePayrollButton } from "@/components/admin/payroll/save-payroll-button";
 import { ListSkeleton } from "@/components/admin/skeletons";
 import { Button } from "@/components/ui/button";
 import { currentCutoff, cutoffLabel, parseCutoff, type Cutoff } from "@/lib/payroll/cutoff";
+import type { MissingDays } from "@/lib/payroll/flow";
 import { formatAmountExact } from "@/lib/payroll/money";
-import { payrollTotals, payslipFingerprint, type Payslip } from "@/lib/payroll/payslip";
+import { payrollTotals, type Payslip } from "@/lib/payroll/payslip";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
-import { computePayroll, getSavedPayroll, listSavedPayrolls } from "@/server/queries/payroll";
+import { type getSavedPayroll, listSavedPayrolls } from "@/server/queries/payroll";
+import { getPayrollFlow } from "@/server/queries/payroll-flow";
 
 export const metadata: Metadata = { title: "Payroll" };
 
@@ -59,23 +64,18 @@ async function Payroll({ searchParams }: Pick<PageProps<"/admin/payroll">, "sear
   const cutoff = parseCutoff(params.cutoff) ?? current;
   const wantPreview = params.view === "preview";
 
-  const [fresh, saved, recent] = await Promise.all([
-    computePayroll(cutoff),
-    getSavedPayroll(cutoff),
+  // `changed`: has anything changed since saving (time record, salaries, benefits, rates, staff)?
+  const [{ fresh, saved, changed, flow, missing }, recent] = await Promise.all([
+    getPayrollFlow(cutoff),
     listSavedPayrolls(),
   ]);
-
-  // Has anything changed since saving (time record, salaries, benefits, rates, staff)?
-  const changed =
-    saved !== null &&
-    [...fresh.map(payslipFingerprint)].sort().join("\n") !==
-      [...saved.payslips.map(payslipFingerprint)].sort().join("\n");
   const showing: Payslip[] = saved && !wantPreview ? saved.payslips : fresh;
   const label = cutoffLabel(cutoff);
   const href = (start: string) => `/admin/payroll?cutoff=${start}`;
 
   return (
     <div className="space-y-6">
+      <PayrollSteps cutoff={cutoff} flow={flow} page="payroll" />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <CutoffPicker cutoff={cutoff} current={current} href={href} />
         <div className="flex flex-wrap gap-2">
@@ -94,12 +94,14 @@ async function Payroll({ searchParams }: Pick<PageProps<"/admin/payroll">, "sear
               cutoffLabel={label}
               replaces={saved !== null}
               count={fresh.length}
+              blankDays={missing.reduce((n, m) => n + m.dates.length, 0)}
             />
           )}
         </div>
       </div>
 
       <Status cutoff={cutoff} saved={saved} changed={changed} preview={wantPreview} />
+      {missing.length > 0 && <BlankDays cutoff={cutoff} missing={missing} />}
 
       {showing.length === 0 ? (
         <EmptyList
@@ -193,11 +195,9 @@ function Status({
     <div className={`${box} border-terracotta/40 bg-blush/40`}>
       <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
       <p className="flex-1">
-        <strong>
-          Saved {when(saved.savedAt)}
-          {by}, but things have changed since
-        </strong>{" "}
-        (time record, salaries, benefits, rates or staff).{" "}
+        <strong>The saved payroll is out of date.</strong> Days or pay changed after it was saved (
+        {when(saved.savedAt)}
+        {by}): time record, salaries, benefits, rates or staff.{" "}
         {preview
           ? "You're looking at the new figures. Save again to replace the saved payslips."
           : "You're looking at the saved payslips."}
@@ -208,6 +208,51 @@ function Status({
         </Link>
       </Button>
     </div>
+  );
+}
+
+/** Staff with blank days so far: blank days don't count in the payslip. */
+function BlankDays({ cutoff, missing }: { cutoff: Cutoff; missing: MissingDays[] }) {
+  const day = (d: string) => format(parseISO(d), "EEE d");
+  return (
+    <section
+      aria-labelledby="blank-days"
+      className="rounded-2xl border border-terracotta/40 bg-blush/40 p-4 text-sm"
+    >
+      <h2 id="blank-days" className="flex items-center gap-2 font-semibold">
+        <CalendarX2Icon className="size-4 shrink-0 text-terracotta-ink" aria-hidden />
+        Some days on the time record are blank
+      </h2>
+      <p className="mt-1 text-muted-foreground">
+        Blank days don&apos;t count in the payslip: daily-paid staff aren&apos;t paid for them, and
+        monthly-paid staff aren&apos;t marked absent. Fill them in first (Rest day if they were
+        off).
+      </p>
+      <ul className="mt-3 divide-y divide-terracotta/20">
+        {missing.map((m) => (
+          <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+            <span className="min-w-0 flex-1">
+              <span className="font-semibold">{m.name}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {m.dates.length} {m.dates.length === 1 ? "day" : "days"}:{" "}
+                {m.dates.slice(0, 6).map(day).join(", ")}
+                {m.dates.length > 6 && ` +${m.dates.length - 6} more`}
+              </span>
+            </span>
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href={`/admin/dtr?cutoff=${cutoff.start}&employee=${m.id}`}
+                aria-label={`Fill in ${m.name}'s days`}
+              >
+                Fill in
+                <ArrowRightIcon aria-hidden />
+              </Link>
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
