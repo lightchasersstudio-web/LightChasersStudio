@@ -2,8 +2,16 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, getDay, parseISO } from "date-fns";
-import { CalendarCheckIcon, Loader2Icon, PencilIcon } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CalendarCheckIcon,
+  Loader2Icon,
+  PencilIcon,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type BaseSyntheticEvent } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import type { z } from "zod";
@@ -31,9 +39,9 @@ import {
   isDayStatus,
   isShift,
   minutesWorked,
-  type ShiftStatus,
 } from "@/lib/payroll/cutoff";
-import { isTimeOutEdited, SHIFTS, shiftTimeOut } from "@/lib/payroll/daily-pay";
+import { isTimeOutEdited } from "@/lib/payroll/daily-pay";
+import { afterStatusChange, timeOutForNewTimeIn } from "@/lib/payroll/day-entry";
 import { amountToInput, formatAmount, parseAmount } from "@/lib/payroll/money";
 import { cn } from "@/lib/utils";
 import { attendanceSheetSchema, type AttendanceSheetInput } from "@/lib/validations/attendance";
@@ -43,7 +51,7 @@ import type { AttendanceLog } from "@/server/queries/attendance";
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** "4h short" / "2h overtime" under a present day's hours, against a shift. */
-function ShiftNote({ minutes, shift }: { minutes: number; shift: number }) {
+export function ShiftNote({ minutes, shift }: { minutes: number; shift: number }) {
   if (!minutes || minutes === shift) return null;
   const short = minutes < shift;
   return (
@@ -53,6 +61,16 @@ function ShiftNote({ minutes, shift }: { minutes: number; shift: number }) {
     </span>
   );
 }
+
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
 
 const STATUS_TONE: Record<string, string> = {
   present: "",
@@ -74,6 +92,9 @@ export function AttendanceSheet({
   hoursPerDay,
   currentRate,
   amPmRate,
+  prev,
+  next,
+  payrollHref,
 }: {
   employeeId: string;
   employeeName: string;
@@ -86,7 +107,14 @@ export function AttendanceSheet({
   currentRate: number;
   /** Payroll settings → AM/PM shift rate: filled in when AM/PM is picked. */
   amPmRate: number;
+  /** The staff before and after this one on the list (same cut-off). */
+  prev: { name: string; href: string } | null;
+  next: { name: string; href: string } | null;
+  /** After the last person, "next" is the payroll. */
+  payrollHref: string;
 }) {
+  const router = useRouter();
+  const after = next ?? { name: "the payroll", href: payrollHref };
   const shift = Math.round(hoursPerDay * 60);
   const currentRateInput = amountToInput(currentRate);
   const amPmRateInput = amountToInput(amPmRate);
@@ -118,6 +146,8 @@ export function AttendanceSheet({
 
   const [fillIn, setFillIn] = useState("09:00");
   const [fillOut, setFillOut] = useState("17:00");
+  /** The weekday blank days become Rest day (0 = Sunday); "" = no day off. */
+  const [dayOff, setDayOff] = useState("0");
 
   const minutesFor = (d: AttendanceSheetInput["days"][number] | undefined) =>
     d && hasTimes(d.status) && TIME.test(d.timeIn) && TIME.test(d.timeOut) && d.timeIn !== d.timeOut
@@ -142,34 +172,48 @@ export function AttendanceSheet({
    * Picking a shift always fills its times (AM 9:30–5:30, PM 2:00–10:00,
    * AM/PM 9:30–10:00), whatever the day had before; the admin can edit them after.
    */
-  function startShift(i: number, status: ShiftStatus) {
-    const timeIn = SHIFTS[status].start;
-    set(`days.${i}.timeIn`, timeIn);
-    set(`days.${i}.timeOut`, shiftTimeOut(timeIn, status) ?? "");
-    form.clearErrors([`days.${i}.timeIn`, `days.${i}.timeOut`]);
-  }
-
   function fillBlank() {
     if (!TIME.test(fillIn) || !TIME.test(fillOut) || fillIn === fillOut) {
       toast.error("Enter a time in and a different time out first.");
       return;
     }
-    let filled = 0;
+    let worked = 0;
+    let rest = 0;
     form.getValues("days").forEach((d, i) => {
-      if (d.status !== "" || getDay(parseISO(d.date)) === 0) return; // skip Sundays
+      if (d.status !== "") return;
+      if (dayOff !== "" && getDay(parseISO(d.date)) === Number(dayOff)) {
+        set(`days.${i}.status`, "rest_day");
+        rest += 1;
+        return;
+      }
       set(`days.${i}.status`, "present");
       set(`days.${i}.timeIn`, fillIn);
       set(`days.${i}.timeOut`, fillOut);
-      filled += 1;
+      worked += 1;
     });
-    toast(filled ? `Filled ${filled} days. Save to keep them.` : "No blank Monday–Saturday left.");
+    const parts = [
+      worked && `${worked} work ${worked === 1 ? "day" : "days"}`,
+      rest && `${rest} rest ${rest === 1 ? "day" : "days"}`,
+    ].filter(Boolean);
+    toast(
+      parts.length ? `Filled ${parts.join(" and ")}. Save to keep them.` : "No blank days left.",
+    );
   }
 
-  async function onSubmit() {
+  async function onSubmit(_: unknown, event?: BaseSyntheticEvent) {
     const values = form.getValues();
+    // "Save & next" carries where to go once the save succeeds; "Save" stays.
+    const submitter = (event?.nativeEvent as SubmitEvent | undefined)?.submitter;
+    const target = submitter instanceof HTMLElement ? submitter.dataset.goTo : undefined;
     const result = await saveAttendance(values);
-    if (handleResult(result, `Time record saved for ${employeeName}.`, form)) form.reset(values);
+    if (handleResult(result, `Time record saved for ${employeeName}.`, form)) {
+      form.reset(values);
+      if (target) router.push(target);
+    }
   }
+
+  const dirty = form.formState.isDirty;
+  const busy = form.formState.isSubmitting;
 
   return (
     <form
@@ -180,7 +224,7 @@ export function AttendanceSheet({
       className="space-y-4"
     >
       <div className="flex flex-col gap-3 rounded-3xl border bg-card p-4 xl:flex-row xl:items-end">
-        <div className="grid grid-cols-2 gap-3 sm:max-w-sm xl:max-w-xs xl:flex-1">
+        <div className="grid grid-cols-2 gap-3 sm:max-w-lg sm:grid-cols-3 xl:max-w-md xl:flex-1">
           <div className="grid gap-1.5">
             <Label htmlFor="fill-in">Usual time in</Label>
             <Input
@@ -199,14 +243,31 @@ export function AttendanceSheet({
               onChange={(e) => setFillOut(e.target.value)}
             />
           </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="fill-day-off">Day off</Label>
+            <NativeSelect
+              id="fill-day-off"
+              value={dayOff}
+              className="w-full"
+              onChange={(e) => setDayOff(e.target.value)}
+            >
+              <NativeSelectOption value="">No day off</NativeSelectOption>
+              {WEEKDAYS.map((name, i) => (
+                <NativeSelectOption key={name} value={String(i)}>
+                  {name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </div>
         </div>
         <Button type="button" variant="outline" onClick={fillBlank}>
           <CalendarCheckIcon aria-hidden />
-          Mark blank days present
+          Fill blank days
         </Button>
         <p className="text-sm text-muted-foreground xl:max-w-64">
-          Fills Monday–Saturday days with nothing recorded yet. Sundays stay blank. AM (9:30–5:30),
-          PM (2:00–10:00) and AM/PM (9:30–10:00, ₱{amountToInput(amPmRate)}) fill in their times.
+          Fills days with nothing recorded yet: work days as Present with these times, the day off
+          as Rest day. AM (9:30–5:30), PM (2:00–10:00) and AM/PM (9:30–10:00, ₱
+          {amountToInput(amPmRate)}) fill in their times.
         </p>
       </div>
 
@@ -255,26 +316,18 @@ export function AttendanceSheet({
                           aria-label={`Status, ${dayLabel}`}
                           className="w-full xl:w-36"
                           onChange={(e) => {
-                            const previous = f.value;
+                            // Shift times, the AM/PM rate…: shared with the day view.
+                            const before = form.getValues(`days.${i}`);
+                            const after = afterStatusChange(before, e.target.value, {
+                              current: currentRateInput,
+                              amPm: amPmRateInput,
+                            });
                             f.onChange(e);
-                            const next = e.target.value;
-                            if (isShift(next)) {
-                              startShift(i, next);
-                            } else if (!hasTimes(next)) {
-                              set(`days.${i}.timeIn`, "");
-                              set(`days.${i}.timeOut`, "");
+                            set(`days.${i}.timeIn`, after.timeIn);
+                            set(`days.${i}.timeOut`, after.timeOut);
+                            set(`days.${i}.rate`, after.rate);
+                            if (!hasTimes(after.status) || isShift(after.status)) {
                               form.clearErrors([`days.${i}.timeIn`, `days.${i}.timeOut`]);
-                            }
-                            // AM/PM puts in the AM/PM rate (₱650); leaving it puts the
-                            // employee's own rate back unless it was changed by hand.
-                            const rate = form.getValues(`days.${i}.rate`).trim();
-                            if (next === "am_pm") {
-                              set(`days.${i}.rate`, amPmRateInput);
-                            } else if (
-                              next &&
-                              (rate === "" || (previous === "am_pm" && rate === amPmRateInput))
-                            ) {
-                              set(`days.${i}.rate`, currentRateInput);
                             }
                           }}
                         >
@@ -308,10 +361,10 @@ export function AttendanceSheet({
                               onChange={(e) => {
                                 f.onChange(e);
                                 // Shifts: a new time in moves the time out with it.
-                                const status = form.getValues(`days.${i}.status`);
-                                const out = isShift(status)
-                                  ? shiftTimeOut(e.target.value, status)
-                                  : null;
+                                const out = timeOutForNewTimeIn(
+                                  form.getValues(`days.${i}.status`),
+                                  e.target.value,
+                                );
                                 if (name === "timeIn" && out) {
                                   set(`days.${i}.timeOut`, out);
                                 }
@@ -441,16 +494,46 @@ export function AttendanceSheet({
         </Table>
       </div>
 
-      <div className="sticky bottom-4 z-10 flex justify-end">
-        <Button
-          type="submit"
-          size="lg"
-          className="shadow-lg"
-          disabled={form.formState.isSubmitting || !form.formState.isDirty}
-        >
-          {form.formState.isSubmitting && <Loader2Icon className="animate-spin" aria-hidden />}
-          Save time record
-        </Button>
+      <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-2">
+        {prev && (
+          <Button asChild variant="outline" size="lg" className="mr-auto bg-card shadow-lg">
+            <Link href={prev.href} aria-label={`Previous: ${prev.name}`}>
+              <ArrowLeftIcon aria-hidden />
+              <span className="max-sm:sr-only">{prev.name}</span>
+            </Link>
+          </Button>
+        )}
+        {dirty ? (
+          <>
+            <Button
+              type="submit"
+              variant="outline"
+              size="lg"
+              className="bg-card shadow-lg"
+              disabled={busy}
+            >
+              Save time record
+            </Button>
+            <Button
+              type="submit"
+              size="lg"
+              className="shadow-lg"
+              disabled={busy}
+              data-go-to={after.href}
+            >
+              {busy && <Loader2Icon className="animate-spin" aria-hidden />}
+              Save &amp; go to {next ? next.name : "payroll"}
+              <ArrowRightIcon aria-hidden />
+            </Button>
+          </>
+        ) : (
+          <Button asChild size="lg" className="shadow-lg">
+            <Link href={after.href}>
+              Next: {next ? next.name : "payroll"}
+              <ArrowRightIcon aria-hidden />
+            </Link>
+          </Button>
+        )}
       </div>
     </form>
   );

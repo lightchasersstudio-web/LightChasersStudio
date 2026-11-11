@@ -104,3 +104,40 @@ export const attendanceSheetSchema = z
   });
 
 export type AttendanceSheetInput = z.input<typeof attendanceSheetSchema>;
+
+/**
+ * The whole team's records for one day (Time record → By day). Each row is a
+ * day like the sheet's; status "" removes that employee's record for the day.
+ */
+export const attendanceDaySchema = z
+  .object({
+    date: dateString,
+    rows: z.array(z.object({ employeeId: z.uuid(), day: daySchema })).max(200),
+  })
+  .superRefine((v, ctx) => {
+    const seen = new Set<string>();
+    v.rows.forEach((r, i) => {
+      if (r.day.date !== v.date || seen.has(r.employeeId)) {
+        ctx.addIssue({ code: "custom", path: ["rows", i], message: "Pick one day." });
+      }
+      seen.add(r.employeeId);
+    });
+  })
+  .transform((v) => ({
+    date: v.date,
+    upserts: v.rows
+      .filter((r) => r.day.status !== "")
+      .map(({ employeeId, day: d }) => ({
+        employee_id: employeeId,
+        work_date: v.date,
+        status: d.status as DayStatus,
+        time_in: hasTimes(d.status) ? d.timeIn : null,
+        time_out: hasTimes(d.status) ? d.timeOut : null,
+        // null = the employee's current daily rate (filled in by the action).
+        daily_rate: d.rate.trim() === "" ? null : parseAmount(d.rate),
+        note: d.note || null,
+      })),
+    cleared: v.rows.filter((r) => r.day.status === "").map((r) => r.employeeId),
+  }));
+
+export type AttendanceTeamDayInput = z.input<typeof attendanceDaySchema>;

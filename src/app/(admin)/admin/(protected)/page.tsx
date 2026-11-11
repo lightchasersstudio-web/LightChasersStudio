@@ -3,15 +3,18 @@ import { addDays, format } from "date-fns";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
+  CalendarClockIcon,
   CalendarDaysIcon,
   CalendarPlusIcon,
   CameraIcon,
   ExternalLinkIcon,
   FlaskConicalIcon,
+  GraduationCapIcon,
   ImagePlusIcon,
   InboxIcon,
   PartyPopperIcon,
   SunIcon,
+  WalletIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -28,6 +31,7 @@ import { paymentsMockEnabled } from "@/lib/payments/mock";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ, businessToday, manilaDate, manilaTime } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
+import { getAdminTasks, type AdminTask } from "@/server/queries/admin-tasks";
 import { getDashboard, type DashboardBooking } from "@/server/queries/bookings";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -104,7 +108,7 @@ async function AdminName() {
 
 async function DashboardBody() {
   await requireAdmin();
-  const d = await getDashboard();
+  const [d, tasks] = await Promise.all([getDashboard(), getAdminTasks()]);
   const todayDate = businessToday();
   const todayHref = `/admin/calendar?month=${todayDate.slice(0, 7)}&day=${todayDate}`;
 
@@ -162,14 +166,17 @@ async function DashboardBody() {
 
         <div id="attention" className="scroll-mt-24">
           <Panel title="Needs your attention">
-            {d.attention.length === 0 ? (
+            {d.attention.length === 0 && tasks.length === 0 ? (
               <EmptyState
                 icon={PartyPopperIcon}
                 title="All caught up!"
-                text="No requests waiting for a yes or no."
+                text="No bookings, requests or payroll waiting on you."
               />
             ) : (
-              <BookingList bookings={d.attention} showDay />
+              <>
+                {tasks.length > 0 && <TaskList tasks={tasks} />}
+                {d.attention.length > 0 && <BookingList bookings={d.attention} showDay />}
+              </>
             )}
           </Panel>
         </div>
@@ -273,6 +280,45 @@ function BookingList({ bookings, showDay }: { bookings: DashboardBooking[]; show
         </RevealItem>
       ))}
     </RevealList>
+  );
+}
+
+const TASK_ICONS: Record<AdminTask["kind"], LucideIcon> = {
+  payroll: WalletIcon,
+  reschedule: CalendarClockIcon,
+  student_id: GraduationCapIcon,
+};
+
+/** Requests, student IDs and payroll waiting on an admin (above the bookings). */
+function TaskList({ tasks }: { tasks: AdminTask[] }) {
+  return (
+    <ul className="-mx-2 divide-y" aria-label="To do">
+      {tasks.map((t) => {
+        const Icon = TASK_ICONS[t.kind];
+        return (
+          <li key={`${t.kind}-${t.href}-${t.title}`}>
+            <Link
+              href={t.href}
+              className="group flex items-center gap-3 rounded-2xl px-2 py-3 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              <span className="grid w-16 shrink-0 place-items-center">
+                <span className="grid size-10 place-items-center rounded-full bg-blush text-terracotta-ink">
+                  <Icon className="size-5" aria-hidden />
+                </span>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold">{t.title}</span>
+                <span className="block truncate text-sm text-muted-foreground">{t.detail}</span>
+              </span>
+              <ArrowRightIcon
+                className="hidden size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 sm:block"
+                aria-hidden
+              />
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

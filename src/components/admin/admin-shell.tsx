@@ -7,7 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { adminNav } from "@/components/admin/admin-nav";
+import { adminNavGroups } from "@/components/admin/admin-nav";
 import { Sparkle } from "@/components/shared/sparkle";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="px-5 py-6">
+      <div className="px-5 py-5">
         <Link
           href="/admin"
           onClick={onNavigate}
@@ -89,37 +89,50 @@ function SidebarContent({
         </Link>
       </div>
       <MotionConfig reducedMotion="user">
-        <nav aria-label="Admin" className="flex-1 space-y-1 px-3">
-          {adminNav.map(({ href, label, icon: Icon }) => {
-            const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={onNavigate}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "group relative flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                  active &&
-                    "text-sidebar-primary-foreground hover:bg-transparent hover:text-sidebar-primary-foreground",
-                )}
+        {/* Scrolls on short screens so every item stays reachable. */}
+        <nav aria-label="Admin" className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 pb-2">
+          {adminNavGroups.map((group) => (
+            <div key={group.label} role="group" aria-labelledby={`${pillId}-${group.label}`}>
+              <p
+                id={`${pillId}-${group.label}`}
+                className="px-4 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
               >
-                {active && (
-                  <motion.span
-                    layoutId={pillId}
-                    className="absolute inset-0 rounded-full bg-sidebar-primary shadow-sm"
-                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                    aria-hidden
-                  />
-                )}
-                <Icon
-                  className="relative size-4 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"
-                  aria-hidden
-                />
-                <span className="relative">{label}</span>
-              </Link>
-            );
-          })}
+                {group.label}
+              </p>
+              <div className="space-y-1">
+                {group.items.map(({ href, label, icon: Icon }) => {
+                  const active = href === "/admin" ? pathname === href : pathname.startsWith(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "group relative flex min-h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                        active &&
+                          "text-sidebar-primary-foreground hover:bg-transparent hover:text-sidebar-primary-foreground",
+                      )}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId={pillId}
+                          className="absolute inset-0 rounded-full bg-sidebar-primary shadow-sm"
+                          transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                          aria-hidden
+                        />
+                      )}
+                      <Icon
+                        className="relative size-4 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6"
+                        aria-hidden
+                      />
+                      <span className="relative">{label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
       </MotionConfig>
       <div className="m-3 rounded-2xl border bg-card p-3">

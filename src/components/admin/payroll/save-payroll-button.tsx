@@ -25,12 +25,15 @@ export function SavePayrollButton({
   cutoffLabel,
   replaces,
   count,
+  blankDays = 0,
 }: {
   cutoff: string;
   cutoffLabel: string;
   /** A payroll is already saved for this cut-off. */
   replaces: boolean;
   count: number;
+  /** Days left blank so far, across all staff (they don't count in the payslips). */
+  blankDays?: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -66,6 +69,15 @@ export function SavePayrollButton({
               ? `The saved payslips are replaced with ${count} new ones, worked out from today's time record, salaries and benefits.`
               : `This saves ${count} payslips with today's time record, salaries and benefits. Later changes don't alter them unless you save again.`}
           </AlertDialogDescription>
+          {blankDays > 0 && (
+            <p className="rounded-2xl border border-terracotta/40 bg-blush/40 p-3 text-sm">
+              <strong>
+                {blankDays} {blankDays === 1 ? "day is" : "days are"} still blank
+              </strong>{" "}
+              on the time record and won&apos;t count in these payslips. You can save now and save
+              again after filling them in.
+            </p>
+          )}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>

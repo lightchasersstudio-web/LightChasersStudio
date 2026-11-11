@@ -82,9 +82,12 @@ test("time record: fill a cut-off, mark an absence, overnight shift, totals", as
 
   await page.getByLabel("Usual time in").fill("08:00");
   await page.getByLabel("Usual time out").fill("17:00");
-  await page.getByRole("button", { name: "Mark blank days present" }).click();
-  await expect(page.getByText("Filled 12 days. Save to keep them.")).toBeVisible();
-  await expect(page.getByLabel("Status, Sun 1 Nov")).toHaveValue("");
+  await expect(page.getByLabel("Day off")).toHaveValue("0"); // Sunday
+  await page.getByRole("button", { name: "Fill blank days" }).click();
+  await expect(
+    page.getByText("Filled 12 work days and 3 rest days. Save to keep them."),
+  ).toBeVisible();
+  await expect(page.getByLabel("Status, Sun 1 Nov")).toHaveValue("rest_day");
 
   await page.getByLabel("Status, Tue 3 Nov").selectOption("absent");
   await expect(page.getByLabel("Time in, Tue 3 Nov")).toBeDisabled();
@@ -123,7 +126,7 @@ test("time record: fill a cut-off, mark an absence, overnight shift, totals", as
 
   await page.getByRole("link", { name: "All staff" }).click();
   const row = entry();
-  await expect(row).toContainText("11/15");
+  await expect(row).toContainText("14/15");
   await expect(row).toContainText("88h");
 
   const { data } = await admin()
@@ -143,5 +146,52 @@ test("time record: fill a cut-off, mark an absence, overnight shift, totals", as
     .from("attendance_logs")
     .select("work_date", { count: "exact", head: true })
     .eq("employee_id", employeeId);
-  expect(count).toBe(11);
+  expect(count).toBe(14);
+});
+
+test("time record: steps bar and Save & next go through the team", async ({ page }) => {
+  test.setTimeout(60_000);
+  const NEXT = `${RUN} Santos`; // sorts right after NAME
+  await admin().from("employees").update({ is_active: true }).eq("id", employeeId);
+  const { data: added, error } = await admin()
+    .from("employees")
+    .insert({
+      full_name: NEXT,
+      position: "Assistant",
+      category: "studio",
+      date_hired: "2026-01-05",
+      salary_type: "daily",
+      salary_rate: 650,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  await signIn(page);
+  await page.goto(`/admin/dtr?cutoff=${CUTOFF}&employee=${employeeId}`);
+  const steps = page.getByRole("navigation", { name: /Payroll steps/ });
+  await expect(steps).toContainText("Record days");
+  await expect(steps.getByRole("link", { name: /^Step 2:/ })).toHaveAttribute(
+    "href",
+    `/admin/payroll?cutoff=${CUTOFF}`,
+  );
+  await page.waitForLoadState("networkidle"); // let React hydrate before changing the form
+
+  // Nothing changed: a plain link to the next person.
+  await expect(page.getByRole("link", { name: `Next: ${NEXT}` })).toBeVisible();
+
+  await page.getByLabel("Note, Mon 2 Nov").fill("Studio day");
+  await page.getByRole("button", { name: `Save & go to ${NEXT}` }).click();
+  await expect(page.getByText(`Time record saved for ${NAME}.`)).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`employee=${added.id}`));
+  await expect(page.getByRole("heading", { level: 2, name: NEXT })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Previous: ${NAME}` })).toBeVisible();
+
+  const { data } = await admin()
+    .from("attendance_logs")
+    .select("note")
+    .eq("employee_id", employeeId)
+    .eq("work_date", "2026-11-02")
+    .single();
+  expect(data?.note).toBe("Studio day");
 });
