@@ -7,6 +7,7 @@ import { BUSINESS_TZ } from "@/lib/utils/business-date";
 // create_booking()/admin_create_booking(); the database stays the final word.
 
 export type SlotRules = {
+  /** Time each booking holds before the buffer (see bookingLengthMinutes). */
   durationMinutes: number;
   bufferMinutes: number;
   slotIntervalMinutes: number;
@@ -32,6 +33,7 @@ export function monthSlots({
   hours,
   blackouts,
   busy,
+  fullDays = [],
   now,
 }: {
   /** "YYYY-MM" in the business timezone. */
@@ -41,11 +43,16 @@ export function monthSlots({
   /** "YYYY-MM-DD" */
   blackouts: string[];
   busy: BusyRange[];
+  /** "YYYY-MM-DD" days with no place at all (for an outside event: days that already have one). */
+  fullDays?: string[];
   now: Date;
 }): DaySlots[] {
   const [year, monthIndex] = month.split("-").map(Number) as [number, number];
   const first = new TZDate(year, monthIndex - 1, 1, BUSINESS_TZ);
-  const earliest = rules.ignoreWindow ? -Infinity : addHours(now, rules.minNoticeHours).getTime();
+  // Staff skip the notice period, but never get offered a time that has already passed.
+  const earliest = rules.ignoreWindow
+    ? now.getTime()
+    : addHours(now, rules.minNoticeHours).getTime();
   const latest = rules.ignoreWindow ? Infinity : addDays(now, rules.maxAdvanceDays).getTime();
 
   return Array.from({ length: getDaysInMonth(first) }, (_, i) => {
@@ -59,7 +66,9 @@ export function monthSlots({
         const t = start.getTime();
         return t >= earliest && t <= latest;
       });
+    const dayFull = fullDays.includes(date);
     const slots = candidates.filter((start) => {
+      if (dayFull) return false;
       const blockedUntil = addMinutes(start, rules.durationMinutes + rules.bufferMinutes);
       return occupancyAt(busy, start, blockedUntil) < rules.capacity;
     });

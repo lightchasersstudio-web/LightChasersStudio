@@ -18,7 +18,7 @@ import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { WEEKDAYS } from "@/lib/catalog";
 import { formatTime } from "@/lib/utils/format";
-import { messengerUrl } from "@/lib/utils/social";
+import { displayUrl, messengerUrl, studioMapsUrl } from "@/lib/utils/social";
 import { getOpeningHours, getPublicSettings } from "@/server/queries/public";
 
 export const metadata: Metadata = {
@@ -43,7 +43,7 @@ export default async function ContactPage() {
   const messenger = messengerUrl(facebook);
   const otherSocials = socialLinks(s).filter((l) => l.label !== "Facebook");
   const place = s.address ?? s.city;
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
+  const mapsUrl = studioMapsUrl(s);
 
   const channels = [
     s.email && {
@@ -115,9 +115,9 @@ export default async function ContactPage() {
 
           {facebook && (
             <div className="relative overflow-hidden rounded-[2rem] bg-panel p-7 text-panel-foreground shadow-xl sm:p-9">
-              <div className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-terracotta/30 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-20 -left-10 size-56 rounded-full bg-sage/25 blur-3xl" />
-              <Sparkle className="absolute top-7 right-8 size-5 text-terracotta" />
+              <div className="pointer-events-none absolute -top-16 -right-16 size-56 animate-float rounded-full bg-terracotta/30 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-20 -left-10 size-56 animate-float rounded-full bg-sage/25 blur-3xl [animation-delay:-4s]" />
+              <Sparkle className="absolute top-7 right-8 size-5 animate-twinkle text-terracotta" />
               <div className="relative">
                 <span className="grid size-14 place-items-center rounded-full bg-panel-foreground text-panel">
                   <FacebookIcon className="size-7" />
@@ -130,7 +130,7 @@ export default async function ContactPage() {
                   what we&apos;ve been up to on our page.
                 </p>
                 <p className="mt-4 font-semibold break-all text-panel-foreground/90">
-                  {facebook.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                  {displayUrl(facebook)}
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   {messenger && (

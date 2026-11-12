@@ -60,7 +60,9 @@ test("book a client in from a free time on the calendar, share it, take payment,
   // Lands on the booking: confirmed, no email needed, cash recorded.
   await expect(page).toHaveURL(/\/admin\/bookings\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-  await expect(page.getByText("Confirmed").first()).toBeVisible();
+  await expect(
+    page.getByText("Confirmed", { exact: true }).filter({ visible: true }).first(),
+  ).toBeVisible();
   await expect(page.getByText(/Paid ₱500 of/)).toBeVisible();
   const reference = (await page
     .getByText(/^BK-\d{4}-[0-9A-F]{6}$/)
@@ -88,7 +90,9 @@ test("book a client in from a free time on the calendar, share it, take payment,
   await page.getByRole("button", { name: "Cancel booking" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Cancel booking" }).click();
   await expect(page.getByText("Booking cancelled.")).toBeVisible();
-  await expect(page.getByText("Cancelled").first()).toBeVisible();
+  await expect(
+    page.getByText("Cancelled", { exact: true }).filter({ visible: true }).first(),
+  ).toBeVisible();
 });
 
 test("calendar warns before booking outside opening hours", async ({ page }, testInfo) => {

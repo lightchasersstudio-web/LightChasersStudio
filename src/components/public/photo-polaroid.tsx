@@ -5,23 +5,33 @@ import { publicImageUrl } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import type { PublicPhoto } from "@/server/queries/public";
 
-/** A portfolio photo in a polaroid frame, with an optional handwritten caption. */
+/**
+ * A portfolio photo in a polaroid frame, with an optional handwritten caption.
+ * `fit="whole"` keeps the photo's own shape instead of cropping it to 4:5.
+ */
 export function PhotoPolaroid({
   photo,
   caption,
   sizes,
   priority,
+  fit = "crop",
   className,
 }: {
   photo: PublicPhoto;
   caption?: string | null;
   sizes: string;
   priority?: boolean;
+  fit?: "crop" | "whole";
   className?: string;
 }) {
+  const whole = fit === "whole";
+  const ratio = whole && photo.width && photo.height ? `${photo.width} / ${photo.height}` : null;
   return (
     <figure className={cn("polaroid pb-10", className)}>
-      <div className="relative aspect-[4/5] overflow-hidden rounded-[2px] bg-muted">
+      <div
+        className={cn("relative overflow-hidden rounded-[2px] bg-muted", !ratio && "aspect-[4/5]")}
+        style={ratio ? { aspectRatio: ratio } : undefined}
+      >
         <Image
           src={publicImageUrl("portfolio", photo.storage_path)}
           alt={photo.alt_text}
@@ -30,7 +40,7 @@ export function PhotoPolaroid({
           priority={priority}
           placeholder={photo.blur_data_url ? "blur" : "empty"}
           blurDataURL={photo.blur_data_url ?? undefined}
-          className="object-cover"
+          className={whole ? "object-contain" : "object-cover"}
         />
       </div>
       {caption && (

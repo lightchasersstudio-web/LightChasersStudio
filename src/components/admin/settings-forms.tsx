@@ -9,6 +9,7 @@ import type { z } from "zod";
 import { SelectField, TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { ImageUploadField } from "@/components/admin/image-upload-field";
+import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -55,6 +56,7 @@ export function StudioProfileForm({ settings }: { settings: BusinessSettings }) 
       email: settings.email ?? "",
       phone: settings.phone ?? "",
       address: settings.address ?? "",
+      mapsUrl: settings.maps_url ?? "",
       city: settings.city,
       facebookUrl: settings.facebook_url ?? "",
       instagramUrl: settings.instagram_url ?? "",
@@ -62,6 +64,7 @@ export function StudioProfileForm({ settings }: { settings: BusinessSettings }) 
     },
   });
   const { control } = form;
+  useUnsavedChangesWarning(form.formState.isDirty);
 
   async function onSubmit() {
     const values = form.getValues();
@@ -129,6 +132,15 @@ export function StudioProfileForm({ settings }: { settings: BusinessSettings }) 
               <TextField control={control} name="address" label="Studio address" maxLength={300} />
               <TextField control={control} name="city" label="City" maxLength={80} />
             </div>
+            <TextField
+              control={control}
+              name="mapsUrl"
+              label="Google Maps link"
+              type="url"
+              placeholder="https://maps.app.goo.gl/…"
+              maxLength={500}
+              description="So the address opens your exact spot: in Google Maps, find your studio's pin, tap Share, copy the link and paste it here. Empty = Google searches for the address."
+            />
             <div className="grid gap-5 lg:grid-cols-3">
               <TextField
                 control={control}
@@ -217,11 +229,13 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
       slotIntervalMinutes: String(settings.slot_interval_minutes) as "15" | "30" | "60",
       bufferMinutes: String(settings.buffer_minutes),
       defaultDepositPercent: String(settings.default_deposit_percent),
+      vatPercent: String(settings.vat_percent),
       holdMinutes: String(settings.hold_minutes),
       maxConcurrentBookings: String(settings.max_concurrent_bookings),
     },
   });
   const { control } = form;
+  useUnsavedChangesWarning(form.formState.isDirty);
 
   async function onSubmit() {
     const values = form.getValues();
@@ -274,7 +288,7 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
               name="bufferMinutes"
               label="Buffer between sessions (minutes)"
               inputMode="numeric"
-              description="Travel and setup time after each booking."
+              description="Gap after each studio session before the next can start. 0 = back to back."
             />
             <TextField
               control={control}
@@ -282,6 +296,13 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
               label="Default deposit (%)"
               inputMode="numeric"
               description="Services can override this with a fixed amount."
+            />
+            <TextField
+              control={control}
+              name="vatPercent"
+              label="VAT added to online bookings (%)"
+              inputMode="numeric"
+              description="Added on top of package + add-ons. Use 0 if you're not VAT-registered."
             />
             <TextField
               control={control}
@@ -293,9 +314,9 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
             <TextField
               control={control}
               name="maxConcurrentBookings"
-              label="Shoots that can run at the same time"
+              label="Studio sessions at the same time"
               inputMode="numeric"
-              description="1–10. Online bookings and the calendar never go over this."
+              description="Usually 1. Outside events (weddings, prenups) are one per day and don't count here; set each package's type in Services."
             />
           </div>
         </CardContent>

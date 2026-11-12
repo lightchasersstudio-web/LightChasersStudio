@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { clientDetailsSchema, publicBookingSchema, shootDetailsSchema } from "./booking";
+import {
+  clientDetailsSchema,
+  publicBookingSchema,
+  rescheduleRequestSchema,
+  shootDetailsSchema,
+} from "./booking";
 
 const details = {
   fullName: "  Ana Cruz ",
@@ -38,8 +43,9 @@ describe("clientDetailsSchema", () => {
     expect(r.error!.issues[0]!.path).toEqual(["messenger"]);
   });
 
-  it("rejects a phone number without enough digits", () => {
+  it("rejects an incomplete mobile number", () => {
     expect(clientDetailsSchema.safeParse({ ...details, phone: "12-34" }).success).toBe(false);
+    expect(clientDetailsSchema.safeParse({ ...details, phone: "0917 123" }).success).toBe(false);
   });
 });
 
@@ -58,6 +64,7 @@ describe("publicBookingSchema", () => {
     ...details,
     ...shoot,
     serviceId: "0f8fad5b-d9cb-469f-a165-70867728950e",
+    addOnIds: [],
     startAt: "2026-11-03T05:00:00.000Z",
     turnstileToken: "",
     website: "",
@@ -71,5 +78,97 @@ describe("publicBookingSchema", () => {
     expect(publicBookingSchema.safeParse({ ...input, website: "spam.example" }).success).toBe(
       false,
     );
+  });
+
+  describe("workshops", () => {
+    const ID = "0f8fad5b-d9cb-469f-a165-70867728950e.webp";
+    const person = (name: string, category = "regular", idPath = "") => ({
+      name,
+      phone: "0917 123 4567",
+      address: "Tetuan, Zamboanga City",
+      category,
+      idPath,
+    });
+    const workshop = {
+      ...input,
+      participants: "1",
+      attendees: [person("Ana Cruz")],
+      payInFull: true,
+      refundRuleAccepted: true,
+    };
+    const paths = (v: object) =>
+      publicBookingSchema.safeParse(v).error?.issues.map((i) => i.path.join(".")) ?? [];
+
+    it("needs the refund rule accepted", () => {
+      expect(paths({ ...workshop, refundRuleAccepted: false })).toEqual(["refundRuleAccepted"]);
+      expect(paths(workshop)).toEqual([]);
+    });
+
+    it("allows up to 3 people", () => {
+      expect(paths({ ...workshop, participants: "4" })).toEqual(["participants"]);
+    });
+
+    it("needs a certificate name for everyone coming", () => {
+      expect(
+        paths({
+          ...workshop,
+          participants: "3",
+          attendees: [person("Ana Cruz"), person(" "), person("B")],
+        }),
+      ).toEqual(["attendees.1.name", "attendees.2.name"]);
+      // Two coming, one card: the second person has no name or contact details.
+      expect(paths({ ...workshop, participants: "2" })).toEqual([
+        "attendees.1.name",
+        "attendees.1.phone",
+        "attendees.1.address",
+      ]);
+    });
+
+    it("needs a mobile number and address for everyone coming", () => {
+      expect(
+        paths({
+          ...workshop,
+          attendees: [{ ...person("Ana Cruz"), phone: "12-34", address: " " }],
+        }),
+      ).toEqual(["attendees.0.phone", "attendees.0.address"]);
+    });
+
+    it("needs an uploaded ID for each student", () => {
+      expect(paths({ ...workshop, attendees: [person("Ana Cruz", "student")] })).toEqual([
+        "attendees.0.idPath",
+      ]);
+      expect(paths({ ...workshop, attendees: [person("Ana Cruz", "student", ID)] })).toEqual([]);
+      // Only paths the server hands out are accepted.
+      expect(
+        paths({ ...workshop, attendees: [person("Ana Cruz", "student", "../other.webp")] }),
+      ).toEqual(["attendees.0.idPath"]);
+      expect(paths({ ...workshop, attendees: [person("Ana Cruz", "vip")] })).toEqual([
+        "attendees.0.category",
+      ]);
+    });
+
+    it("ignores the people limit on packages", () => {
+      expect(paths({ ...input, participants: "12" })).toEqual([]);
+    });
+  });
+});
+
+describe("rescheduleRequestSchema", () => {
+  it("needs a message and keeps an empty preference as null", () => {
+    const base = { reference: "bk-2026-1a2b3c", email: "Ana@Example.com" };
+    expect(
+      rescheduleRequestSchema.safeParse({ ...base, preferred: "", message: "hi" }).success,
+    ).toBe(false);
+    const ok = rescheduleRequestSchema.parse({
+      ...base,
+      preferred: "  ",
+      message: " Can we move to Saturday? ",
+    });
+    expect(ok).toEqual({
+      reference: "BK-2026-1A2B3C",
+      email: "ana@example.com",
+      preferred: null,
+      message: "Can we move to Saturday?",
+    });
   });
 });

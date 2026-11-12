@@ -2,7 +2,7 @@
 
 import { paymentsMockEnabled } from "@/lib/payments/mock";
 import { fail, ok, type ActionResult } from "@/lib/utils/action-result";
-import { getMockCheckout, mockPaySchema } from "@/server/queries/mock-checkout";
+import { getMockCheckout, mockPaySchema, mockReturnUrls } from "@/server/queries/mock-checkout";
 import { settlePaidEvent } from "@/server/settle-payment";
 
 /**
@@ -29,5 +29,5 @@ export async function mockPay(input: unknown): Promise<ActionResult<{ redirectUr
     { mock: true, reference: parsed.data.reference },
   );
   if (result === "error") return fail("The trial payment couldn't be recorded. Try again.");
-  return ok({ redirectUrl: `/book/done?ref=${parsed.data.reference}` });
+  return ok({ redirectUrl: mockReturnUrls(parsed.data.reference, checkout.purpose).done });
 }

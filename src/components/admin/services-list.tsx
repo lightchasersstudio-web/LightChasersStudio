@@ -11,7 +11,7 @@ import { moveItem, ReorderButtons } from "@/components/admin/reorder-buttons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { categoryLabel } from "@/lib/catalog";
+import { asBookingCategory, bookingCategoryLabel, categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
 import { formatDuration } from "@/lib/utils/format";
 import { formatPeso } from "@/lib/utils/money";
@@ -72,7 +72,7 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
       {services.map((service, index) => (
         <li
           key={service.id}
-          className="flex flex-col gap-4 rounded-2xl border bg-card p-3 sm:flex-row sm:items-center sm:p-4"
+          className="flex flex-col gap-4 rounded-2xl border bg-card p-3 transition-all duration-200 hover:border-terracotta/40 hover:shadow-md sm:flex-row sm:items-center sm:p-4"
         >
           <div className="flex min-w-0 flex-1 items-center gap-4">
             <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-24">
@@ -94,15 +94,18 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate font-heading text-lg font-semibold">{service.name}</h2>
+                <BookingTypeBadge value={service.booking_category} />
                 {!service.is_active && <Badge variant="secondary">Hidden</Badge>}
               </div>
               <p className="text-sm text-muted-foreground">{categoryLabel(service.category)}</p>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 text-sm">
                 <span className="font-semibold">{formatPeso(service.price_cents)}</span>
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <ClockIcon className="size-3.5" aria-hidden />
-                  {formatDuration(service.duration_minutes)}
-                </span>
+                {service.duration_minutes !== null && (
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <ClockIcon className="size-3.5" aria-hidden />
+                    {formatDuration(service.duration_minutes)}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -143,5 +146,21 @@ export function ServicesList({ services: initial }: { services: Service[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+const BOOKING_TYPE_TONES = {
+  studio: "border-sage bg-sage/25 text-foreground",
+  outside: "border-terracotta/40 bg-blush text-terracotta-ink",
+  excluded: "border-border bg-muted text-muted-foreground",
+} as const;
+
+/** How the package is scheduled (studio / outside event / no scheduling rules). */
+function BookingTypeBadge({ value }: { value: string }) {
+  const category = asBookingCategory(value);
+  return (
+    <Badge variant="outline" className={BOOKING_TYPE_TONES[category]}>
+      {bookingCategoryLabel(category)}
+    </Badge>
   );
 }

@@ -3,6 +3,7 @@ import {
   HouseIcon,
   PackageIcon,
   PartyPopperIcon,
+  PresentationIcon,
   UsersIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -15,4 +16,5 @@ export const CATEGORY_ICONS: Record<ServiceCategory, LucideIcon> = {
   studio: HouseIcon,
   event: PartyPopperIcon,
   commercial: PackageIcon,
+  workshop: PresentationIcon,
 };

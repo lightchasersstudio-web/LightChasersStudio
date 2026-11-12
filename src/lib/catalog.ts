@@ -19,8 +19,56 @@ export const SERVICE_CATEGORY_VALUES = SERVICE_CATEGORIES.map((c) => c.value) as
   ...ServiceCategory[],
 ];
 
+/** Every package category, incl. the workshop (booked from its own button, never listed publicly). */
+export const PACKAGE_CATEGORIES: typeof SERVICE_CATEGORIES = [
+  ...SERVICE_CATEGORIES,
+  { value: "workshop", label: "Workshop" },
+];
+export const PACKAGE_CATEGORY_VALUES = PACKAGE_CATEGORIES.map((c) => c.value) as [
+  ServiceCategory,
+  ...ServiceCategory[],
+];
+
 export function categoryLabel(value: ServiceCategory): string {
-  return SERVICE_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+  return PACKAGE_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+}
+
+/**
+ * How a package is scheduled (`services.booking_category`, owner decision
+ * 2026-11-06). The database enforces it (assert_schedule); this is the wording.
+ */
+export const BOOKING_CATEGORIES = [
+  {
+    value: "studio",
+    label: "Studio",
+    hint: "One studio session at a time, back to back.",
+  },
+  {
+    value: "outside",
+    label: "Outside event",
+    hint: "One per day (weddings, prenups). Can run while a studio session is on.",
+  },
+  {
+    value: "excluded",
+    label: "No scheduling rules",
+    hint: "Never blocks anything and is never blocked (e.g. the Photobooth).",
+  },
+] as const;
+export type BookingCategory = (typeof BOOKING_CATEGORIES)[number]["value"];
+export const BOOKING_CATEGORY_VALUES = BOOKING_CATEGORIES.map((c) => c.value) as [
+  BookingCategory,
+  ...BookingCategory[],
+];
+
+export function bookingCategoryLabel(value: string): string {
+  return BOOKING_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+}
+
+/** The database stores text; anything unexpected is treated as a studio booking. */
+export function asBookingCategory(value: string | null | undefined): BookingCategory {
+  return BOOKING_CATEGORY_VALUES.includes(value as BookingCategory)
+    ? (value as BookingCategory)
+    : "studio";
 }
 
 export const WEEKDAYS = [

@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { AddOnsManager } from "@/components/admin/add-ons-manager";
 import { PageHeader } from "@/components/admin/page-header";
 import { ServicesList } from "@/components/admin/services-list";
 import { ListSkeleton } from "@/components/admin/skeletons";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/server/auth";
+import { listAddOnsForAdmin } from "@/server/queries/add-ons";
 import { listServicesForAdmin } from "@/server/queries/services";
 
 export const metadata: Metadata = { title: "Services" };
@@ -37,5 +39,18 @@ export default function AdminServicesPage() {
 
 async function Services() {
   await requireAdmin();
-  return <ServicesList services={await listServicesForAdmin()} />;
+  const [services, addOns] = await Promise.all([listServicesForAdmin(), listAddOnsForAdmin()]);
+  return (
+    <>
+      <ServicesList services={services} />
+      <AddOnsManager
+        addOns={addOns}
+        packages={services.map((s) => ({
+          id: s.id,
+          name: s.name,
+          hasSetLength: s.duration_minutes !== null,
+        }))}
+      />
+    </>
+  );
 }

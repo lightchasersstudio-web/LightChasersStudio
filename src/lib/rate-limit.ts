@@ -14,11 +14,17 @@ export async function clientIp(): Promise<string | null> {
 
 /**
  * Fixed-window rate limit stored in Postgres (hit_rate_limit). Returns true while
- * allowed. The IP is hashed so raw addresses are never stored.
+ * allowed. Counted per visitor IP, or per `subject` (e.g. an email address) when
+ * given. Both are hashed so raw addresses are never stored.
  */
-export async function rateLimit(action: string, limit: number, windowSeconds: number) {
-  const ip = (await clientIp()) ?? "unknown";
-  const key = `${action}:${createHash("sha256").update(ip).digest("hex").slice(0, 32)}`;
+export async function rateLimit(
+  action: string,
+  limit: number,
+  windowSeconds: number,
+  subject?: string,
+) {
+  const who = subject ?? (await clientIp()) ?? "unknown";
+  const key = `${action}:${createHash("sha256").update(who).digest("hex").slice(0, 32)}`;
   const { data, error } = await createAdminClient().rpc("hit_rate_limit", {
     p_key: key,
     p_limit: limit,

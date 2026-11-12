@@ -41,6 +41,14 @@ function day(date: string, opts: Partial<Parameters<typeof monthSlots>[number]> 
 }
 
 describe("monthSlots", () => {
+  it("shows a day at the bookings-per-day limit as fully booked", () => {
+    const full = day("2026-11-03", { fullDays: ["2026-11-03"] });
+    expect(full.status).toBe("full");
+    expect(full.slots).toEqual([]);
+    // Other days are unaffected.
+    expect(day("2026-11-04", { fullDays: ["2026-11-03"] }).status).toBe("open");
+  });
+
   it("lists every day of the month by its Manila date", () => {
     const days = monthSlots({
       month: "2026-11",
@@ -101,6 +109,16 @@ describe("monthSlots", () => {
   it("lets staff book inside the notice period", () => {
     const staff = { ...RULES, ignoreWindow: true };
     expect(day("2026-11-01", { rules: staff }).status).toBe("open");
+  });
+
+  it("never offers staff a time that has already passed", () => {
+    const staff = { ...RULES, ignoreWindow: true };
+    // NOW is 31 Oct 08:00 in Manila: the 08:00 slot is now, earlier days are gone.
+    const october = (date: string) => day(date, { rules: staff, month: "2026-10" });
+    const today = october("2026-10-31").slots;
+    expect(today.map(hhmm)[0]).toBe("08:00");
+    expect(today.every((t) => t.getTime() >= NOW.getTime())).toBe(true);
+    expect(october("2026-10-30").slots).toHaveLength(0);
   });
 });
 

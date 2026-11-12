@@ -1,12 +1,20 @@
 import "server-only";
 
 import {
+  balancePaidAlertEmail,
   bookingClosedEmail,
   bookingConfirmedEmail,
   bookingReceivedEmail,
+  bookingUpdatedEmail,
   newBookingAlertEmail,
+  paymentReceivedEmail,
+  rescheduleRequestAlertEmail,
+  shootReminderEmail,
+  thankYouReviewEmail,
 } from "@/lib/email/booking-emails";
 import { sendEmail } from "@/lib/email/send";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { facebookReviewsUrl } from "@/lib/utils/social";
 import { getPublicEnv } from "@/lib/env";
 import type { BookingRecord } from "@/server/queries/booking-record";
 
@@ -34,6 +42,10 @@ export async function notifyBookingConfirmed(b: BookingRecord) {
   if (b.email) await sendEmail({ to: b.email, ...bookingConfirmedEmail(b.summary, siteUrl()) });
 }
 
+export async function notifyBookingUpdated(b: BookingRecord) {
+  if (b.email) await sendEmail({ to: b.email, ...bookingUpdatedEmail(b.summary, siteUrl()) });
+}
+
 export async function notifyBookingClosed(b: BookingRecord, status: "declined" | "cancelled") {
   if (b.email) {
     await sendEmail({ to: b.email, ...bookingClosedEmail(b.summary, siteUrl(), status) });
@@ -45,4 +57,55 @@ export async function resendLatestEmail(b: BookingRecord) {
   if (b.status === "confirmed" || b.status === "completed") return notifyBookingConfirmed(b);
   if (b.status === "declined" || b.status === "cancelled") return notifyBookingClosed(b, b.status);
   if (b.email) await sendEmail({ to: b.email, ...bookingReceivedEmail(b.summary, siteUrl()) });
+}
+
+/** The client paid the rest online: thank them, tell the studio. */
+export async function notifyBalancePaid(b: BookingRecord) {
+  const jobs: Promise<void>[] = [];
+  if (b.email) jobs.push(sendEmail({ to: b.email, ...paymentReceivedEmail(b.summary, siteUrl()) }));
+  if (b.summary.studioEmail) {
+    jobs.push(
+      sendEmail({
+        to: b.summary.studioEmail,
+        ...balancePaidAlertEmail(b.summary, siteUrl(), b.id),
+      }),
+    );
+  }
+  await Promise.all(jobs);
+}
+
+/** A client asked for a new date: tell the studio (the request is also on the admin page). */
+export async function notifyRescheduleRequest(
+  b: BookingRecord,
+  request: { preferred: string | null; message: string },
+) {
+  if (!b.summary.studioEmail) return;
+  await sendEmail({
+    to: b.summary.studioEmail,
+    ...rescheduleRequestAlertEmail(b.summary, siteUrl(), b.id, request),
+  });
+}
+
+/** "See you tomorrow!" (the daily reminders job). */
+export async function sendShootReminder(b: BookingRecord) {
+  if (b.email) await sendEmail({ to: b.email, ...shootReminderEmail(b.summary, siteUrl()) });
+}
+
+/** Marked completed: thank the client and ask for a Facebook review. */
+/** Thank-you email after the shoot; with a photos link it also says the photos are ready. */
+export async function notifyBookingCompleted(b: BookingRecord, photosUrl: string | null = null) {
+  if (!b.email) return;
+  const { data } = await createAdminClient()
+    .from("business_settings")
+    .select("facebook_url")
+    .single();
+  await sendEmail({
+    to: b.email,
+    ...thankYouReviewEmail(
+      b.summary,
+      siteUrl(),
+      facebookReviewsUrl(data?.facebook_url ?? null),
+      photosUrl,
+    ),
+  });
 }

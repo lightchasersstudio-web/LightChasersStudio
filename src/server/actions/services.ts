@@ -1,5 +1,8 @@
 "use server";
 
+import { z } from "zod";
+
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail, type ActionResult } from "@/lib/utils/action-result";
 import {
   reorderSchema,
@@ -7,7 +10,11 @@ import {
   serviceSchema,
   setServiceActiveSchema,
 } from "@/lib/validations/services";
+import { parseWorkshopSlides, saveWorkshopSlidesSchema } from "@/lib/validations/workshop-slides";
+import { workshopDays } from "@/lib/booking/workshop";
 import { adminAction, audit, PG, revalidate, TAGS } from "@/server/admin-action";
+import { notifyBookingUpdated } from "@/server/booking-notifications";
+import { loadBookingRecord } from "@/server/queries/booking-record";
 import { removeObjects } from "@/server/storage";
 
 export async function createService(input: unknown): Promise<ActionResult<{ id: string }>> {
@@ -40,7 +47,9 @@ export async function updateService(id: string, input: unknown): Promise<ActionR
 
     const { data: before } = await ctx.supabase
       .from("services")
-      .select("cover_image_path")
+      .select(
+        "cover_image_path, workshop_starts_at, workshop_ends_at, workshop_location, workshop_days",
+      )
       .eq("id", id)
       .maybeSingle();
     if (!before) return fail("Service not found.");
@@ -52,7 +61,32 @@ export async function updateService(id: string, input: unknown): Promise<ActionR
     if (before.cover_image_path && before.cover_image_path !== row.cover_image_path) {
       await removeObjects(ctx.supabase, "portfolio", [before.cover_image_path]);
     }
-    await audit(ctx, "service.update", "service", id, { name: row.name });
+    // A trigger has moved the workshop's sign-ups; tell them if the admin wants that.
+    const same = (a: string | null, b: string | null) =>
+      a === b || (a !== null && b !== null && Date.parse(a) === Date.parse(b));
+    // Any day added, removed or moved (e.g. only day 2 changed) counts as a move.
+    const sameDays = (old: typeof before, days: { starts_at: string; ends_at: string }[]) => {
+      const was = workshopDays(old);
+      return (
+        was.length === days.length &&
+        was.every(
+          (d, i) => same(d.startsAt, days[i]!.starts_at) && same(d.endsAt, days[i]!.ends_at),
+        )
+      );
+    };
+    const moved =
+      row.category === "workshop" &&
+      row.workshop_starts_at !== null &&
+      (!same(before.workshop_starts_at, row.workshop_starts_at) ||
+        !same(before.workshop_ends_at, row.workshop_ends_at) ||
+        !sameDays(before, row.workshop_days) ||
+        before.workshop_location !== row.workshop_location);
+    const emailed =
+      moved && notifySchema.parse(input).notifyWorkshopMove ? await emailWorkshopMove(id) : 0;
+    await audit(ctx, "service.update", "service", id, {
+      name: row.name,
+      ...(moved ? { workshop_moved: true, emailed } : {}),
+    });
     revalidate(TAGS.services, TAGS.portfolio); // photos show the package name and link
     return ok(undefined);
   });
@@ -77,7 +111,7 @@ export async function deleteService(input: unknown): Promise<ActionResult> {
       .from("services")
       .delete()
       .eq("id", id)
-      .select("name, cover_image_path")
+      .select("name, cover_image_path, workshop_slides")
       .maybeSingle();
     if (error?.code === PG.foreignKey) {
       return fail(
@@ -87,8 +121,10 @@ export async function deleteService(input: unknown): Promise<ActionResult> {
     if (error) throw error;
     if (!data) return fail("Service not found.");
 
-    if (data.cover_image_path)
-      await removeObjects(ctx.supabase, "portfolio", [data.cover_image_path]);
+    await removeObjects(ctx.supabase, "portfolio", [
+      ...(data.cover_image_path ? [data.cover_image_path] : []),
+      ...parseWorkshopSlides(data.workshop_slides).map((s) => s.path),
+    ]);
     await audit(ctx, "service.delete", "service", id, { name: data.name });
     revalidate(TAGS.services, TAGS.portfolio);
     return ok(undefined);
@@ -112,5 +148,59 @@ export async function reorderServices(input: unknown): Promise<ActionResult> {
 function slugTaken() {
   return fail("Please check the highlighted fields.", {
     slug: ["Another service already uses this URL name."],
+  });
+}
+
+const notifySchema = z.object({ notifyWorkshopMove: z.boolean().catch(true) });
+
+/** Emails the updated booking to everyone signed up for this workshop who still is. */
+async function emailWorkshopMove(serviceId: string): Promise<number> {
+  const { data, error } = await createAdminClient()
+    .from("bookings")
+    .select("id")
+    .eq("service_id", serviceId)
+    .in("status", ["pending", "confirmed"]);
+  if (error) throw error;
+  const results = await Promise.allSettled(
+    data.map(async ({ id }) => {
+      const record = await loadBookingRecord({ id });
+      if (!record?.email) return false;
+      await notifyBookingUpdated(record);
+      return true;
+    }),
+  );
+  for (const r of results) if (r.status === "rejected") console.error("[workshop move]", r.reason);
+  return results.filter((r) => r.status === "fulfilled" && r.value).length;
+}
+
+/**
+ * Saves the workshop banner's slideshow (photos the browser already uploaded),
+ * then deletes the files of photos that were taken out.
+ */
+export async function saveWorkshopSlides(input: unknown): Promise<ActionResult> {
+  return adminAction(saveWorkshopSlidesSchema, input, async ({ serviceId, slides }, ctx) => {
+    const { data: before, error: readError } = await ctx.supabase
+      .from("services")
+      .select("workshop_slides")
+      .eq("id", serviceId)
+      .eq("category", "workshop")
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!before) return fail("Workshop not found.");
+
+    const { error } = await ctx.supabase
+      .from("services")
+      .update({ workshop_slides: slides })
+      .eq("id", serviceId);
+    if (error) throw error;
+
+    const kept = new Set(slides.map((s) => s.path));
+    const removed = parseWorkshopSlides(before.workshop_slides)
+      .map((s) => s.path)
+      .filter((p) => !kept.has(p));
+    await removeObjects(ctx.supabase, "portfolio", removed);
+    await audit(ctx, "service.workshop_slides", "service", serviceId, { count: slides.length });
+    revalidate(TAGS.services);
+    return ok(undefined);
   });
 }

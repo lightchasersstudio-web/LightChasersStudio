@@ -1,5 +1,7 @@
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
+import { SiteMessenger } from "@/components/public/site-messenger";
+import { SiteBookBar, SiteWorkshop } from "@/components/public/site-workshop";
 
 export default function PublicLayout({ children }: LayoutProps<"/">) {
   return (
@@ -9,6 +11,9 @@ export default function PublicLayout({ children }: LayoutProps<"/">) {
         {children}
       </main>
       <SiteFooter />
+      <SiteBookBar />
+      <SiteMessenger />
+      <SiteWorkshop />
     </>
   );
 }

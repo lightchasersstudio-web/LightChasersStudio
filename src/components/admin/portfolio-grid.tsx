@@ -140,7 +140,10 @@ export function PortfolioGrid({
       ) : (
         <ul className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {visible.map((img, index) => (
-            <li key={img.id} className="overflow-hidden rounded-2xl border bg-card">
+            <li
+              key={img.id}
+              className="animate-in overflow-hidden rounded-2xl border bg-card duration-300 zoom-in-95 fade-in hover:shadow-md"
+            >
               <div className="relative aspect-[4/3] bg-muted">
                 <Image
                   src={publicImageUrl("portfolio", img.storage_path)}

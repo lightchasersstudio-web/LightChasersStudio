@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { blackoutSchema, datesInRange, weeklyHoursSchema } from "./availability";
 import { updatePortfolioImageSchema } from "./portfolio";
 import { bookingRulesSchema } from "./settings";
-import { serviceSchema, slugify, type ServiceFormInput } from "./services";
+import { serviceSchema, slugify, workshopFormValues, type ServiceFormInput } from "./services";
 
 const service: ServiceFormInput = {
   name: "Prenup Session",
@@ -11,13 +11,27 @@ const service: ServiceFormInput = {
   category: "wedding",
   summary: "",
   description: "",
-  durationMinutes: "120",
+  hasSetLength: false,
+  lengthHours: "",
   price: "15,000",
   depositMode: "default",
   deposit: "",
   inclusions: "  2 locations \n\n 50 edited photos ",
   coverImagePath: null,
   isActive: true,
+  bookingCategory: "outside",
+  workshopDate: "",
+  workshopStart: "",
+  workshopEnd: "",
+  workshopSeats: "",
+  workshopLocation: "",
+  earlyBirdPrice: "",
+  earlyBirdUntil: "",
+  earlyBirdSeats: "",
+  studentPrice: "",
+  regularEnabled: true,
+  earlyBirdEnabled: false,
+  studentEnabled: false,
 };
 
 describe("serviceSchema", () => {
@@ -25,11 +39,20 @@ describe("serviceSchema", () => {
     const row = serviceSchema.parse(service);
     expect(row).toMatchObject({
       price_cents: 1_500_000,
-      duration_minutes: 120,
+      duration_minutes: null,
       deposit_cents: null,
       summary: null,
       inclusions: ["2 locations", "50 edited photos"],
     });
+  });
+
+  it("keeps the package contract as typed, and empty as none", () => {
+    expect(serviceSchema.parse({ ...service, contract: "  " }).contract).toBeNull();
+    const terms = "1. Booking\nThe deposit holds your date.\n\n2. Delivery";
+    expect(serviceSchema.parse({ ...service, contract: terms }).contract).toBe(terms);
+    expect(serviceSchema.safeParse({ ...service, contract: "x".repeat(30001) }).success).toBe(
+      false,
+    );
   });
 
   it("accepts a fixed deposit up to the price", () => {
@@ -45,9 +68,214 @@ describe("serviceSchema", () => {
     }
   });
 
-  it("rejects bad slugs and too-short sessions", () => {
+  it("stores a set length in minutes, only when switched on", () => {
+    const timed = { ...service, hasSetLength: true, lengthHours: "4.5" };
+    expect(serviceSchema.parse(timed).duration_minutes).toBe(270);
+    expect(serviceSchema.parse({ ...service, lengthHours: "4" }).duration_minutes).toBeNull();
+  });
+
+  it("saves the booking type; workshops are always excluded", () => {
+    expect(serviceSchema.parse(service).booking_category).toBe("outside");
+    expect(serviceSchema.parse({ ...service, bookingCategory: "excluded" }).booking_category).toBe(
+      "excluded",
+    );
+    expect(
+      serviceSchema.safeParse({ ...service, bookingCategory: "anywhere" as "studio" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects bad slugs and bad lengths", () => {
     expect(serviceSchema.safeParse({ ...service, slug: "Bad Slug!" }).success).toBe(false);
-    expect(serviceSchema.safeParse({ ...service, durationMinutes: "10" }).success).toBe(false);
+    for (const lengthHours of ["", "0.25", "25", "4.1", "abc"]) {
+      const r = serviceSchema.safeParse({ ...service, hasSetLength: true, lengthHours });
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]?.path).toEqual(["lengthHours"]);
+    }
+  });
+});
+
+describe("serviceSchema: workshop schedule", () => {
+  const workshop = {
+    ...service,
+    category: "workshop" as const,
+    workshopDate: "2026-11-14",
+    workshopStart: "13:00",
+    workshopEnd: "17:30",
+    workshopSeats: "15",
+    workshopLocation: "  Light Chasers Studio, Tetuan  ",
+  };
+
+  it("stores Manila times as timestamps, with the seats", () => {
+    expect(serviceSchema.parse(workshop)).toMatchObject({
+      workshop_starts_at: "2026-11-14T05:00:00.000Z",
+      workshop_ends_at: "2026-11-14T09:30:00.000Z",
+      workshop_seats: 15,
+      workshop_location: "Light Chasers Studio, Tetuan",
+    });
+  });
+
+  it("round-trips back to the form", () => {
+    const row = serviceSchema.parse(workshop);
+    expect(workshopFormValues(row)).toEqual({
+      workshopDate: "2026-11-14",
+      workshopStart: "13:00",
+      workshopEnd: "17:30",
+      workshopExtraDays: [],
+      workshopSeats: "15",
+      workshopLocation: "Light Chasers Studio, Tetuan",
+      notifyWorkshopMove: true,
+      earlyBirdPrice: "",
+      earlyBirdUntil: "",
+      earlyBirdSeats: "",
+      studentPrice: "",
+      regularEnabled: true,
+      earlyBirdEnabled: false,
+      studentEnabled: false,
+    });
+  });
+
+  it("stores up to 3 days, each with its own times, and round-trips them", () => {
+    const row = serviceSchema.parse({
+      ...workshop,
+      workshopExtraDays: [
+        { date: "2026-11-15", start: "09:00", end: "12:00" },
+        { date: "2026-11-21", start: "13:00", end: "17:00" },
+      ],
+    });
+    expect(row).toMatchObject({
+      workshop_starts_at: "2026-11-14T05:00:00.000Z",
+      workshop_ends_at: "2026-11-21T09:00:00.000Z",
+      workshop_days: [
+        { starts_at: "2026-11-14T05:00:00.000Z", ends_at: "2026-11-14T09:30:00.000Z" },
+        { starts_at: "2026-11-15T01:00:00.000Z", ends_at: "2026-11-15T04:00:00.000Z" },
+        { starts_at: "2026-11-21T05:00:00.000Z", ends_at: "2026-11-21T09:00:00.000Z" },
+      ],
+    });
+    expect(workshopFormValues(row).workshopExtraDays).toEqual([
+      { date: "2026-11-15", start: "09:00", end: "12:00" },
+      { date: "2026-11-21", start: "13:00", end: "17:00" },
+    ]);
+  });
+
+  it("refuses more than 3 days, days out of order, and extra days without day 1", () => {
+    const day = (date: string) => ({ date, start: "09:00", end: "12:00" });
+    const paths = (input: object) => {
+      const r = serviceSchema.safeParse({ ...workshop, ...input });
+      return r.success ? [] : r.error.issues.map((i) => i.path.join("."));
+    };
+    expect(
+      paths({ workshopExtraDays: [day("2026-11-15"), day("2026-11-16"), day("2026-11-17")] }),
+    ).toEqual(["workshopExtraDays"]);
+    expect(paths({ workshopExtraDays: [day("2026-11-14")] })).toEqual(["workshopExtraDays.0.date"]);
+    expect(paths({ workshopExtraDays: [day("2026-11-16"), day("2026-11-15")] })).toEqual([
+      "workshopExtraDays.1.date",
+    ]);
+    expect(
+      paths({
+        workshopDate: "",
+        workshopStart: "",
+        workshopEnd: "",
+        workshopExtraDays: [day("2026-11-15")],
+      }),
+    ).toEqual(["workshopDate"]);
+    expect(
+      paths({ workshopExtraDays: [{ date: "2026-11-15", start: "12:00", end: "09:00" }] }),
+    ).toEqual(["workshopExtraDays.0.end"]);
+  });
+
+  it("allows no date yet and no seat limit", () => {
+    const row = serviceSchema.parse({
+      ...workshop,
+      workshopDate: "",
+      workshopStart: "",
+      workshopEnd: "",
+      workshopSeats: "",
+    });
+    expect(row).toMatchObject({
+      workshop_starts_at: null,
+      workshop_ends_at: null,
+      workshop_seats: null,
+    });
+  });
+
+  it("rejects a half-filled time, an end before the start, or bad seats", () => {
+    const cases: [Partial<ServiceFormInput>, string][] = [
+      [{ workshopStart: "" }, "workshopStart"],
+      [{ workshopDate: "" }, "workshopDate"],
+      [{ workshopEnd: "12:00" }, "workshopEnd"],
+      [{ workshopSeats: "0" }, "workshopSeats"],
+      [{ workshopSeats: "ten" }, "workshopSeats"],
+    ];
+    for (const [change, path] of cases) {
+      const r = serviceSchema.safeParse({ ...workshop, ...change });
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]?.path).toEqual([path]);
+    }
+  });
+
+  it("stores early-bird and student prices, or none when empty", () => {
+    expect(
+      serviceSchema.parse({
+        ...workshop,
+        earlyBirdPrice: "4,000",
+        earlyBirdUntil: "2027-01-31",
+        earlyBirdSeats: "25",
+        studentPrice: "4000",
+      }),
+    ).toMatchObject({
+      workshop_early_bird_price_cents: 400_000,
+      workshop_early_bird_until: "2027-01-31",
+      workshop_early_bird_seats: 25,
+      workshop_student_price_cents: 400_000,
+    });
+    // No early-bird price: its date and places are dropped too.
+    expect(
+      serviceSchema.parse({ ...workshop, earlyBirdUntil: "2027-01-31", earlyBirdSeats: "25" }),
+    ).toMatchObject({
+      workshop_early_bird_price_cents: null,
+      workshop_early_bird_until: null,
+      workshop_early_bird_seats: null,
+      workshop_student_price_cents: null,
+    });
+    const bad = serviceSchema.safeParse({ ...workshop, studentPrice: "abc" });
+    expect(bad.error?.issues[0]?.path).toEqual(["studentPrice"]);
+  });
+
+  it("switches each category on or off; one that's on needs a price", () => {
+    const row = serviceSchema.parse({
+      ...workshop,
+      regularEnabled: false,
+      earlyBirdEnabled: true,
+      earlyBirdPrice: "4000",
+      studentEnabled: false,
+      studentPrice: "4000",
+    });
+    expect(row).toMatchObject({
+      workshop_regular_enabled: false,
+      workshop_early_bird_enabled: true,
+      workshop_student_enabled: false,
+      // A price is kept while its category is off, ready to switch back on.
+      workshop_student_price_cents: 400_000,
+    });
+    expect(workshopFormValues(row)).toMatchObject({
+      regularEnabled: false,
+      earlyBirdEnabled: true,
+      studentEnabled: false,
+    });
+    for (const [change, path] of [
+      [{ earlyBirdEnabled: true }, "earlyBirdPrice"],
+      [{ studentEnabled: true }, "studentPrice"],
+    ] as const) {
+      const r = serviceSchema.safeParse({ ...workshop, ...change });
+      expect(r.error?.issues[0]?.path).toEqual([path]);
+    }
+  });
+
+  it("ignores the schedule on other packages", () => {
+    const row = serviceSchema.parse({ ...workshop, category: "portrait" });
+    expect(row.workshop_starts_at).toBeNull();
+    expect(row.workshop_seats).toBeNull();
+    expect(row.workshop_location).toBeNull();
   });
 });
 
@@ -151,6 +379,7 @@ describe("bookingRulesSchema", () => {
     slotIntervalMinutes: "30",
     bufferMinutes: "30",
     defaultDepositPercent: "30",
+    vatPercent: "12",
     holdMinutes: "20",
     maxConcurrentBookings: "3",
   } as const;

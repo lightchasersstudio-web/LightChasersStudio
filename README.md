@@ -2,7 +2,7 @@
 
 Booking website for Light Chasers Studio, a photography studio in Zamboanga City. Clients browse services and the portfolio, then book a session and pay a deposit online. Staff manage everything from an admin dashboard.
 
-**Stack:** Next.js 16 (App Router, TypeScript), Tailwind CSS v4, shadcn/ui, Supabase (Postgres, Auth, Storage, RLS), PayMongo, Resend, Cloudflare Turnstile, deployed on Vercel.
+**Stack:** Next.js 16 (App Router, TypeScript), Tailwind CSS v4, shadcn/ui, Supabase (Postgres, Auth, Storage, RLS), PayMongo, email from the studio Gmail (nodemailer; Resend as a fallback for a future domain), Cloudflare Turnstile, deployed on Vercel.
 
 ## Getting started
 

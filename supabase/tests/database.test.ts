@@ -58,7 +58,7 @@ async function setupFixtures(c: PoolClient, capacity = 1) {
   await c.query(`update public.business_settings
     set timezone = '${TZ}', min_notice_hours = 48, max_advance_days = 180,
         slot_interval_minutes = 30, buffer_minutes = 30, default_deposit_percent = 30, hold_minutes = 20,
-        max_concurrent_bookings = ${capacity}
+        max_concurrent_bookings = ${capacity}, vat_percent = 0
     where id`);
   await c.query("delete from public.availability_rules");
   await c.query("delete from public.blackout_dates");
@@ -138,6 +138,30 @@ function adminBook(
   ]);
 }
 
+const UPDATE = `select * from public.admin_update_booking(
+  p_booking_id => $1, p_service_id => $2, p_start_at => $3, p_package_cents => $4,
+  p_add_ons => $5::jsonb, p_charge_vat => $6, p_allow_outside_hours => false,
+  p_location => 'Studio', p_participants => 2, p_special_requests => null,
+  p_contact_name => 'Walk In', p_contact_phone => '09171234567',
+  p_preferred_contact => 'phone', p_messenger => null)`;
+
+function updateBooking(
+  c: PoolClient,
+  id: string,
+  serviceId: string,
+  start: Date,
+  opts: { pkg?: number; addOns?: unknown[]; vat?: boolean } = {},
+) {
+  return c.query(UPDATE, [
+    id,
+    serviceId,
+    start.toISOString(),
+    opts.pkg ?? 350000,
+    JSON.stringify(opts.addOns ?? []),
+    opts.vat ?? false,
+  ]);
+}
+
 const PAID = "select * from public.mark_booking_paid($1, $2, $3, $4, '{}'::jsonb)";
 
 describe.skipIf(!url)("database (RLS + booking rules)", () => {
@@ -153,7 +177,14 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         expect(services.rows.map((r) => r.slug).sort()).toEqual(
           ["test-free-consult", "test-portrait", "test-wedding"].sort(),
         );
-        for (const table of ["clients", "bookings", "payments", "audit_logs", "admin_profiles"]) {
+        for (const table of [
+          "clients",
+          "bookings",
+          "payments",
+          "audit_logs",
+          "admin_profiles",
+          "booking_requests",
+        ]) {
           const { rows } = await c.query(`select * from public.${table}`);
           expect(rows, table).toHaveLength(0);
         }
@@ -231,8 +262,58 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
 
         await c.query("reset role");
         await actAs(c, "authenticated", adminId);
-        expect((await c.query("select id from public.bookings")).rows).toHaveLength(1);
-        expect((await c.query("select id from public.clients")).rows).toHaveLength(1);
+        // Scoped to this test's rows: the shared dev DB also holds real bookings.
+        const own = await c.query("select id from public.bookings where service_id = $1", [
+          s.portrait,
+        ]);
+        expect(own.rows).toHaveLength(1);
+        const client = await c.query(
+          "select id from public.clients where email = 'ana@example.com'",
+        );
+        expect(client.rows).toHaveLength(1);
+      });
+    });
+
+    it("shows only published reviews publicly; only admins can write them", async () => {
+      await inRollback(async (c) => {
+        const adminId = crypto.randomUUID();
+        const userId = crypto.randomUUID();
+        await c.query(
+          "insert into auth.users (id, email) values ($1, 'admin@test.local'), ($2, 'user@test.local')",
+          [adminId, userId],
+        );
+        await c.query("insert into public.admin_profiles (user_id, role) values ($1, 'owner')", [
+          adminId,
+        ]);
+        await c.query("delete from public.reviews");
+        await c.query(`insert into public.reviews (name, category, shoot, quote, is_published)
+          values ('Shown', 'wedding', 'Prenup', 'A lovely published review.', true),
+                 ('Draft', 'portrait', 'Family', 'A review not shown yet.', false)`);
+        const insert = `insert into public.reviews (name, category, shoot, quote)
+          values ('Fake', 'event', 'Party', 'Five stars from myself.')`;
+
+        await actAs(c, "anon");
+        expect((await c.query("select name from public.reviews")).rows).toEqual([
+          { name: "Shown" },
+        ]);
+        expect(await expectFailure(c, insert)).toMatch(/row-level security/);
+
+        await c.query("reset role");
+        await actAs(c, "authenticated", userId);
+        expect((await c.query("select name from public.reviews")).rows).toHaveLength(1);
+        expect(await expectFailure(c, insert)).toMatch(/row-level security/);
+        await c.query("update public.reviews set is_published = true");
+        await c.query("delete from public.reviews");
+
+        await c.query("reset role");
+        await actAs(c, "authenticated", adminId);
+        // The signed-in non-admin's update and delete above touched nothing.
+        expect((await c.query("select name from public.reviews order by name")).rows).toEqual([
+          { name: "Draft" },
+          { name: "Shown" },
+        ]);
+        await c.query(insert);
+        expect((await c.query("select id from public.reviews")).rows).toHaveLength(3);
       });
     });
   });
@@ -255,6 +336,102 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         const free = (await book(c, s.free, manila(12, 10), "cy@example.com")).rows[0]!;
         expect(free.status).toBe("pending");
         expect(free.hold_expires_at).toBeNull();
+      });
+    });
+
+    it("adds add-on prices to the total and deposit, and keeps a copy on the booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        const { rows: addOns } = await c.query<{ id: string; name: string }>(`
+          insert into public.add_ons (name, price_cents, is_active, sort_order) values
+            ('Test Extra Photographer', 200000, true, 0),
+            ('Test Videographer', 500000, true, 1),
+            ('Test Hidden Extra', 100000, false, 2)
+          returning id, name`);
+        const id = (name: string) => addOns.find((a) => a.name === name)!.id;
+        const both = [id("Test Extra Photographer"), id("Test Videographer")];
+
+        await actAs(c, "anon");
+        const visible = await c.query("select name from public.add_ons where name like 'Test %'");
+        expect(visible.rows.map((r) => r.name).sort()).toEqual([
+          "Test Extra Photographer",
+          "Test Videographer",
+        ]);
+
+        await c.query("reset role");
+        await actAs(c, "service_role");
+        const withExtras = `select * from public.create_booking(
+          p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+          p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+          p_start_at => $3, p_add_on_ids => $4)`;
+
+        // Default 30% deposit applies to package + add-ons: (350,000 + 700,000) × 30%.
+        const portrait = (
+          await c.query(withExtras, [
+            "ana@example.com",
+            s.portrait,
+            manila(10, 10).toISOString(),
+            [...both, both[0]], // a repeated id counts once
+          ])
+        ).rows[0]!;
+        expect(portrait.deposit_cents).toBe(315000);
+        const booking = await c.query("select price_cents from public.bookings where id = $1", [
+          portrait.booking_id,
+        ]);
+        expect(booking.rows[0].price_cents).toBe(1050000);
+        const copies = await c.query(
+          "select name, price_cents from public.booking_add_ons where booking_id = $1 order by name",
+          [portrait.booking_id],
+        );
+        expect(copies.rows).toEqual([
+          { name: "Test Extra Photographer", price_cents: 200000 },
+          { name: "Test Videographer", price_cents: 500000 },
+        ]);
+
+        // A package's fixed deposit stays fixed.
+        const wedding = (
+          await c.query(withExtras, [
+            "bea@example.com",
+            s.wedding,
+            manila(11, 10).toISOString(),
+            both,
+          ])
+        ).rows[0]!;
+        expect(wedding.deposit_cents).toBe(200000);
+
+        expect(
+          await expectFailure(c, withExtras, [
+            "cy@example.com",
+            s.portrait,
+            manila(12, 10).toISOString(),
+            [id("Test Hidden Extra")],
+          ]),
+        ).toMatch(/add_on_unavailable/);
+
+        await c.query("reset role");
+        await actAs(c, "anon");
+        expect((await c.query("select id from public.booking_add_ons")).rows).toHaveLength(0);
+      });
+    });
+
+    it("adds VAT on top of package + add-ons and records it on the booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        await c.query("update public.business_settings set vat_percent = 12 where id");
+        await actAs(c, "service_role");
+
+        // ₱3,500 + 12% VAT = ₱3,920; default 30% deposit of that = ₱1,176.
+        const portrait = (await book(c, s.portrait, manila(10, 10))).rows[0]!;
+        expect(portrait.deposit_cents).toBe(117600);
+        const row = await c.query(
+          "select price_cents, vat_cents from public.bookings where id = $1",
+          [portrait.booking_id],
+        );
+        expect(row.rows[0]).toEqual({ price_cents: 392000, vat_cents: 42000 });
+
+        // A fixed package deposit stays as set.
+        const wedding = (await book(c, s.wedding, manila(11, 10), "bea@example.com")).rows[0]!;
+        expect(wedding.deposit_cents).toBe(200000);
       });
     });
 
@@ -346,7 +523,10 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
           "select full_name, email from public.clients where email = 'ana@example.com'",
         );
         expect(clients.rows).toEqual([{ full_name: "Ana Cruz", email: "ana@example.com" }]);
-        const names = await c.query("select contact_name from public.bookings order by start_at");
+        const names = await c.query(
+          "select contact_name from public.bookings where service_id = $1 order by start_at",
+          [s.portrait],
+        );
         expect(names.rows.map((r) => r.contact_name)).toEqual(["Ana Cruz", "Impostor"]);
       });
     });
@@ -409,6 +589,222 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       expect(rows[0].hold_expires_at).toBeNull();
     });
   });
+  describe("booking categories (studio, outside events, excluded)", () => {
+    // Far ahead, so the shared dev database's own bookings don't land on the same day.
+    const DAY = 150;
+    const dateOf = (d: Date) => new TZDate(d, TZ).toISOString().slice(0, 10);
+
+    /** Studio portrait (60 min + 30 buffer), outside wedding + prenup, excluded booth. */
+    async function categories(c: PoolClient) {
+      const s = await setupFixtures(c, 1);
+      await c.query("update public.business_settings set max_advance_days = 400 where id");
+      await c.query("update public.services set booking_category = 'outside' where id = $1", [
+        s.wedding,
+      ]);
+      const { rows } = await c.query<{ id: string; slug: string }>(`
+        insert into public.services (name, slug, category, duration_minutes, price_cents, is_active, booking_category)
+        values
+          ('Test Prenup', 'test-prenup', 'wedding', null, 800000, true, 'outside'),
+          ('Test Booth', 'test-booth', 'event', 240, 500000, true, 'excluded')
+        returning id, slug`);
+      const id = (slug: string) => rows.find((r) => r.slug === slug)!.id;
+      return { ...s, prenup: id("test-prenup"), booth: id("test-booth") };
+    }
+
+    /** create_booking that must fail; returns the error message. */
+    const refused = (c: PoolClient, serviceId: string, start: Date, email: string) =>
+      expectFailure(c, CREATE, ["Bo", email, "09170000000", serviceId, start.toISOString()]);
+
+    /** Runs something that must fail inside a savepoint; returns the error message. */
+    async function failsWith(c: PoolClient, run: () => Promise<unknown>) {
+      await c.query("savepoint cat");
+      try {
+        await run();
+      } catch (e) {
+        await c.query("rollback to savepoint cat");
+        return (e as Error).message;
+      }
+      throw new Error("expected failure but succeeded");
+    }
+
+    it("1. two studio bookings at overlapping times: the second is refused", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        expect(await refused(c, s.portrait, manila(DAY, 10, 30), "b@example.com")).toMatch(
+          /slot_unavailable/,
+        );
+        // Staff can't double-book the studio either.
+        expect(await failsWith(c, () => adminBook(c, s.portrait, manila(DAY, 10)))).toMatch(
+          /slot_unavailable/,
+        );
+      });
+    });
+
+    it("2. a studio booking right after the previous one ends is allowed", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        // 10:00 + 60 min + 30 min buffer = free again at 11:30.
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        expect(await refused(c, s.portrait, manila(DAY, 11), "b@example.com")).toMatch(
+          /slot_unavailable/,
+        );
+        await expect(
+          book(c, s.portrait, manila(DAY, 11, 30), "b@example.com"),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("3. two weddings/prenups on the same day: the second is refused", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        await book(c, s.wedding, manila(DAY, 8), "a@example.com");
+        // Hours apart, and a different outside package: still the same day.
+        expect(await refused(c, s.prenup, manila(DAY, 16), "b@example.com")).toMatch(
+          /outside_day_full/,
+        );
+        expect(await refused(c, s.wedding, manila(DAY, 13), "c@example.com")).toMatch(
+          /outside_day_full/,
+        );
+        expect(await failsWith(c, () => adminBook(c, s.prenup, manila(DAY, 17)))).toMatch(
+          /outside_day_full/,
+        );
+        // The next day is free.
+        await expect(book(c, s.prenup, manila(DAY + 1, 8), "d@example.com")).resolves.toBeDefined();
+      });
+    });
+
+    it("4. a wedding and a studio booking at the same time are both allowed", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        await book(c, s.wedding, manila(DAY, 10), "a@example.com");
+        await expect(book(c, s.portrait, manila(DAY, 10), "b@example.com")).resolves.toBeDefined();
+        // And the other way round: studio first, then a prenup at that time.
+        await book(c, s.portrait, manila(DAY + 1, 10), "c@example.com");
+        await expect(
+          book(c, s.prenup, manila(DAY + 1, 10), "d@example.com"),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("5. a photobooth overlapping a studio booking and a wedding is allowed", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        await book(c, s.wedding, manila(DAY, 10), "b@example.com");
+        await expect(book(c, s.booth, manila(DAY, 9), "c@example.com")).resolves.toBeDefined();
+        // A second booth on top, and booths block neither the studio nor the day.
+        await expect(book(c, s.booth, manila(DAY, 10), "d@example.com")).resolves.toBeDefined();
+        await expect(book(c, s.portrait, manila(DAY, 13), "e@example.com")).resolves.toBeDefined();
+        await book(c, s.booth, manila(DAY + 1, 8), "f@example.com");
+        await expect(
+          book(c, s.wedding, manila(DAY + 1, 9), "g@example.com"),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("cancelled bookings don't block, and moves are checked too", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        const w = (await book(c, s.wedding, manila(DAY, 8), "a@example.com")).rows[0]!;
+        await c.query("update public.bookings set status = 'cancelled' where id = $1", [
+          w.booking_id,
+        ]);
+        await book(c, s.wedding, manila(DAY, 9), "b@example.com");
+
+        // A staff booking on another day can't be moved onto that day...
+        const { rows } = await adminBook(c, s.prenup, manila(DAY + 1, 8), { price: 800000 });
+        const id = rows[0]!.booking_id;
+        await updateBooking(c, id, s.prenup, manila(DAY + 1, 10), { pkg: 800000 });
+        expect(
+          await failsWith(c, () =>
+            updateBooking(c, id, s.prenup, manila(DAY, 14), { pkg: 800000 }),
+          ),
+        ).toMatch(/outside_day_full/);
+        // ...but as a studio package that day it's fine (the other category).
+        await expect(
+          updateBooking(c, id, s.portrait, manila(DAY, 14), { pkg: 800000 }),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("feeds the calendars: busy ranges are studio only, outside days per date", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        await book(c, s.portrait, manila(DAY, 10), "a@example.com");
+        const w = (await book(c, s.wedding, manila(DAY + 1, 10), "b@example.com")).rows[0]!;
+        await book(c, s.booth, manila(DAY + 2, 10), "c@example.com");
+
+        await actAs(c, "anon");
+        const busy = await c.query("select * from public.get_busy_ranges($1, $2)", [
+          manila(DAY, 0).toISOString(),
+          manila(DAY + 3, 0).toISOString(),
+        ]);
+        expect(busy.rows.map((r) => new Date(r.start_at).getTime())).toEqual([
+          manila(DAY, 10).getTime(),
+        ]);
+        const outside = () =>
+          c.query<{ d: string }>(
+            "select to_char(d, 'YYYY-MM-DD') as d from public.get_outside_days($1::date, $2::date) d",
+            [dateOf(manila(DAY - 1, 12)), dateOf(manila(DAY + 3, 12))],
+          );
+        expect((await outside()).rows.map((r) => r.d)).toEqual([dateOf(manila(DAY + 1, 10))]);
+
+        await c.query("reset role");
+        await c.query(
+          "update public.bookings set hold_expires_at = now() - interval '1 minute' where id = $1",
+          [w.booking_id],
+        );
+        await actAs(c, "anon");
+        expect((await outside()).rows).toEqual([]);
+      });
+    });
+
+    it("flags a late wedding payment when the day was taken meanwhile", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        await actAs(c, "service_role");
+        const lapsed = (await book(c, s.wedding, manila(DAY, 8), "a@example.com")).rows[0]!;
+        await c.query(
+          "update public.bookings set hold_expires_at = now() - interval '1 minute' where id = $1",
+          [lapsed.booking_id],
+        );
+        await book(c, s.prenup, manila(DAY, 15), "b@example.com"); // expires `lapsed`, takes the day
+        const { rows } = await c.query(PAID, [lapsed.reference_code, "cs_c", "pay_c", 200000]);
+        expect(rows[0].outcome).toBe("needs_review");
+      });
+    });
+
+    it("keeps workshops excluded, and the workshop only blocks studio bookings", async () => {
+      await inRollback(async (c) => {
+        const s = await categories(c);
+        const { rows } = await c.query<{ booking_category: string }>(
+          `insert into public.services (name, slug, category, price_cents, is_active, booking_category,
+             workshop_starts_at, workshop_ends_at, workshop_seats)
+           values ('Test Class', 'test-class', 'workshop', 500000, true, 'studio', $1, $2, 10)
+           returning booking_category`,
+          [manila(DAY, 9).toISOString(), manila(DAY, 12).toISOString()],
+        );
+        expect(rows[0]!.booking_category).toBe("excluded");
+        await actAs(c, "service_role");
+        expect(await refused(c, s.portrait, manila(DAY, 10), "a@example.com")).toMatch(
+          /slot_unavailable/,
+        );
+        await expect(book(c, s.wedding, manila(DAY, 10), "b@example.com")).resolves.toBeDefined();
+        await expect(book(c, s.booth, manila(DAY, 10), "c@example.com")).resolves.toBeDefined();
+        // Staff can still book the studio during the workshop.
+        await expect(adminBook(c, s.portrait, manila(DAY, 10))).resolves.toBeDefined();
+      });
+    });
+  });
+
   describe("capacity (several shoots at once)", () => {
     it("allows up to max_concurrent_bookings at the same time", async () => {
       await inRollback(async (c) => {
@@ -451,17 +847,19 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     });
 
     it("serialises booking creation so two requests can't both take the last spot", async () => {
-      // Session A checks capacity and keeps its transaction open; session B's check
+      // Session A checks the schedule and keeps its transaction open; session B's check
       // must wait for A (advisory lock), so B can't count before A's booking exists.
-      const range = "now() + interval '10 days', now() + interval '10 days 1 hour'";
+      // Any committed studio package will do (the lock is taken before counting).
+      const range = `now() + interval '10 days', now() + interval '10 days 1 hour',
+        (select id from public.services where booking_category = 'studio' limit 1)`;
       const a = await pool!.connect();
       const b = await pool!.connect();
       try {
         await a.query("begin");
-        await a.query(`select public.assert_capacity(${range})`);
+        await a.query(`select public.assert_schedule(${range})`);
         await b.query("begin");
         await b.query("set local lock_timeout = '1s'");
-        await expect(b.query(`select public.assert_capacity(${range})`)).rejects.toThrow(
+        await expect(b.query(`select public.assert_schedule(${range})`)).rejects.toThrow(
           /lock timeout/,
         );
       } finally {
@@ -477,9 +875,17 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     it("skips the notice rule, warns outside hours, and never exceeds capacity", async () => {
       await inRollback(async (c) => {
         const s = await setupFixtures(c, 1);
+        // The shared dev DB may hold a real booking tomorrow at 10:00; free it (rolled back).
+        const tomorrow = manila(1, 10);
+        await c.query(
+          `update public.bookings set status = 'cancelled'
+           where status in ('pending_payment', 'pending', 'confirmed')
+             and start_at < $1::timestamptz + interval '2 hours' and blocked_until > $1::timestamptz - interval '1 hour'`,
+          [tomorrow.toISOString()],
+        );
         await actAs(c, "service_role");
         // Tomorrow is too soon for the public, fine for staff.
-        const created = (await adminBook(c, s.portrait, manila(1, 10))).rows[0]!;
+        const created = (await adminBook(c, s.portrait, tomorrow)).rows[0]!;
         const { rows } = await c.query(
           "select status, source, hold_expires_at from public.bookings where id = $1",
           [created.booking_id],
@@ -565,6 +971,66 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("records a balance paid from the booking page without flagging it", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        await actAs(c, "service_role");
+        const b = (await book(c, s.portrait, manila(10, 10))).rows[0]!;
+        await c.query(PAID, [b.reference_code, "cs_dep", "pay_dep", 105000]);
+        const { rows: price } = await c.query(
+          "select price_cents from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        const balance = price[0].price_cents - 105000;
+        // The server creates the balance checkout as a pending "balance" payment first.
+        await c.query(
+          `insert into public.payments (booking_id, provider, provider_checkout_id, amount_cents, status, purpose)
+           values ($1, 'paymongo', 'cs_bal', $2, 'pending', 'balance')`,
+          [b.booking_id, balance],
+        );
+        const paid = await c.query(PAID, [b.reference_code, "cs_bal", "pay_bal", balance]);
+        expect(paid.rows[0].outcome).toBe("balance_paid");
+
+        // Paying the balance a second time is more than the price: flag it.
+        await c.query(
+          `insert into public.payments (booking_id, provider, provider_checkout_id, amount_cents, status, purpose)
+           values ($1, 'paymongo', 'cs_bal2', $2, 'pending', 'balance')`,
+          [b.booking_id, balance],
+        );
+        const again = await c.query(PAID, [b.reference_code, "cs_bal2", "pay_bal2", balance]);
+        expect(again.rows[0].outcome).toBe("needs_review");
+        const { rows } = await c.query(
+          "select status, needs_refund_review from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        expect(rows[0]).toEqual({ status: "pending", needs_refund_review: true });
+      });
+    });
+
+    it("clears the reminder mark when the booking's time moves", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        await actAs(c, "service_role");
+        const b = (await book(c, s.portrait, manila(10, 10))).rows[0]!;
+        await c.query("update public.bookings set reminder_sent_at = now() where id = $1", [
+          b.booking_id,
+        ]);
+        await c.query("update public.bookings set location = 'Park' where id = $1", [b.booking_id]);
+        const kept = await c.query("select reminder_sent_at from public.bookings where id = $1", [
+          b.booking_id,
+        ]);
+        expect(kept.rows[0].reminder_sent_at).not.toBeNull();
+        await c.query(
+          "update public.bookings set start_at = start_at + interval '1 day', end_at = end_at + interval '1 day', blocked_until = blocked_until + interval '1 day' where id = $1",
+          [b.booking_id],
+        );
+        const moved = await c.query("select reminder_sent_at from public.bookings where id = $1", [
+          b.booking_id,
+        ]);
+        expect(moved.rows[0].reminder_sent_at).toBeNull();
+      });
+    });
+
     it("settles a held booking once, even when the event repeats", async () => {
       await inRollback(async (c) => {
         const s = await setupFixtures(c);
@@ -624,6 +1090,16 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
     });
   });
 
+  it("purges old rate-limit rows daily", async () => {
+    await inRollback(async (c) => {
+      const { rows } = await c.query(
+        "select schedule, command from cron.job where jobname = 'purge-rate-limits'",
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].command).toMatch(/delete from public\.rate_limits/);
+    });
+  });
+
   it("hit_rate_limit allows N hits per window, then blocks", async () => {
     await inRollback(async (c) => {
       await actAs(c, "service_role");
@@ -635,6 +1111,1286 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
         true,
         false,
       ]);
+    });
+  });
+  describe("admin_update_booking (edit after booking)", () => {
+    it("moves a booking, changes the package and recomputes add-ons, VAT and total", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await c.query("update public.business_settings set vat_percent = 12 where id");
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        await updateBooking(c, b.booking_id, s.wedding, manila(150, 13), {
+          pkg: 900000,
+          addOns: [{ add_on_id: null, name: "Extra prints", price_cents: 50000 }],
+          vat: true,
+        });
+        const { rows } = await c.query(
+          `select service_id, start_at, end_at, price_cents, vat_cents, location, participants,
+             (select count(*)::int from public.booking_add_ons a where a.booking_id = b.id) as add_ons
+           from public.bookings b where id = $1`,
+          [b.booking_id],
+        );
+        expect(rows[0]).toMatchObject({
+          service_id: s.wedding,
+          price_cents: 1064000, // (9,000 + 500) + 12% VAT
+          vat_cents: 114000,
+          location: "Studio",
+          participants: 2,
+          add_ons: 1,
+        });
+        expect(new Date(rows[0].start_at).getTime()).toBe(manila(150, 13).getTime());
+        expect(new Date(rows[0].end_at).getTime()).toBe(manila(150, 15).getTime()); // 2h package
+      });
+    });
+
+    it("keeps its own time slot but refuses a full one", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const a = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        await adminBook(c, s.portrait, manila(150, 13), { email: "other@example.com" });
+        // Same time, new details: its own booking doesn't count against it.
+        await expect(
+          updateBooking(c, a.booking_id, s.portrait, manila(150, 10)),
+        ).resolves.toBeDefined();
+        expect(
+          await expectFailure(c, UPDATE, [
+            a.booking_id,
+            s.portrait,
+            manila(150, 13).toISOString(),
+            350000,
+            "[]",
+            false,
+          ]),
+        ).toMatch(/slot_unavailable/);
+      });
+    });
+
+    it("refuses cancelled bookings and caps the deposit at a lower total", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!; // deposit 105,000
+        await updateBooking(c, b.booking_id, s.portrait, manila(150, 10), { pkg: 50000 });
+        const { rows } = await c.query(
+          "select price_cents, deposit_cents from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        expect(rows[0]).toEqual({ price_cents: 50000, deposit_cents: 50000 });
+
+        await c.query("update public.bookings set status = 'cancelled' where id = $1", [
+          b.booking_id,
+        ]);
+        expect(
+          await expectFailure(c, UPDATE, [
+            b.booking_id,
+            s.portrait,
+            manila(150, 10).toISOString(),
+            350000,
+            "[]",
+            false,
+          ]),
+        ).toMatch(/booking_not_editable/);
+      });
+    });
+
+    it("rejects malformed add-ons", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        const bad = JSON.stringify([{ add_on_id: null, name: "X", price_cents: -5 }]);
+        expect(
+          await expectFailure(c, UPDATE, [
+            b.booking_id,
+            s.portrait,
+            manila(150, 10).toISOString(),
+            350000,
+            bad,
+            false,
+          ]),
+        ).toMatch(/invalid_add_ons/);
+      });
+    });
+  });
+
+  it("admin_create_booking includes staff-chosen add-ons in the total", async () => {
+    await inRollback(async (c) => {
+      const s = await setupFixtures(c, 1);
+      await actAs(c, "service_role");
+      const { rows } = await c.query<{ booking_id: string }>(
+        `select * from public.admin_create_booking(
+          p_full_name => 'Walk In', p_email => null, p_phone => '09171234567',
+          p_preferred_contact => 'phone', p_messenger => null, p_service_id => $1,
+          p_start_at => $2, p_price_cents => 300000, p_allow_outside_hours => false,
+          p_location => null, p_participants => 1, p_special_requests => null,
+          p_payment_provider => null, p_payment_amount_cents => null, p_payment_reference => null,
+          p_admin_id => null, p_add_ons => $3::jsonb)`,
+        [
+          s.portrait,
+          manila(150, 10).toISOString(),
+          JSON.stringify([{ add_on_id: null, name: "Videographer", price_cents: 200000 }]),
+        ],
+      );
+      const b = await c.query("select price_cents from public.bookings where id = $1", [
+        rows[0]!.booking_id,
+      ]);
+      expect(b.rows[0].price_cents).toBe(500000);
+    });
+  });
+
+  describe("package lengths and add-on rules", () => {
+    /** A package without a set length, the photobooth (4 h) and two add-ons with rules. */
+    async function lengthFixtures(c: PoolClient) {
+      const s = await setupFixtures(c, 1);
+      const { rows } = await c.query<{ id: string; slug: string }>(`
+        insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents, is_active)
+        values ('Test Session', 'test-session', 'portrait', null, 300000, 0, true),
+               ('Test Photobooth', 'test-photobooth', 'event', 240, 1000000, 0, true)
+        returning id, slug`);
+      const session = rows.find((r) => r.slug === "test-session")!.id;
+      const booth = rows.find((r) => r.slug === "test-photobooth")!.id;
+      const { rows: addOns } = await c.query<{ id: string; name: string }>(
+        `insert into public.add_ons (name, price_cents, extra_minutes, service_ids, is_active) values
+           ('Test Extension', 100000, 60, array[$1::uuid], true),
+           ('Test Second Shooter', 200000, 0, array[$2::uuid], true)
+         returning id, name`,
+        [booth, session],
+      );
+      const extension = addOns.find((a) => a.name === "Test Extension")!.id;
+      const shooter = addOns.find((a) => a.name === "Test Second Shooter")!.id;
+      return { ...s, session, booth, extension, shooter };
+    }
+
+    const WITH_ADD_ONS = `select * from public.create_booking(
+      p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+      p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+      p_start_at => $3, p_add_on_ids => $4)`;
+
+    it("books a package without a set length as a start time holding one slot", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        await actAs(c, "service_role");
+        const start = manila(10, 10);
+        const { booking_id } = (await book(c, s.session, start)).rows[0]!;
+        const b = await c.query(
+          "select end_at, blocked_until, has_end_time from public.bookings where id = $1",
+          [booking_id],
+        );
+        expect(b.rows[0].has_end_time).toBe(false);
+        expect(b.rows[0].end_at.getTime() - start.getTime()).toBe(30 * 60_000);
+        expect(b.rows[0].blocked_until.getTime() - start.getTime()).toBe(60 * 60_000); // + buffer
+
+        expect(
+          await expectFailure(c, CREATE, [
+            "Bea",
+            "bea@example.com",
+            "09171234567",
+            s.session,
+            manila(10, 10, 30).toISOString(),
+          ]),
+        ).toMatch(/slot_unavailable/);
+        await book(c, s.session, manila(10, 11), "cy@example.com");
+        // Any start up to the last slot before closing (19:00) fits.
+        await book(c, s.session, manila(10, 18, 30), "di@example.com");
+      });
+    });
+
+    it("lengthens the photobooth by its extensions and enforces which add-ons go where", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        await actAs(c, "service_role");
+        const start = manila(20, 10);
+        const { booking_id } = (
+          await c.query(WITH_ADD_ONS, [
+            "ana@example.com",
+            s.booth,
+            start.toISOString(),
+            [s.extension],
+          ])
+        ).rows[0]!;
+        const b = await c.query(
+          "select end_at, has_end_time, price_cents from public.bookings where id = $1",
+          [booking_id],
+        );
+        expect(b.rows[0].has_end_time).toBe(true);
+        expect(b.rows[0].end_at.getTime() - start.getTime()).toBe(5 * 60 * 60_000);
+        expect(b.rows[0].price_cents).toBe(1100000);
+
+        // 15:00 + 4 h + 1 h runs past closing.
+        expect(
+          await expectFailure(c, WITH_ADD_ONS, [
+            "bea@example.com",
+            s.booth,
+            manila(21, 15).toISOString(),
+            [s.extension],
+          ]),
+        ).toMatch(/outside_business_hours/);
+        // Add-ons only go with their packages.
+        for (const [service, addOn] of [
+          [s.session, s.extension],
+          [s.booth, s.shooter],
+        ]) {
+          expect(
+            await expectFailure(c, WITH_ADD_ONS, [
+              "cy@example.com",
+              service,
+              manila(22, 10).toISOString(),
+              [addOn],
+            ]),
+          ).toMatch(/add_on_unavailable/);
+        }
+      });
+    });
+
+    it("re-checks the slot when staff add an extension to a booking", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        await actAs(c, "service_role");
+        const { booking_id } = (await adminBook(c, s.booth, manila(30, 10))).rows[0]!;
+        // 10:00–14:00 + 30 min buffer; another shoot at 15:00.
+        await adminBook(c, s.session, manila(30, 15), { email: "next@example.com" });
+
+        const extension = JSON.stringify([
+          { add_on_id: s.extension, name: "Test Extension", price_cents: 100000 },
+        ]);
+        expect(
+          await expectFailure(c, UPDATE, [
+            booking_id,
+            s.booth,
+            manila(30, 10).toISOString(),
+            1000000,
+            extension,
+            false,
+          ]),
+        ).toMatch(/slot_unavailable/);
+
+        // Moved earlier, the extended booking (9:00–14:00) fits.
+        await c.query(UPDATE, [
+          booking_id,
+          s.booth,
+          manila(30, 9).toISOString(),
+          1000000,
+          extension,
+          false,
+        ]);
+        const b = await c.query("select end_at from public.bookings where id = $1", [booking_id]);
+        expect(b.rows[0].end_at.getTime()).toBe(manila(30, 14).getTime());
+      });
+    });
+
+    it("allows up to 10,000 people", async () => {
+      await inRollback(async (c) => {
+        const s = await lengthFixtures(c);
+        const { booking_id } = (await adminBook(c, s.session, manila(40, 10))).rows[0]!;
+        await c.query("update public.bookings set participants = 10000 where id = $1", [
+          booking_id,
+        ]);
+        expect(
+          await expectFailure(c, "update public.bookings set participants = 10001 where id = $1", [
+            booking_id,
+          ]),
+        ).toMatch(/participants_check/);
+      });
+    });
+  });
+
+  describe("delete_booking (owner, safeguarded)", () => {
+    it("deletes an unpaid booking and its client if they have no other bookings", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10), { email: null })).rows[0]!;
+        const { rows: before } = await c.query(
+          "select client_id from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        await c.query("select * from public.delete_booking($1)", [b.booking_id]);
+        expect(
+          (await c.query("select 1 from public.bookings where id = $1", [b.booking_id])).rows,
+        ).toHaveLength(0);
+        expect(
+          (await c.query("select 1 from public.clients where id = $1", [before[0].client_id])).rows,
+        ).toHaveLength(0);
+      });
+    });
+
+    it("refuses a booking with real payments but allows trial-mode ones", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const paid = (await adminBook(c, s.portrait, manila(150, 10), { pay: ["cash", 50000] }))
+          .rows[0]!;
+        expect(
+          await expectFailure(c, "select * from public.delete_booking($1)", [paid.booking_id]),
+        ).toMatch(/booking_has_payments/);
+
+        const online = (await book(c, s.portrait, manila(151, 10), "trial@example.com")).rows[0]!;
+        await c.query(PAID, [online.reference_code, "mock_cs_1", "mock_pay_1", 105000]);
+        await expect(
+          c.query("select * from public.delete_booking($1)", [online.booking_id]),
+        ).resolves.toBeDefined();
+      });
+    });
+
+    it("can't be run by anon or signed-in users", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        for (const role of ["anon", "authenticated"] as const) {
+          await actAs(c, role);
+          expect(
+            await expectFailure(c, "select * from public.delete_booking(gen_random_uuid())"),
+          ).toMatch(/permission denied/);
+          expect(
+            await expectFailure(
+              c,
+              `select * from public.admin_update_booking(gen_random_uuid(), gen_random_uuid(), now(),
+                 1, '[]'::jsonb, false, false, null, 1, null, 'A B', '0917000000', 'phone', null)`,
+            ),
+          ).toMatch(/permission denied/);
+          await c.query("reset role");
+        }
+      });
+    });
+  });
+  describe("privacy (anonymise a client, clear student IDs)", () => {
+    it("wipes a client's personal data but keeps the money records", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10), { pay: ["cash", 50000] }))
+          .rows[0]!;
+        await c.query(
+          "update public.bookings set special_requests = 'Bring the dog', admin_notes = 'VIP', status = 'cancelled' where id = $1",
+          [b.booking_id],
+        );
+        await c.query(
+          'update public.payments set raw = \'{"billing":{"name":"Walk In"}}\' where booking_id = $1',
+          [b.booking_id],
+        );
+        await c.query(
+          `insert into public.audit_logs (action, entity, entity_id, metadata)
+           values ('booking.update', 'booking', $1, '{"before":{"contact_name":"Walk In","price_cents":1},"emailed_client":true}')`,
+          [b.booking_id],
+        );
+        const { rows: before } = await c.query(
+          "select client_id, price_cents, reference_code from public.bookings where id = $1",
+          [b.booking_id],
+        );
+
+        await c.query("select * from public.anonymise_client($1)", [before[0].client_id]);
+
+        const { rows: client } = await c.query(
+          "select full_name, email, phone, consent_version from public.clients where id = $1",
+          [before[0].client_id],
+        );
+        expect(client[0]).toEqual({
+          full_name: "Deleted client",
+          email: null,
+          phone: "0000000",
+          consent_version: "anonymised",
+        });
+        const { rows: booking } = await c.query(
+          "select contact_name, contact_phone, special_requests, admin_notes, price_cents, reference_code from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        expect(booking[0]).toEqual({
+          contact_name: "Deleted client",
+          contact_phone: "0000000",
+          special_requests: null,
+          admin_notes: null,
+          price_cents: before[0].price_cents,
+          reference_code: before[0].reference_code,
+        });
+        const { rows: payments } = await c.query(
+          "select amount_cents, raw from public.payments where booking_id = $1",
+          [b.booking_id],
+        );
+        expect(payments).toEqual([{ amount_cents: 50000, raw: null }]);
+        const { rows: logs } = await c.query(
+          "select metadata from public.audit_logs where entity_id = $1 and action = 'booking.update'",
+          [b.booking_id],
+        );
+        expect(logs[0].metadata).toEqual({ before: { price_cents: 1 }, emailed_client: true });
+      });
+    });
+
+    it("refuses while the client has an upcoming booking, and only for the server", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        const { rows } = await c.query("select client_id from public.bookings where id = $1", [
+          b.booking_id,
+        ]);
+        expect(
+          await expectFailure(c, "select * from public.anonymise_client($1)", [rows[0].client_id]),
+        ).toMatch(/client_has_upcoming_booking/);
+        for (const role of ["anon", "authenticated"] as const) {
+          await c.query("reset role");
+          await actAs(c, role);
+          for (const fn of [
+            "public.anonymise_client(gen_random_uuid())",
+            "public.clear_past_student_ids()",
+          ]) {
+            expect(await expectFailure(c, `select * from ${fn}`)).toMatch(/permission denied/);
+          }
+        }
+      });
+    });
+
+    it("clears student ID photos only once the workshop is over", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 2);
+        await actAs(c, "service_role");
+        const past = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        const future = (await adminBook(c, s.portrait, manila(151, 10))).rows[0]!;
+        await c.query("reset role");
+        await c.query(
+          "update public.bookings set start_at = now() - interval '2 days', end_at = now() - interval '1 day', blocked_until = now() - interval '1 day' where id = $1",
+          [past.booking_id],
+        );
+        await c.query(
+          `insert into public.booking_attendees (booking_id, position, full_name, category, price_cents, student_id_path, id_status)
+           values ($1, 1, 'Old Student', 'student', 100, 'old.webp', 'accepted'),
+                  ($2, 1, 'New Student', 'student', 100, 'new.webp', 'pending')`,
+          [past.booking_id, future.booking_id],
+        );
+        await actAs(c, "service_role");
+        const { rows } = await c.query("select * from public.clear_past_student_ids()");
+        // The dev DB may hold other past workshops; ours must be in, the upcoming one out.
+        const paths = rows.map((r) => r.student_id_path);
+        expect(paths).toContain("old.webp");
+        expect(paths).not.toContain("new.webp");
+        const { rows: left } = await c.query(
+          "select student_id_path from public.booking_attendees where booking_id = any ($1) order by full_name",
+          [[past.booking_id, future.booking_id]],
+        );
+        expect(left).toEqual([{ student_id_path: "new.webp" }, { student_id_path: null }]);
+      });
+    });
+  });
+  describe("workshops (pay half or in full)", () => {
+    const WORKSHOP = `select * from public.create_booking(
+      p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+      p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+      p_start_at => $3, p_pay_in_full => $4,
+      p_attendees => '[{"name": "Ana Cruz", "category": "regular", "phone": "0917 123 4567", "address": "Tetuan, Zamboanga City"}]'::jsonb)`;
+
+    it("charges half or the full price, and needs the choice", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        // A fixed package deposit is ignored for workshops.
+        const { rows } = await c.query<{ id: string }>(`
+          insert into public.services (name, slug, category, duration_minutes, price_cents, deposit_cents,
+            workshop_starts_at, workshop_ends_at)
+          values ('Test Workshop', 'test-workshop', 'workshop', null, 100001, 5000,
+            '${manila(152, 9).toISOString()}', '${manila(152, 12).toISOString()}') returning id`);
+        const workshop = rows[0]!.id;
+        await actAs(c, "service_role");
+
+        const half = (
+          await c.query(WORKSHOP, [
+            "ana@example.com",
+            workshop,
+            manila(152, 10).toISOString(),
+            false,
+          ])
+        ).rows[0]!;
+        expect(half.deposit_cents).toBe(50001); // round(100001 / 2)
+        expect(half.status).toBe("pending_payment");
+
+        const full = (
+          await c.query(WORKSHOP, [
+            "bea@example.com",
+            workshop,
+            manila(152, 11).toISOString(),
+            true,
+          ])
+        ).rows[0]!;
+        expect(full.deposit_cents).toBe(100001);
+
+        expect(
+          await expectFailure(c, WORKSHOP, [
+            "cy@example.com",
+            workshop,
+            manila(152, 12).toISOString(),
+            null,
+          ]),
+        ).toMatch(/payment_option_required/);
+
+        // Packages ignore the option and keep their deposit rules.
+        const pkg = (
+          await c.query(WORKSHOP, [
+            "di@example.com",
+            s.portrait,
+            manila(153, 10).toISOString(),
+            true,
+          ])
+        ).rows[0]!;
+        expect(pkg.deposit_cents).toBe(105000);
+      });
+    });
+  });
+
+  describe("workshop schedule (admin sets the time and place)", () => {
+    const SIGN_UP = `select * from public.create_booking(
+      p_full_name => 'Ana Cruz', p_email => $1, p_phone => '09171234567',
+      p_preferred_contact => 'email', p_consent_version => 'v1', p_service_id => $2,
+      p_start_at => now(), p_participants => $3, p_pay_in_full => true,
+      p_location => 'My house', p_attendees => $4::jsonb)`;
+
+    /** Certificate names for n people (none needed for one). */
+    type Person = {
+      name: string;
+      category?: string;
+      id_path?: string | null;
+      phone?: string;
+      address?: string;
+    };
+    /** The attendees as create_booking takes them (JSON); n regular people by default. */
+    const contact = { phone: "0917 123 4567", address: "Tetuan, Zamboanga City" };
+    const names = (n: number | Person[]) =>
+      JSON.stringify(
+        typeof n === "number"
+          ? Array.from({ length: n }, (_, i) => ({
+              name: `Person ${i + 1}`,
+              category: "regular",
+              ...contact,
+            }))
+          : n.map((p) => ({ category: "regular", ...contact, ...p })),
+      );
+
+    /** The same instant as Postgres returns it (UTC ISO). */
+    const utc = (d: Date) => new Date(d.getTime()).toISOString();
+
+    async function addWorkshop(
+      c: PoolClient,
+      opts: {
+        start?: Date | null;
+        end?: Date | null;
+        seats?: number | null;
+        location?: string | null;
+        earlyBirdUntil?: string | null;
+        earlyBirdSeats?: number | null;
+        studentPrice?: number | null;
+      } = {},
+    ) {
+      const start = opts.start === undefined ? manila(160, 13) : opts.start;
+      const end = opts.end === undefined ? manila(160, 17) : opts.end;
+      const { rows } = await c.query<{ id: string }>(
+        `insert into public.services (name, slug, category, price_cents,
+           workshop_starts_at, workshop_ends_at, workshop_seats, workshop_location,
+           workshop_early_bird_price_cents, workshop_early_bird_until, workshop_early_bird_seats,
+           workshop_student_price_cents)
+         values ('Test Workshop', 'test-workshop', 'workshop', 500000, $1, $2, $3, $4,
+           400000, $5, $6, $7) returning id`,
+        [
+          start?.toISOString() ?? null,
+          end?.toISOString() ?? null,
+          opts.seats ?? null,
+          opts.location === undefined ? "The studio" : opts.location,
+          opts.earlyBirdUntil ?? null,
+          opts.earlyBirdSeats ?? null,
+          opts.studentPrice === undefined ? 400000 : opts.studentPrice,
+        ],
+      );
+      return rows[0]!.id;
+    }
+
+    it("every sign-up takes the workshop's time, whatever time is sent", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // one shoot at a time: sign-ups must not count as shoots
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        for (const email of ["ana@example.com", "bea@example.com", "cy@example.com"]) {
+          await c.query(SIGN_UP, [email, workshop, 1, names(1)]);
+        }
+        const { rows } = await c.query<{
+          start_at: Date;
+          end_at: Date;
+          has_end_time: boolean;
+          location: string | null;
+        }>(
+          "select start_at, end_at, has_end_time, location from public.bookings where service_id = $1",
+          [workshop],
+        );
+        expect(rows).toHaveLength(3);
+        for (const r of rows) {
+          // The client's location is ignored: the workshop's own place wins.
+          expect(r.location).toBe("The studio");
+          expect(r.start_at.toISOString()).toBe(utc(manila(160, 13)));
+          expect(r.end_at.toISOString()).toBe(utc(manila(160, 17)));
+          expect(r.has_end_time).toBe(true);
+        }
+      });
+    });
+
+    it("a multi-day workshop only blocks its own days' hours", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        // Day 1 and day 3 (the day in between is free for shoots).
+        const workshop = await addWorkshop(c, { start: manila(160, 13), end: manila(162, 17) });
+        await c.query("update public.services set workshop_days = $2::jsonb where id = $1", [
+          workshop,
+          JSON.stringify([
+            { starts_at: manila(160, 13).toISOString(), ends_at: manila(160, 17).toISOString() },
+            { starts_at: manila(162, 13).toISOString(), ends_at: manila(162, 17).toISOString() },
+          ]),
+        ]);
+
+        await actAs(c, "anon");
+        const { rows: busy } = await c.query<{ start_at: Date; blocked_until: Date }>(
+          "select * from public.get_busy_ranges($1, $2)",
+          [manila(159, 0).toISOString(), manila(164, 0).toISOString()],
+        );
+        expect(busy.map((r) => [utc(r.start_at), utc(r.blocked_until)])).toEqual([
+          [utc(manila(160, 13)), utc(manila(160, 17))],
+          [utc(manila(162, 13)), utc(manila(162, 17))],
+        ]);
+
+        await actAs(c, "service_role");
+        // The day in between books normally; a workshop day's hours don't.
+        const between = await book(c, s.portrait, manila(161, 14), "between@example.com");
+        expect(between.rows[0]!.booking_id).toBeTruthy();
+        expect(
+          await expectFailure(c, CREATE, [
+            "X Y",
+            "day3@example.com",
+            "09171234567",
+            s.portrait,
+            manila(162, 14).toISOString(),
+          ]),
+        ).toMatch(/slot_unavailable/);
+      });
+    });
+
+    it("prices the workshop per person; half or full is of that total", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // VAT 0
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const three = (await c.query(SIGN_UP, ["ana@example.com", workshop, 3, names(3)])).rows[0]!;
+        expect(three.deposit_cents).toBe(1_500_000); // 3 x 5,000.00, paid in full
+        const { rows } = await c.query<{ price_cents: number }>(
+          "select price_cents from public.bookings where id = $1",
+          [three.booking_id],
+        );
+        expect(rows[0]!.price_cents).toBe(1_500_000);
+      });
+    });
+
+    it("takes 1 to 3 people, each named for their certificate", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const fails = (people: string | null) =>
+          expectFailure(c, SIGN_UP, ["ana@example.com", workshop, 1, people]);
+        expect(await fails(names(4))).toMatch(/invalid_participants/);
+        expect(await fails(null)).toMatch(/invalid_participants/);
+        expect(await fails(names([{ name: "Ana Cruz" }, { name: " " }]))).toMatch(
+          /invalid_attendees/,
+        );
+        expect(await fails(names([{ name: "Ana Cruz", category: "vip" }]))).toMatch(
+          /category_unavailable/,
+        );
+
+        // The count follows the names, whatever p_participants says.
+        const two = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: " Ana Cruz " }, { name: "Ben Reyes" }]),
+          ])
+        ).rows[0]!;
+        const { rows } = await c.query<{ position: number; full_name: string }>(
+          "select position, full_name from public.booking_attendees where booking_id = $1 order by position",
+          [two.booking_id],
+        );
+        expect(rows).toEqual([
+          { position: 1, full_name: "Ana Cruz" },
+          { position: 2, full_name: "Ben Reyes" },
+        ]);
+        const { rows: booking } = await c.query<{ participants: number }>(
+          "select participants from public.bookings where id = $1",
+          [two.booking_id],
+        );
+        expect(booking[0]!.participants).toBe(2);
+      });
+    });
+
+    it("prices each person by category; a student needs an uploaded ID", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c); // VAT 0
+        const workshop = await addWorkshop(c);
+        await c.query(
+          "insert into storage.objects (bucket_id, name) values ('student-ids', 'test-id.webp')",
+        );
+        await actAs(c, "service_role");
+        expect(
+          await expectFailure(c, SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: "Ana Cruz", category: "student", id_path: "missing.webp" }]),
+          ]),
+        ).toMatch(/student_id_required/);
+
+        const mixed = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            3,
+            names([
+              { name: "Ana Cruz" },
+              { name: "Ben Reyes", category: "early_bird" },
+              { name: "Cy Lim", category: "student", id_path: "test-id.webp" },
+            ]),
+          ])
+        ).rows[0]!;
+        expect(mixed.deposit_cents).toBe(1_300_000); // 5,000 + 4,000 + 4,000, paid in full
+        const { rows } = await c.query<{
+          category: string;
+          price_cents: number;
+          id_status: string | null;
+        }>(
+          "select category, price_cents, id_status from public.booking_attendees where booking_id = $1 order by position",
+          [mixed.booking_id],
+        );
+        expect(rows).toEqual([
+          { category: "regular", price_cents: 500_000, id_status: null },
+          { category: "early_bird", price_cents: 400_000, id_status: null },
+          { category: "student", price_cents: 400_000, id_status: "pending" },
+        ]);
+      });
+    });
+
+    it("needs a mobile number and address for each person, and keeps them", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        for (const missing of [{ phone: "12" }, { address: " " }]) {
+          expect(
+            await expectFailure(c, SIGN_UP, [
+              "ana@example.com",
+              workshop,
+              1,
+              names([{ name: "Ana Cruz", ...missing }]),
+            ]),
+          ).toMatch(/attendee_contact_required/);
+        }
+        const ok = (
+          await c.query(SIGN_UP, [
+            "ana@example.com",
+            workshop,
+            1,
+            names([{ name: "Ana Cruz", phone: " 0917 555 0000 ", address: " Pasonanca " }]),
+          ])
+        ).rows[0]!;
+        const { rows } = await c.query<{ phone: string; address: string }>(
+          "select phone, address from public.booking_attendees where booking_id = $1",
+          [ok.booking_id],
+        );
+        expect(rows[0]).toEqual({ phone: "0917 555 0000", address: "Pasonanca" });
+      });
+    });
+
+    it("refuses a category the admin switched off", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await c.query(
+          "update public.services set workshop_regular_enabled = false, workshop_early_bird_enabled = false where id = $1",
+          [workshop],
+        );
+        await actAs(c, "service_role");
+        for (const category of ["regular", "early_bird"]) {
+          expect(
+            await expectFailure(c, SIGN_UP, [
+              "ana@example.com",
+              workshop,
+              1,
+              names([{ name: "Ana Cruz", category }]),
+            ]),
+          ).toMatch(/category_unavailable/);
+        }
+      });
+    });
+
+    it("closes early bird after its last day or its places, and unoffered categories", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const ended = await addWorkshop(c, { earlyBirdUntil: "2020-01-31", studentPrice: null });
+        await actAs(c, "service_role");
+        const early = names([{ name: "Ana Cruz", category: "early_bird" }]);
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", ended, 1, early])).toMatch(
+          /early_bird_closed/,
+        );
+        expect(
+          await expectFailure(c, SIGN_UP, [
+            "ana@example.com",
+            ended,
+            1,
+            names([{ name: "Ana Cruz", category: "student", id_path: "x.webp" }]),
+          ]),
+        ).toMatch(/category_unavailable/);
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c, { earlyBirdSeats: 2 });
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, [
+          "ana@example.com",
+          workshop,
+          1,
+          names([{ name: "Ana Cruz", category: "early_bird" }]),
+        ]);
+        // One early-bird place left: two more can't both have it.
+        const two = names([
+          { name: "Ben Reyes", category: "early_bird" },
+          { name: "Cy Lim", category: "early_bird" },
+        ]);
+        expect(await expectFailure(c, SIGN_UP, ["ben@example.com", workshop, 2, two])).toMatch(
+          /early_bird_full/,
+        );
+        const { rows } = await c.query<{ taken: number }>(
+          "select public.workshop_early_birds_taken($1) as taken",
+          [workshop],
+        );
+        expect(rows[0]!.taken).toBe(1);
+      });
+    });
+
+    it("refuses sign-ups with no date, after it starts, or past the seats", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const noDate = await addWorkshop(c, { start: null, end: null });
+        await actAs(c, "service_role");
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", noDate, 1, names(1)])).toMatch(
+          /workshop_not_scheduled/,
+        );
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const started = await addWorkshop(c, {
+          start: new Date(Date.now() - 3_600_000),
+          end: new Date(Date.now() + 3_600_000),
+        });
+        await actAs(c, "service_role");
+        expect(await expectFailure(c, SIGN_UP, ["ana@example.com", started, 1, names(1)])).toMatch(
+          /workshop_closed/,
+        );
+      });
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c, { seats: 3 });
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 2, names(2)]);
+        // Two people asked, one seat left.
+        expect(await expectFailure(c, SIGN_UP, ["bea@example.com", workshop, 2, names(2)])).toMatch(
+          /workshop_full/,
+        );
+        await c.query(SIGN_UP, ["bea@example.com", workshop, 1, names(1)]);
+        const { rows } = await c.query<{ taken: number }>(
+          "select public.workshop_seats_taken($1) as taken",
+          [workshop],
+        );
+        expect(rows[0]!.taken).toBe(3);
+        expect(await expectFailure(c, SIGN_UP, ["cy@example.com", workshop, 1, names(1)])).toMatch(
+          /workshop_full/,
+        );
+      });
+    });
+
+    it("blocks shoots during the workshop, on the calendar and in create_booking", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        await c.query(SIGN_UP, ["ana@example.com", workshop, 1, names(1)]);
+
+        expect(
+          await expectFailure(c, CREATE, [
+            "Bea",
+            "bea@example.com",
+            "09171234567",
+            s.portrait,
+            manila(160, 14).toISOString(),
+          ]),
+        ).toMatch(/slot_unavailable/);
+        // Before the workshop (ends with the 30-min buffer at 12:00) is fine.
+        await book(c, s.portrait, manila(160, 10, 30), "cy@example.com");
+        // Staff can still book during it (the sign-up doesn't count as a shoot).
+        await adminBook(c, s.portrait, manila(160, 15));
+
+        await actAs(c, "anon");
+        const { rows } = await c.query<{ start_at: Date; blocked_until: Date }>(
+          "select * from public.get_busy_ranges($1, $2)",
+          [manila(160, 0).toISOString(), manila(161, 0).toISOString()],
+        );
+        const ranges = rows.map((r) => [r.start_at.toISOString(), r.blocked_until.toISOString()]);
+        // The workshop once (capacity 1), not once per sign-up; plus the two shoots.
+        expect(ranges.filter(([a]) => a === utc(manila(160, 13)))).toEqual([
+          [utc(manila(160, 13)), utc(manila(160, 17))],
+        ]);
+        expect(ranges).toHaveLength(3);
+      });
+    });
+
+    it("moving the workshop (time or place) moves its open sign-ups", async () => {
+      await inRollback(async (c) => {
+        await setupFixtures(c);
+        const workshop = await addWorkshop(c);
+        await actAs(c, "service_role");
+        const { booking_id } = (await c.query(SIGN_UP, ["ana@example.com", workshop, 1, names(1)]))
+          .rows[0]!;
+        await c.query(
+          "update public.services set workshop_starts_at = $2, workshop_ends_at = $3 where id = $1",
+          [workshop, manila(170, 9).toISOString(), manila(170, 12).toISOString()],
+        );
+        await c.query("update public.services set workshop_location = 'New venue' where id = $1", [
+          workshop,
+        ]);
+        const { rows } = await c.query<{
+          start_at: Date;
+          blocked_until: Date;
+          location: string | null;
+        }>("select start_at, blocked_until, location from public.bookings where id = $1", [
+          booking_id,
+        ]);
+        expect(rows[0]!.location).toBe("New venue");
+        expect(rows[0]!.start_at.toISOString()).toBe(utc(manila(170, 9)));
+        expect(rows[0]!.blocked_until.toISOString()).toBe(utc(manila(170, 12)));
+      });
+    });
+  });
+
+  describe("payroll", () => {
+    async function payrollUsers(c: PoolClient) {
+      const adminId = crypto.randomUUID();
+      const userId = crypto.randomUUID();
+      await c.query(
+        "insert into auth.users (id, email) values ($1, 'admin@test.local'), ($2, 'user@test.local')",
+        [adminId, userId],
+      );
+      await c.query("insert into public.admin_profiles (user_id, role) values ($1, 'admin')", [
+        adminId,
+      ]);
+      return { adminId, userId };
+    }
+
+    async function addEmployee(c: PoolClient, name = "Ana Cruz") {
+      const { rows } = await c.query(
+        `insert into public.employees (full_name, position, date_hired, salary_type, salary_rate)
+         values ($1, 'Photographer', '2026-01-05', 'monthly', 20000) returning id`,
+        [name],
+      );
+      return rows[0]!.id as string;
+    }
+
+    it("lets admins (not other users or anon) use the payroll tables", async () => {
+      await inRollback(async (c) => {
+        const { adminId, userId } = await payrollUsers(c);
+        await actAs(c, "authenticated", adminId);
+        const id = await addEmployee(c);
+        const benefits = await c.query(
+          "select * from public.employee_benefits where employee_id = $1",
+          [id],
+        );
+        expect(benefits.rows[0]).toMatchObject({
+          sss_enabled: true,
+          philhealth_enabled: true,
+          pagibig_enabled: true,
+        });
+        const settings = await c.query("select * from public.contribution_settings");
+        expect(Number(settings.rows[0]!.sss_employee_rate)).toBe(0.05);
+        expect(Number(settings.rows[0]!.work_days_per_month)).toBe(30);
+        expect(Number(settings.rows[0]!.hours_per_day)).toBe(8);
+
+        for (const [role, uid] of [
+          ["authenticated", userId],
+          ["anon", undefined],
+        ] as const) {
+          await c.query("reset role");
+          await actAs(c, role, uid);
+          for (const table of [
+            "employees",
+            "employee_benefits",
+            "contribution_settings",
+            "attendance_logs",
+            "payroll_periods",
+            "payslips",
+          ]) {
+            const { rows } = await c.query(`select * from public.${table}`);
+            expect(rows, `${role}: ${table}`).toHaveLength(0);
+          }
+          expect(
+            await expectFailure(
+              c,
+              `insert into public.employees (full_name, position, date_hired, salary_type, salary_rate)
+               values ('X Y', 'Staff', '2026-01-01', 'daily', 600)`,
+            ),
+          ).toMatch(/row-level security|permission denied/);
+          expect(
+            await expectFailure(
+              c,
+              "select public.save_payroll('2026-11-01', '2026-11-15', '[]'::jsonb, null)",
+            ),
+          ).toMatch(/permission denied/);
+        }
+      });
+    });
+
+    it("computes hours worked, including shifts past midnight", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out) values
+           ($1, '2026-11-02', 'present', '08:00', '17:30'),
+           ($1, '2026-11-03', 'present', '18:00', '01:15'),
+           ($1, '2026-11-04', 'absent', null, null)`,
+          [id],
+        );
+        const { rows } = await c.query(
+          "select minutes_worked from public.attendance_logs where employee_id = $1 order by work_date",
+          [id],
+        );
+        expect(rows.map((r) => r.minutes_worked)).toEqual([570, 435, 0]);
+        const insert = (
+          date: string,
+          status: string,
+          timeIn: string | null,
+          timeOut: string | null,
+        ) =>
+          expectFailure(
+            c,
+            `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out)
+             values ($1, $2, $3, $4, $5)`,
+            [id, date, status, timeIn, timeOut],
+          );
+        expect(await insert("2026-11-05", "present", null, null)).toMatch(/attendance_logs_times/);
+        expect(await insert("2026-11-06", "leave", "08:00", "17:00")).toMatch(
+          /attendance_logs_times/,
+        );
+        expect(await insert("2026-11-04", "leave", null, null)).toMatch(
+          /attendance_logs_one_per_day/,
+        );
+      });
+    });
+
+    it("AM/PM shifts, rest days and the daily rate saved on each record", async () => {
+      await inRollback(async (c) => {
+        // The sample day: Studio AM, Events PM past midnight, Photobooth rest day.
+        const add = async (name: string, category: string, type: string, rate: number) => {
+          const { rows } = await c.query(
+            `insert into public.employees (full_name, position, date_hired, salary_type, salary_rate, category)
+             values ($1, 'Staff', '2026-01-05', $2, $3, $4) returning id`,
+            [name, type, rate, category],
+          );
+          return rows[0]!.id as string;
+        };
+        const bea = await add("Bea Studio", "studio", "daily", 650);
+        const carlo = await add("Carlo Events", "events", "monthly", 24015); // ÷ 30 = ₱800.50
+        const dina = await add("Dina Booth", "photobooth", "daily", 700);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out) values
+           ($1, '2026-11-10', 'am', '08:00', '16:00'),
+           ($2, '2026-11-10', 'pm', '18:00', '02:00'),
+           ($3, '2026-11-10', 'rest_day', null, null)`,
+          [bea, carlo, dina],
+        );
+        const day = async () =>
+          (
+            await c.query(
+              `select e.full_name, l.status, l.minutes_worked, l.daily_rate, l.time_out_edited
+               from public.attendance_logs l join public.employees e on e.id = l.employee_id
+               where l.work_date = '2026-11-10' and l.employee_id = any($1) order by e.full_name`,
+              [[bea, carlo, dina]],
+            )
+          ).rows.map((r) => [
+            r.full_name,
+            r.status,
+            r.minutes_worked,
+            Number(r.daily_rate),
+            r.time_out_edited,
+          ]);
+        expect(await day()).toEqual([
+          ["Bea Studio", "am", 480, 650, false],
+          ["Carlo Events", "pm", 480, 800.5, false],
+          ["Dina Booth", "rest_day", 0, 700, false],
+        ]);
+
+        // A raise later doesn't touch the saved day; a changed time out is flagged.
+        await c.query("update public.employees set salary_rate = 900 where id = $1", [bea]);
+        await c.query(
+          "update public.attendance_logs set time_out = '15:00' where employee_id = $1",
+          [bea],
+        );
+        expect((await day())[0]).toEqual(["Bea Studio", "am", 420, 650, true]);
+
+        // AM/PM need both times; rest days take none; employees take only the 3 categories.
+        expect(
+          await expectFailure(
+            c,
+            `insert into public.attendance_logs (employee_id, work_date, status) values ($1, '2026-11-11', 'pm')`,
+            [bea],
+          ),
+        ).toMatch(/attendance_logs_times/);
+        expect(
+          await expectFailure(
+            c,
+            `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out)
+             values ($1, '2026-11-11', 'rest_day', '08:00', '16:00')`,
+            [bea],
+          ),
+        ).toMatch(/attendance_logs_times/);
+        expect(
+          await expectFailure(
+            c,
+            "update public.employees set category = 'weddings' where id = $1",
+            [bea],
+          ),
+        ).toMatch(/employees_category_check/);
+      });
+    });
+
+    it("AM/PM shift: 9:30 AM–10:00 PM, the AM/PM rate when none is given", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c); // monthly ₱20,000 → ₱666.67 a day
+        const amPmRate = Number(
+          (await c.query("select am_pm_rate from public.contribution_settings")).rows[0]!
+            .am_pm_rate,
+        );
+        expect(amPmRate).toBe(650);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status, time_in, time_out) values
+           ($1, '2026-11-10', 'am_pm', '09:30', '22:00'),
+           ($1, '2026-11-11', 'am_pm', '09:30', '20:00'),
+           ($1, '2026-11-12', 'am', '09:30', '17:30')`,
+          [id],
+        );
+        const { rows } = await c.query(
+          `select status, minutes_worked, daily_rate, time_out_edited from public.attendance_logs
+           where employee_id = $1 order by work_date`,
+          [id],
+        );
+        expect(
+          rows.map((r) => [r.status, r.minutes_worked, Number(r.daily_rate), r.time_out_edited]),
+        ).toEqual([
+          ["am_pm", 750, 650, false],
+          ["am_pm", 630, 650, true],
+          ["am", 480, 666.67, false],
+        ]);
+      });
+    });
+
+    it("a deleted employee is never active, and keeps their records", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c);
+        await c.query(
+          `insert into public.attendance_logs (employee_id, work_date, status) values ($1, '2026-11-10', 'rest_day')`,
+          [id],
+        );
+        expect(
+          await expectFailure(c, "update public.employees set deleted_at = now() where id = $1", [
+            id,
+          ]),
+        ).toMatch(/employees_deleted_inactive/);
+        await c.query(
+          "update public.employees set deleted_at = now(), is_active = false where id = $1",
+          [id],
+        );
+        const { rows } = await c.query(
+          "select count(*)::int as n from public.attendance_logs where employee_id = $1",
+          [id],
+        );
+        expect(rows[0]!.n).toBe(1);
+      });
+    });
+
+    it("save_payroll replaces a cut-off's payslips and only accepts real cut-offs", async () => {
+      await inRollback(async (c) => {
+        const id = await addEmployee(c);
+        const slip = {
+          employee_id: id,
+          employee_name: "Ana Cruz",
+          employee_position: "Photographer",
+          salary_type: "monthly",
+          salary_rate: 20000,
+          daily_rate: 769.23,
+          monthly_salary: 20000,
+          days_present: 10,
+          days_absent: 1,
+          days_leave: 0,
+          days_holiday: 0,
+          minutes_worked: 4800,
+          basic_pay: 10000,
+          absence_deduction: 769.23,
+          sss_deduction: 500,
+          philhealth_deduction: 250,
+          pagibig_deduction: 100,
+          gross_pay: 10000,
+          total_deductions: 1619.23,
+          net_pay: 8380.77,
+        };
+        await actAs(c, "service_role");
+        const save = (start: string, end: string, slips: unknown[]) =>
+          c.query("select public.save_payroll($1, $2, $3::jsonb, null) as id", [
+            start,
+            end,
+            JSON.stringify(slips),
+          ]);
+        const first = (await save("2026-11-16", "2026-11-30", [slip])).rows[0]!.id;
+        const again = (
+          await save("2026-11-16", "2026-11-30", [
+            { ...slip, sss_deduction: null, total_deductions: 1119.23, net_pay: 8880.77 },
+          ])
+        ).rows[0]!.id;
+        expect(again).toBe(first);
+        const { rows } = await c.query(
+          "select sss_deduction, net_pay from public.payslips where payroll_period_id = $1",
+          [first],
+        );
+        expect(rows).toEqual([{ sss_deduction: null, net_pay: "8880.77" }]);
+
+        await save("2026-02-16", "2026-02-28", []);
+        await save("2026-11-01", "2026-11-15", []);
+        const fails = (start: string, end: string, slips: unknown[] = []) =>
+          expectFailure(c, "select public.save_payroll($1, $2, $3::jsonb, null)", [
+            start,
+            end,
+            JSON.stringify(slips),
+          ]);
+        expect(await fails("2026-11-02", "2026-11-16")).toMatch(/payroll_periods_cutoff/);
+        expect(await fails("2026-11-16", "2026-11-29")).toMatch(/payroll_periods_cutoff/);
+        expect(await fails("2026-12-01", "2026-12-15", [{ ...slip, net_pay: 1 }])).toMatch(
+          /payslips_totals/,
+        );
+        // Overtime counts in gross pay; undertime in the deductions.
+        expect(await fails("2026-12-01", "2026-12-15", [{ ...slip, overtime_pay: 250 }])).toMatch(
+          /payslips_totals/,
+        );
+        const hourly = {
+          ...slip,
+          overtime_pay: 250,
+          undertime_deduction: 125,
+          gross_pay: 10250,
+          total_deductions: 1744.23,
+          net_pay: 8505.77,
+        };
+        const dec = (await save("2026-12-01", "2026-12-15", [hourly])).rows[0]!.id;
+        const { rows: saved } = await c.query(
+          "select overtime_pay, undertime_deduction, hourly_rate from public.payslips where payroll_period_id = $1",
+          [dec],
+        );
+        expect(saved).toEqual([
+          { overtime_pay: "250.00", undertime_deduction: "125.00", hourly_rate: "0.00" },
+        ]);
+      });
     });
   });
 });

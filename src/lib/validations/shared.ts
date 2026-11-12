@@ -18,9 +18,16 @@ export const intString = (min: number, max: number) =>
   z
     .string()
     .trim()
-    .regex(/^\d+$/, "Enter a whole number.")
+    // "1,000" is fine too.
+    .transform((v) => v.replace(/,(?=\d{3}\b)/g, ""))
+    .pipe(z.string().regex(/^\d+$/, "Enter a whole number."))
     .transform(Number)
-    .pipe(z.number().min(min, `Must be at least ${min}.`).max(max, `Must be at most ${max}.`));
+    .pipe(
+      z
+        .number()
+        .min(min, `Must be at least ${min.toLocaleString("en-PH")}.`)
+        .max(max, `Must be at most ${max.toLocaleString("en-PH")}.`),
+    );
 
 /** Peso amount typed into an input → centavos. */
 export const pesoString = z.string().transform((v, ctx) => {
