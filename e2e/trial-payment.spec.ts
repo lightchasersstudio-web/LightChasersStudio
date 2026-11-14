@@ -48,13 +48,17 @@ test("pay through the pretend checkout, then review and confirm it as admin", as
   await pickFirstFreeTime(page);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Review & pay" })).toBeVisible();
+  // Sign and agree to the package contract and the studio policy, when shown.
+  await agreeToTerms(page, name);
   await page.getByRole("button", { name: /Pay .* deposit/ }).click();
 
   await expect(page).toHaveURL(/\/book\/mock-checkout\?/);
   await expect(page.getByText("TEST MODE — no real money")).toBeVisible();
   await page.getByRole("button", { name: /Pay .* \(test\)/ }).click();
-  await expect(page).toHaveURL(/\/book\/done\?ref=BK-/);
-  await expect(page.getByRole("heading", { name: "Thank you!" })).toBeVisible();
+  // Settling sends the emails and the receipt PDF first, which takes a few seconds.
+  await expect(page).toHaveURL(/\/book\/done\?ref=BK-/, { timeout: 20_000 });
+  await expect(page.getByRole("heading", { name: /^Thank you/, level: 1 })).toBeVisible();
   const reference = new URL(page.url()).searchParams.get("ref")!;
 
   // Admin sees it waiting for their OK, confirms it.
@@ -63,30 +67,54 @@ test("pay through the pretend checkout, then review and confirm it as admin", as
   await page.getByLabel("Password").fill(process.env.E2E_ADMIN_PASSWORD!);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin$/);
-  const review = page.locator("section", {
-    has: page.getByRole("heading", { name: /Needs your (OK|attention)/ }),
-  });
-  await review.getByRole("link", { name: new RegExp(name) }).click();
+  // Find it through the bookings search (the dashboard only shows the first few).
+  await page.goto(`/admin/bookings?q=${encodeURIComponent(name)}`);
+  await page
+    .getByRole("link", { name: new RegExp(name) })
+    .first()
+    .click();
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   await expect(
     page.getByText("Needs review", { exact: true }).filter({ visible: true }).first(),
   ).toBeVisible();
   await expect(page.getByText("PayMongo").filter({ visible: true }).first()).toBeVisible();
+  // Every payment gets a numbered receipt (studio policy 1.5).
+  await expect(page.getByText(/Receipt AR-\d{4}-\d{5}/).first()).toBeVisible();
   await page.getByRole("button", { name: "Confirm booking" }).click();
-  await expect(page.getByText("Booking confirmed.")).toBeVisible();
+  await expect(page.getByText("Booking confirmed.")).toBeVisible({ timeout: 15_000 });
 
-  // Email previews: received (client + studio) and confirmed.
-  await page.goto("/admin/trial-emails");
-  await expect(page.getByText(`We received your booking ${reference}`)).toBeVisible();
-  await expect(page.getByText(`Your booking ${reference} is confirmed`)).toBeVisible();
+  // Email previews: received (client + studio) and confirmed. With the studio
+  // Gmail set up, emails are really sent instead, so there are no previews.
+  if (!process.env.GMAIL_USER) {
+    await page.goto("/admin/trial-emails");
+    await expect(page.getByText(`We received your booking ${reference}`)).toBeVisible();
+    await expect(page.getByText(`Your booking ${reference} is confirmed`)).toBeVisible();
+  }
 
   // Clean up the slot.
-  await page.goto("/admin");
+  await page.goto(`/admin/bookings?q=${encodeURIComponent(name)}`);
   await page
     .getByRole("link", { name: new RegExp(name) })
     .first()
     .click();
   await page.getByRole("button", { name: "Cancel booking" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Cancel booking" }).click();
-  await expect(page.getByText("Booking cancelled.")).toBeVisible();
+  // The dialog asks why and says what the policy means for the money.
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByRole("radio", { name: /The client cancelled/ })).toBeChecked();
+  await expect(dialog.getByText(/is kept, not refunded/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel booking" }).click();
+  await expect(page.getByText("Booking cancelled.")).toBeVisible({ timeout: 15_000 });
 });
+
+/** Review & pay: sign + tick the package contract and tick the studio policy, when the package has them. */
+async function agreeToTerms(page: Page, fullName: string) {
+  // The step slides in: wait for its content before looking for the terms.
+  await expect(page.getByText(/We hold (this time|your seats?) for/)).toBeVisible();
+  const signature = page.getByLabel("Sign by typing your full name");
+  if (await signature.isVisible()) {
+    await signature.fill(fullName);
+    await page.getByRole("checkbox", { name: /contract above/ }).check();
+  }
+  const policy = page.getByRole("checkbox", { name: /Studio Policy Manual/ });
+  if (await policy.isVisible()) await policy.check();
+}

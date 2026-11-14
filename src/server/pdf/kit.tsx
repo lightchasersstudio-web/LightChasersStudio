@@ -14,7 +14,10 @@ import {
 } from "@react-pdf/renderer";
 import sharp from "sharp";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/database.types";
 
 // Shared bits for the payroll PDFs (A4, studio name and logo at the top).
 // Fonts are bundled TTFs: the built-in PDF fonts have no ₱ sign.
@@ -108,9 +111,12 @@ export type Brand = {
   logo: Buffer | null;
 };
 
-/** Studio name, contact line and logo (the uploaded one, else the bundled logo). */
-export async function loadBrand(): Promise<Brand> {
-  const supabase = await createClient();
+/**
+ * Studio name, contact line and logo (the uploaded one, else the bundled logo).
+ * Pass a client when there's no signed-in admin (e.g. the payment webhook).
+ */
+export async function loadBrand(client?: SupabaseClient<Database>): Promise<Brand> {
+  const supabase = client ?? (await createClient());
   const { data } = await supabase
     .from("business_settings")
     .select("business_name, address, city, phone, email, logo_path")
@@ -206,14 +212,22 @@ export function PdfFooter({ note }: { note: string }) {
   );
 }
 
+/** Renders a <Document> to PDF bytes (e.g. to attach to an email). */
+export async function renderPdf(
+  /** A component that renders a <Document>. */
+  doc: React.ReactElement,
+): Promise<Buffer> {
+  registerFonts();
+  return renderToBuffer(doc as React.ReactElement<DocumentProps>);
+}
+
 /** Renders a <Document> to a PDF response (inline, with a file name for saving). */
 export async function pdfResponse(
   /** A component that renders a <Document>. */
   doc: React.ReactElement,
   fileName: string,
 ): Promise<Response> {
-  registerFonts();
-  const buffer = await renderToBuffer(doc as React.ReactElement<DocumentProps>);
+  const buffer = await renderPdf(doc);
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",

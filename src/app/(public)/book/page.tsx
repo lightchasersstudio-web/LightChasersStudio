@@ -7,8 +7,14 @@ import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { contractForWizard } from "@/lib/booking/contract";
+import { depositPercents } from "@/lib/booking/pricing";
 import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
-import { getPublicSettings, listActiveAddOns, listActiveServices } from "@/server/queries/public";
+import {
+  getPublicSettings,
+  getStudioPolicy,
+  listActiveAddOns,
+  listActiveServices,
+} from "@/server/queries/public";
 
 export const metadata: Metadata = {
   title: "Book now",
@@ -37,12 +43,14 @@ export default function BookPage({ searchParams }: PageProps<"/book">) {
 }
 
 async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">) {
-  const [{ service: slug }, services, addOns, settings] = await Promise.all([
+  const [{ service: slug }, services, addOns, settings, policyText] = await Promise.all([
     searchParams,
     listActiveServices(),
     listActiveAddOns(),
     getPublicSettings(),
+    getStudioPolicy(),
   ]);
+  const policy = contractForWizard(policyText);
   if (services.length === 0) {
     return (
       <div className="space-y-4 text-center">
@@ -68,6 +76,8 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
           summary,
           price_cents,
           deposit_cents,
+          deposit_group,
+          booking_category,
           duration_minutes,
           contract,
           reschedule_fee_cents,
@@ -80,6 +90,8 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
           price_cents,
           deposit_cents,
           duration_minutes,
+          deposit_group,
+          booking_category,
           reschedule_fee_cents,
           ...contractForWizard(contract),
         }),
@@ -87,11 +99,16 @@ async function Wizard({ searchParams }: Pick<PageProps<"/book">, "searchParams">
       addOns={addOns}
       initialServiceId={initial?.id ?? null}
       businessName={settings.business_name}
-      depositPercent={settings.default_deposit_percent}
+      depositPercents={depositPercents(settings)}
       vatPercent={settings.vat_percent}
       holdMinutes={settings.hold_minutes}
       paymentMethods={acceptedPaymentMethods()}
       maxAdvanceDays={settings.max_advance_days}
+      studioPolicy={
+        policy.contract && policy.contractHash
+          ? { text: policy.contract, hash: policy.contractHash }
+          : null
+      }
     />
   );
 }

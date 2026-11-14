@@ -5,6 +5,7 @@ import { addDays, getDaysInMonth } from "date-fns";
 
 import { PAGE_SIZE, searchTerm, type BookingFilters } from "@/lib/admin/list-filters";
 import { summaryDays, summaryPeople } from "@/lib/booking/booking-summary";
+import { asCancelReason } from "@/lib/booking/policy";
 import type { BookingStatus } from "@/lib/booking/status";
 import { asBookingCategory, type BookingCategory } from "@/lib/catalog";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -57,7 +58,9 @@ export async function listBookingsForMonth(
           ? ("expired" as const)
           : b.status,
     }))
-    .filter((b) => includeClosed || !["cancelled", "declined", "expired"].includes(b.status))
+    .filter(
+      (b) => includeClosed || !["cancelled", "declined", "expired", "no_show"].includes(b.status),
+    )
     .map((b) => ({
       id: b.id,
       reference: b.reference_code,
@@ -129,11 +132,16 @@ export async function getBookingForAdmin(id: string) {
     supabase
       .from("bookings")
       .select(
-        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contract_signed_name, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, created_at, service:services(name, category, workshop_days), add_ons:booking_add_ons(add_on_id, name, price_cents), attendees:booking_attendees(id, position, full_name, phone, address, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, amount_cents, status, paid_at, reference, created_at), requests:booking_requests(id, preferred, message, status, created_at, resolved_at)",
+        "id, reference_code, status, source, service_id, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contract_signed_name, policy_text, policy_accepted_at, sensitive_shoot, pets_or_messy, bts_opt_out, contact_name, contact_phone, preferred_contact, messenger, location, participants, special_requests, admin_notes, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, cancelled_at, cancel_reason, rescheduled_at, created_at, service:services(name, category, workshop_days, reschedule_fee_cents), add_ons:booking_add_ons(id, add_on_id, name, price_cents, created_at), attendees:booking_attendees(id, position, full_name, phone, address, category, price_cents, student_id_path, id_status, id_reviewed_at), client:clients(email), payments(id, provider, purpose, amount_cents, status, paid_at, reference, receipt_number, created_at), requests:booking_requests(id, preferred, message, status, created_at, resolved_at)",
       )
       .eq("id", id)
       .maybeSingle(),
-    supabase.from("business_settings").select("business_name, phone, email, vat_percent").single(),
+    supabase
+      .from("business_settings")
+      .select(
+        "business_name, phone, email, vat_percent, cleaning_fee_cents, backdrop_paper_yard_cents, extra_person_cents, storage_day_cents",
+      )
+      .single(),
   ]);
   if (error) throw error;
   if (settings.error) throw settings.error;
@@ -159,6 +167,13 @@ export async function getBookingForAdmin(id: string) {
     email: data.client?.email ?? null,
     serviceName: data.service?.name ?? "Session",
     vatPercent: settings.data.vat_percent,
+    chargePrices: {
+      cleaning_fee_cents: settings.data.cleaning_fee_cents,
+      backdrop_paper_yard_cents: settings.data.backdrop_paper_yard_cents,
+      extra_person_cents: settings.data.extra_person_cents,
+      storage_day_cents: settings.data.storage_day_cents,
+    },
+    cancelReason: asCancelReason(data.cancel_reason),
     payments,
     paidCents,
     attendees: attendees.map((a) => ({

@@ -14,7 +14,6 @@ import {
   InboxIcon,
   PartyPopperIcon,
   SunIcon,
-  WalletIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -284,12 +283,11 @@ function BookingList({ bookings, showDay }: { bookings: DashboardBooking[]; show
 }
 
 const TASK_ICONS: Record<AdminTask["kind"], LucideIcon> = {
-  payroll: WalletIcon,
   reschedule: CalendarClockIcon,
   student_id: GraduationCapIcon,
 };
 
-/** Requests, student IDs and payroll waiting on an admin (above the bookings). */
+/** Requests and student IDs waiting on an admin (above the bookings). */
 function TaskList({ tasks }: { tasks: AdminTask[] }) {
   return (
     <ul className="-mx-2 divide-y" aria-label="To do">

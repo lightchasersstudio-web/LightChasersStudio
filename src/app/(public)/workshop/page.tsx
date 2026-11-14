@@ -9,6 +9,7 @@ import { SectionHeading } from "@/components/public/section-heading";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { contractForWizard } from "@/lib/booking/contract";
+import { depositPercents } from "@/lib/booking/pricing";
 import { acceptedPaymentMethods } from "@/lib/payments/paymongo";
 import {
   earlyBirdOpening,
@@ -167,6 +168,8 @@ async function Workshop() {
                 summary: workshop.summary,
                 price_cents: workshop.price_cents,
                 deposit_cents: workshop.deposit_cents,
+                deposit_group: workshop.deposit_group,
+                booking_category: workshop.booking_category,
                 duration_minutes: workshop.duration_minutes,
                 reschedule_fee_cents: workshop.reschedule_fee_cents,
                 ...contractForWizard(workshop.contract),
@@ -175,7 +178,7 @@ async function Workshop() {
             addOns={[]}
             initialServiceId={workshop.id}
             businessName={settings.business_name}
-            depositPercent={settings.default_deposit_percent}
+            depositPercents={depositPercents(settings)}
             vatPercent={settings.vat_percent}
             holdMinutes={settings.hold_minutes}
             paymentMethods={acceptedPaymentMethods()}

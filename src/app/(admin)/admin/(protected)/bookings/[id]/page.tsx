@@ -6,10 +6,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { BookingCharges } from "@/components/admin/bookings/booking-charges";
 import { BookingRequests } from "@/components/admin/bookings/booking-requests";
 import { BookingVat } from "@/components/admin/bookings/booking-vat";
 import { ContactActions } from "@/components/admin/bookings/contact-actions";
 import { DeleteBooking } from "@/components/admin/bookings/delete-booking";
+import { PaymentReceipt } from "@/components/admin/bookings/payment-receipt";
 import { PrintSheet } from "@/components/admin/bookings/print-sheet";
 import { AdminNotesForm, RecordPaymentForm } from "@/components/admin/bookings/record-payment-form";
 import { ShareBooking } from "@/components/admin/bookings/share-booking";
@@ -23,17 +25,24 @@ import { StatusBadge } from "@/components/booking/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAddOns, formatSummaryWhen } from "@/lib/booking/booking-summary";
 import { describeHistoryEntry } from "@/lib/booking/history";
+import {
+  closedBookingNote,
+  hoursUntil,
+  pastRescheduleCutoff,
+  RESCHEDULE_CUTOFF_HOURS,
+  SHOOT_FLAGS,
+  STUDIO_POLICY_TITLE,
+} from "@/lib/booking/policy";
 import { replyTemplates } from "@/lib/booking/reply-templates";
 import { workshopRefundCents } from "@/lib/booking/workshop";
 import { getPublicEnv } from "@/lib/env";
+import { providerLabel } from "@/lib/payments/providers";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatPeso } from "@/lib/utils/money";
 import { requireAdmin } from "@/server/auth";
 import { getBookingForAdmin, listBookingHistory } from "@/server/queries/bookings";
 
 export const metadata: Metadata = { title: "Booking" };
-
-const PROVIDERS: Record<string, string> = { paymongo: "PayMongo", gcash: "GCash", cash: "Cash" };
 
 export default function BookingPage({ params }: PageProps<"/admin/bookings/[id]">) {
   return (
@@ -53,6 +62,29 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
   const balance = Math.max(b.price_cents - b.paidCents, 0);
   const active = ["pending_payment", "pending", "confirmed"].includes(b.status);
   const day = format(new TZDate(b.start_at, BUSINESS_TZ), "yyyy-MM-dd");
+  const closedNote = closedBookingNote(
+    {
+      status: b.status,
+      startAt: b.start_at,
+      cancelledAt: b.cancelled_at,
+      cancelReason: b.cancelReason,
+      paidCents: b.paidCents,
+    },
+    "staff",
+  );
+  // Policy 1.4: moved once at most, up to 48 hours before the start.
+  const rescheduleNote = !editable
+    ? null
+    : b.rescheduled_at
+      ? "Already rescheduled once (the policy allows one). Only move it again for force majeure, without the fee."
+      : pastRescheduleCutoff(b.start_at)
+        ? `Less than ${RESCHEDULE_CUTOFF_HOURS} hours before the start: by policy it can't be rescheduled any more, except for force majeure.`
+        : null;
+  const flags = SHOOT_FLAGS.filter((f) => b[f.column]);
+  // Charges and rescheduling fees: lines that aren't catalogue add-ons.
+  const chargeLines = b.add_ons
+    .filter((a) => a.add_on_id === null)
+    .map((a) => ({ id: a.id, name: a.name, priceCents: a.price_cents }));
   const lookupUrl = `${getPublicEnv().NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/booking?ref=${b.reference_code}`;
 
   return (
@@ -95,8 +127,29 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                 <h2 id="actions" className="text-xl font-semibold">
                   Status
                 </h2>
-                <StatusActions id={b.id} status={b.status} hasEmail={Boolean(b.email)} />
+                <StatusActions
+                  id={b.id}
+                  status={b.status}
+                  hasEmail={Boolean(b.email)}
+                  policy={{
+                    startAt: b.start_at,
+                    paidCents: b.paidCents,
+                    rescheduleFeeCents: b.service?.reschedule_fee_cents ?? 0,
+                    started: hoursUntil(b.start_at) <= 0,
+                  }}
+                />
+                {rescheduleNote && (
+                  <p className="text-sm text-muted-foreground">{rescheduleNote}</p>
+                )}
               </section>
+            )}
+            {closedNote && (
+              <p
+                role="note"
+                className="rounded-2xl bg-accent px-4 py-3 text-sm text-accent-foreground"
+              >
+                {closedNote}
+              </p>
             )}
 
             <section aria-labelledby="contact" className="space-y-3 rounded-3xl border bg-card p-5">
@@ -160,6 +213,13 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                 <dt className="text-muted-foreground">Requests</dt>
                 <dd className="whitespace-pre-line">{b.special_requests ?? "—"}</dd>
               </dl>
+              {flags.length > 0 && (
+                <ul className="space-y-1.5 rounded-2xl bg-accent px-4 py-3 text-sm text-accent-foreground">
+                  {flags.map((f) => (
+                    <li key={f.name}>{f.staff}</li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             <section
@@ -195,10 +255,19 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                 <ul className="divide-y text-sm">
                   {b.payments.map((p) => (
                     <li key={p.id} className="flex flex-wrap justify-between gap-2 py-2">
-                      <span>
-                        {PROVIDERS[p.provider] ?? p.provider}
-                        {p.reference && (
-                          <span className="text-muted-foreground"> · {p.reference}</span>
+                      <span className="flex flex-col">
+                        <span>
+                          {providerLabel(p.provider)}
+                          {p.reference && (
+                            <span className="text-muted-foreground"> · {p.reference}</span>
+                          )}
+                        </span>
+                        {p.status === "paid" && p.receipt_number && (
+                          <PaymentReceipt
+                            paymentId={p.id}
+                            number={p.receipt_number}
+                            hasEmail={Boolean(b.email)}
+                          />
                         )}
                       </span>
                       <span>
@@ -224,9 +293,17 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                 vatPercent={b.vatPercent}
                 disabled={["cancelled", "declined", "expired"].includes(b.status)}
               />
-              {balance > 0 && b.status !== "cancelled" && b.status !== "declined" && (
-                <RecordPaymentForm bookingId={b.id} />
-              )}
+              <BookingCharges
+                bookingId={b.id}
+                lines={chargeLines}
+                prices={b.chargePrices}
+                vatPercent={b.vat_cents > 0 ? b.vatPercent : 0}
+                canAdd={["pending", "confirmed", "completed"].includes(b.status)}
+              />
+              {balance > 0 &&
+                !["cancelled", "declined", "expired", "no_show"].includes(b.status) && (
+                  <RecordPaymentForm bookingId={b.id} />
+                )}
             </section>
 
             {b.contract_text && b.contract_accepted_at && (
@@ -235,6 +312,13 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
                 acceptedAt={b.contract_accepted_at}
                 signedName={b.contract_signed_name}
                 title={`${b.summary.serviceName} contract`}
+              />
+            )}
+            {b.policy_text && b.policy_accepted_at && (
+              <AgreedContract
+                text={b.policy_text}
+                acceptedAt={b.policy_accepted_at}
+                title={STUDIO_POLICY_TITLE}
               />
             )}
 

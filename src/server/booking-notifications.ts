@@ -13,6 +13,7 @@ import {
   thankYouReviewEmail,
 } from "@/lib/email/booking-emails";
 import { sendEmail } from "@/lib/email/send";
+import { closedBookingNote } from "@/lib/booking/policy";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { facebookReviewsUrl } from "@/lib/utils/social";
 import { getPublicEnv } from "@/lib/env";
@@ -47,15 +48,26 @@ export async function notifyBookingUpdated(b: BookingRecord) {
 }
 
 export async function notifyBookingClosed(b: BookingRecord, status: "declined" | "cancelled") {
-  if (b.email) {
-    await sendEmail({ to: b.email, ...bookingClosedEmail(b.summary, siteUrl(), status) });
-  }
+  if (!b.email) return;
+  // What happens to the money under the studio policy (refund for force majeure, else kept).
+  const note = closedBookingNote(
+    {
+      status,
+      startAt: b.summary.startAt,
+      cancelledAt: b.policy.cancelledAt,
+      cancelReason: b.policy.cancelReason,
+      paidCents: b.summary.paidCents,
+    },
+    "client",
+  );
+  await sendEmail({ to: b.email, ...bookingClosedEmail(b.summary, siteUrl(), status, note) });
 }
 
 /** The client email that matches the booking's current status (for "Resend email"). */
 export async function resendLatestEmail(b: BookingRecord) {
   if (b.status === "confirmed" || b.status === "completed") return notifyBookingConfirmed(b);
   if (b.status === "declined" || b.status === "cancelled") return notifyBookingClosed(b, b.status);
+  if (b.status === "no_show") return; // nothing to send for a no-show
   if (b.email) await sendEmail({ to: b.email, ...bookingReceivedEmail(b.summary, siteUrl()) });
 }
 

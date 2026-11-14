@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { STORAGE_PATH } from "@/lib/storage";
+import { pesosToCents } from "@/lib/utils/money";
 import { isGoogleMapsUrl } from "@/lib/utils/social";
 import { intString, optionalText, optionalUrl } from "@/lib/validations/shared";
 
@@ -55,11 +56,15 @@ export const bookingRulesSchema = z
     maxAdvanceDays: intString(1, 730),
     slotIntervalMinutes: z.enum(["15", "30", "60"]).transform(Number),
     bufferMinutes: intString(0, 480),
+    // Down payment %: studio packages and events (owner request 2026-11-12).
     defaultDepositPercent: intString(0, 100),
+    eventsDepositPercent: intString(0, 100),
     vatPercent: intString(0, 50),
     holdMinutes: intString(5, 120),
     // Studio sessions only; outside events are one per day (owner decision 2026-11-06).
     maxConcurrentBookings: intString(1, 10),
+    // Studio Policy 7.2: client details deleted this many days after the booking; 0 = never.
+    personalDataDays: intString(0, 3650),
   })
   .transform((v) => ({
     min_notice_hours: v.minNoticeHours,
@@ -67,9 +72,11 @@ export const bookingRulesSchema = z
     slot_interval_minutes: v.slotIntervalMinutes,
     buffer_minutes: v.bufferMinutes,
     default_deposit_percent: v.defaultDepositPercent,
+    events_deposit_percent: v.eventsDepositPercent,
     vat_percent: v.vatPercent,
     hold_minutes: v.holdMinutes,
     max_concurrent_bookings: v.maxConcurrentBookings,
+    personal_data_days: v.personalDataDays,
   }));
 
 export type BookingRulesInput = z.input<typeof bookingRulesSchema>;
@@ -95,3 +102,40 @@ export const changePasswordSchema = z
   });
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/** Studio Policy Manual & Client Agreement (studio packages agree to it when booking). */
+export const studioPolicySchema = z
+  .object({
+    studioPolicy: z.string().trim().max(60_000, "Keep the policy under 60,000 characters."),
+  })
+  .transform((v) => ({ studio_policy: v.studioPolicy }));
+export type StudioPolicyInput = z.input<typeof studioPolicySchema>;
+
+/** Peso price (before VAT) for one preset charge; 0 turns that preset off. */
+const chargePrice = z
+  .string()
+  .trim()
+  .transform((v, ctx) => {
+    const cents = v === "" ? 0 : pesosToCents(v);
+    if (cents === null || cents > 10_000_000) {
+      ctx.addIssue({ code: "custom", message: "Enter an amount like 500, or 0." });
+      return z.NEVER;
+    }
+    return cents;
+  });
+
+/** Extra charges after a shoot (studio policy 3.2, 4.4, 5.1, 7.8). */
+export const chargePricesSchema = z
+  .object({
+    cleaningFee: chargePrice,
+    backdropPaperYard: chargePrice,
+    extraPerson: chargePrice,
+    storageDay: chargePrice,
+  })
+  .transform((v) => ({
+    cleaning_fee_cents: v.cleaningFee,
+    backdrop_paper_yard_cents: v.backdropPaperYard,
+    extra_person_cents: v.extraPerson,
+    storage_day_cents: v.storageDay,
+  }));
+export type ChargePricesInput = z.input<typeof chargePricesSchema>;

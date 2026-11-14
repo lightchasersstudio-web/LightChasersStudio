@@ -4,6 +4,7 @@ import { fillFaqTokens, groupFaqs } from "./faq";
 
 const settings = {
   default_deposit_percent: 30,
+  events_deposit_percent: 50,
   vat_percent: 12,
   hold_minutes: 20,
   max_advance_days: 180,

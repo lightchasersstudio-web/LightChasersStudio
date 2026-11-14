@@ -22,7 +22,7 @@ import { ShareButton } from "@/components/shared/share-button";
 import { Sparkle } from "@/components/shared/sparkle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { bookingTotals } from "@/lib/booking/pricing";
+import { bookingTotals, depositPercentFor, depositPercents } from "@/lib/booking/pricing";
 import { rescheduleFeeNotice } from "@/lib/booking/reschedule-fee";
 import { categoryLabel } from "@/lib/catalog";
 import { publicImageUrl } from "@/lib/storage";
@@ -88,7 +88,7 @@ async function ServiceDetail({ params }: Pick<PageProps<"/services/[slug]">, "pa
     addOnsCents: 0,
     vatPercent: settings.vat_percent,
     fixedDepositCents: service.deposit_cents,
-    depositPercent: settings.default_deposit_percent,
+    depositPercent: depositPercentFor(service.deposit_group, depositPercents(settings)),
   });
 
   return (

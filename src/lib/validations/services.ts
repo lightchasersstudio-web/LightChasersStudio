@@ -2,7 +2,11 @@ import { TZDate } from "@date-fns/tz";
 import { z } from "zod";
 
 import { WORKSHOP_MAX_DAYS, workshopDays } from "@/lib/booking/workshop";
-import { BOOKING_CATEGORY_VALUES, PACKAGE_CATEGORY_VALUES } from "@/lib/catalog";
+import {
+  BOOKING_CATEGORY_VALUES,
+  DEPOSIT_GROUP_VALUES,
+  PACKAGE_CATEGORY_VALUES,
+} from "@/lib/catalog";
 import { STORAGE_PATH } from "@/lib/storage";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { centsToPesoInput, pesosToCents } from "@/lib/utils/money";
@@ -26,6 +30,8 @@ export const serviceSchema = z
     lengthHours: z.string().trim(),
     price: pesoString,
     depositMode: z.enum(["default", "fixed"]),
+    // Which down payment % applies (Settings → Booking rules): events or studio.
+    depositGroup: z.enum(DEPOSIT_GROUP_VALUES, "Pick studio or events.").default("studio"),
     // Added to a booking (before VAT) when it's moved to a new date or time; "" or 0 = free.
     rescheduleFee: z
       .string()
@@ -148,6 +154,7 @@ export const serviceSchema = z
       duration_minutes: durationMinutes,
       price_cents: v.price,
       deposit_cents: depositCents,
+      deposit_group: v.depositGroup,
       reschedule_fee_cents: v.rescheduleFee,
       inclusions: v.inclusions,
       cover_image_path: v.coverImagePath,

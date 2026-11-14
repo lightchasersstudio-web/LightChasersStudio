@@ -2,8 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Payroll against the DEV Supabase project: preview, payslip, save, change,
- * save again. Needs an admin login and the service role key (it adds its own
+ * Payroll against the DEV Supabase project: payslips from the time record, a
+ * change showing at once, printing saving them. Needs an admin login and the service role key (it adds its own
  * employees and time records, and removes them and its payroll afterwards).
  */
 const email = process.env.E2E_ADMIN_EMAIL;
@@ -95,30 +95,25 @@ async function signIn(page: Page) {
   await expect(page).toHaveURL(/\/admin$/);
 }
 
-test("payroll: preview, payslip, save, change, save again", async ({ page }, testInfo) => {
+test("payroll: payslips follow the time record, printing saves them", async ({
+  page,
+}, testInfo) => {
   test.setTimeout(90_000);
-  // Phones show a card per person instead of the table.
-  const phone = testInfo.project.name === "mobile";
+  // Gross and deductions show from laptop width; net pay on every screen.
+  const wide = testInfo.project.name !== "mobile";
   const entry = (name: string) =>
-    (phone
-      ? page.getByRole("list", { name: "Payslips" }).getByRole("listitem")
-      : page.getByRole("row")
-    ).filter({ hasText: name });
+    page.getByRole("list", { name: "Payslips" }).getByRole("listitem").filter({ hasText: name });
   await signIn(page);
-  await page.goto(`/admin/payroll?cutoff=${cutoff}`);
-  await expect(page.getByText("Preview, not saved yet.")).toBeVisible();
+  await page.goto(`/admin/payroll?date=${cutoff}`);
+  await expect(page.getByRole("heading", { name: /^Payslips · Jan/ })).toBeVisible();
 
   const monthly = entry(MONTHLY);
-  await expect(monthly).toContainText("₱15,400.00"); // half of ₱30,000 + ₱400 overtime
   await expect(monthly).toContainText("₱12,675.00"); // net
   const daily = entry(DAILY);
-  await expect(daily).toContainText("₱7,150.00"); // 11 × ₱650
-  await expect(daily).toContainText("₱6,806.25"); // − PhilHealth ₱243.75 − Pag-IBIG ₱100
-  if (!phone) {
-    await expect(monthly).toContainText("incl. ₱400.00 overtime");
-    await expect(monthly).toContainText("₱1,500.00"); // 1 absent day + 4 h short
-    await expect(monthly).toContainText("4h short");
-    await expect(daily).toContainText("Not enrolled"); // SSS off
+  await expect(daily).toContainText("₱6,806.25"); // 11 × ₱650 − PhilHealth ₱243.75 − Pag-IBIG ₱100
+  if (wide) {
+    await expect(monthly).toContainText("₱15,400.00"); // half of ₱30,000 + ₱400 overtime
+    await expect(daily).toContainText("₱7,150.00");
   }
 
   await monthly.getByRole("button", { name: `View ${MONTHLY}'s payslip` }).click();
@@ -130,13 +125,7 @@ test("payroll: preview, payslip, save, change, save again", async ({ page }, tes
   await expect(slip).toContainText("Net pay₱12,675.00");
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Save payroll" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Save payroll" }).click();
-  await expect(page.getByText(/^Payroll saved: \d+ payslips\.$/)).toBeVisible();
-  // "Saved …" (other test files may add staff meanwhile, which marks it as changed).
-  await expect(page.getByText(/^Saved /).first()).toBeVisible();
-
-  // The absence turns out to be a work day: the saved payroll is now out of date.
+  // The absence turns out to be a work day: the running cut-off shows it at once.
   const sb = admin();
   const { error } = await sb
     .from("attendance_logs")
@@ -145,16 +134,11 @@ test("payroll: preview, payslip, save, change, save again", async ({ page }, tes
     .eq("status", "absent");
   expect(error).toBeNull();
   await page.reload();
-  await expect(page.getByText(/The saved payroll is out of date/)).toBeVisible();
-  await expect(entry(MONTHLY)).toContainText("₱12,675.00");
-  await page.getByRole("link", { name: "Show new figures" }).click();
-  await expect(entry(MONTHLY)).toContainText("₱13,675.00");
-  await page.getByRole("button", { name: "Save again" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Replace payslips" }).click();
-  // Saving goes back to the saved view (no ?view=preview).
-  await expect(page).not.toHaveURL(/view=preview/);
   await expect(entry(MONTHLY)).toContainText("₱13,675.00");
 
+  // Printing saves the payslips (no separate "save payroll" step).
+  const res = await page.request.get(`/admin/payroll/pdf?cutoff=${cutoff}`);
+  expect(res.status()).toBe(200);
   const { data: period } = await sb
     .from("payroll_periods")
     .select("id")
@@ -179,14 +163,14 @@ test("PDFs: payslips (all and one) and employee details, admins only", async ({
 }, testInfo) => {
   test.setTimeout(90_000);
   await signIn(page);
-  await page.goto(`/admin/payroll?cutoff=${cutoff}`);
+  await page.goto(`/admin/payroll?date=${cutoff}`);
   const pdfs = {
     payslips: `/admin/payroll/pdf?cutoff=${cutoff}`,
     payslip: `/admin/payroll/pdf?cutoff=${cutoff}&employee=${ids[MONTHLY]}`,
     employee: `/admin/employees/${ids[DAILY]}/pdf`,
     staff: `/admin/employees/pdf`,
   };
-  await expect(page.getByRole("link", { name: "All payslips (PDF)" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Print all payslips" })).toHaveAttribute(
     "href",
     pdfs.payslips,
   );
@@ -208,8 +192,8 @@ test("PDFs: payslips (all and one) and employee details, admins only", async ({
     }
   }
 
-  // Unsaved cut-off: nothing to print. Signed out: no PDF.
-  expect((await page.request.get("/admin/payroll/pdf?cutoff=2031-03-01")).status()).toBe(404);
+  // Not a cut-off: refused. Signed out: no PDF.
+  expect((await page.request.get("/admin/payroll/pdf?cutoff=2031-03-05")).status()).toBe(400);
   const stranger = await browser.newContext();
   const res = await stranger.request.get(pdfs.payslips, { maxRedirects: 0 });
   expect(res.headers()["content-type"] ?? "").not.toBe("application/pdf");

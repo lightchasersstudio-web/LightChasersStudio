@@ -33,9 +33,9 @@ const ATTENDEE_CATEGORY_VALUES = ATTENDEE_CATEGORIES.map((c) => c.value) as [
 export const STUDENT_ID_PATH = /^[0-9a-f-]{36}\.(webp|jpg)$/;
 
 /** Version of the privacy notice the client agreed to (stored with their consent). */
-export const CONSENT_VERSION = "2026-10-30";
+export const CONSENT_VERSION = "2026-11-14";
 /** When the privacy policy (/privacy) last changed; shown on the page. */
-export const PRIVACY_UPDATED = "30 October 2026";
+export const PRIVACY_UPDATED = "14 November 2026";
 
 const fullName = z.string().trim().min(2, "Enter your full name.").max(120);
 /** A complete mobile number (see isCompleteMobile): partial numbers can't book. */
@@ -85,6 +85,14 @@ export const publicBookingSchema = z
     contractHash: z.string().max(64).optional(),
     // Their full name, typed as their signature (must match fullName).
     contractSignature: z.string().max(120).optional(),
+    // Studio packages: the Studio Policy Manual, ticked + the fingerprint of the
+    // wording shown (checked on the server like the contract).
+    policyAccepted: z.boolean().optional(),
+    policyHash: z.string().max(64).optional(),
+    // Studio packages: what the studio must know ahead (policy 3.8, 3.9, 7.4).
+    sensitiveShoot: z.boolean().optional(),
+    petsOrMessy: z.boolean().optional(),
+    btsOptOut: z.boolean().optional(),
     // Honeypot: hidden from people, filled in by bots.
     website: z.string().max(0),
     // Workshops only: pay the full price (else half), after accepting the refund rule.

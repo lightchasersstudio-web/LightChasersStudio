@@ -4,12 +4,12 @@ import Image from "next/image";
 
 import { formatSummaryWhen } from "@/lib/booking/booking-summary";
 import { STATUS_LABELS } from "@/lib/booking/status";
+import { providerLabel } from "@/lib/payments/providers";
 import { cn } from "@/lib/utils";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatPeso } from "@/lib/utils/money";
 import type { AdminBooking } from "@/server/queries/bookings";
 
-const PROVIDERS: Record<string, string> = { paymongo: "PayMongo", gcash: "GCash", cash: "Cash" };
 const CONTACT: Record<string, string> = {
   email: "Email",
   phone: "Phone call",
@@ -103,7 +103,7 @@ export function PrintSheet({
               .map((p) => (
                 <tr key={p.id} className="border-b">
                   <td className="py-1">
-                    Paid · {PROVIDERS[p.provider] ?? p.provider}
+                    Paid · {providerLabel(p.provider)}
                     {p.paid_at && `, ${format(new TZDate(p.paid_at, BUSINESS_TZ), "d MMM yyyy")}`}
                   </td>
                   <td className="py-1 text-right">− {formatPeso(p.amount_cents)}</td>

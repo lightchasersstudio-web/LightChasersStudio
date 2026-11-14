@@ -2,11 +2,12 @@
 
 import { refresh } from "next/cache";
 
-import { cutoffLabel } from "@/lib/payroll/cutoff";
+import { cutoffFor, cutoffLabel } from "@/lib/payroll/cutoff";
 import { asSalaryType, salaryRates } from "@/lib/payroll/employees";
 import { fail, ok, type ActionResult } from "@/lib/utils/action-result";
 import { attendanceDaySchema, attendanceSheetSchema } from "@/lib/validations/attendance";
 import { adminAction, audit } from "@/server/admin-action";
+import { syncPayroll } from "@/server/payroll-sync";
 
 /** Saves one employee's time record for a cut-off: changed days in, blanked days out. */
 export async function saveAttendance(input: unknown): Promise<ActionResult> {
@@ -61,6 +62,8 @@ export async function saveAttendance(input: unknown): Promise<ActionResult> {
         name: employee.full_name,
         cutoff: cutoffLabel(cutoff),
       });
+      // One save: the cut-off's payslips follow the time record.
+      await syncPayroll(cutoff, ctx, [employeeId]);
       refresh();
       return ok(undefined);
     },
@@ -122,6 +125,8 @@ export async function saveAttendanceDay(input: unknown): Promise<ActionResult> {
       date,
       staff: upserts.length,
     });
+    // One save: the cut-off's payslips follow the time record.
+    await syncPayroll(cutoffFor(date), ctx, ids);
     refresh();
     return ok(undefined);
   });

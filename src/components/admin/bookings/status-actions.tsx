@@ -30,17 +30,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { cancelAdvice, CANCEL_REASONS, type CancelReason } from "@/lib/booking/policy";
 import type { BookingStatus } from "@/lib/booking/status";
+import { formatPeso } from "@/lib/utils/money";
 import { bookingStatusSchema, type BookingStatusInput } from "@/lib/validations/admin-booking";
 import { markRefundReviewed, setBookingStatus } from "@/server/actions/admin-bookings";
 
-type Move = "confirmed" | "declined" | "completed" | "cancelled";
+type Move = "confirmed" | "declined" | "completed" | "cancelled" | "no_show";
 
 const MESSAGES: Record<Move, string> = {
   confirmed: "Booking confirmed.",
   declined: "Booking declined.",
   completed: "Marked as completed.",
   cancelled: "Booking cancelled.",
+  no_show: "Marked as a no-show.",
+};
+
+/** What the studio policy needs to know to advise on a cancellation. */
+type PolicyFacts = {
+  startAt: string;
+  paidCents: number;
+  rescheduleFeeCents: number;
+  /** The booked time has started (checked on the server), so a no-show can be marked. */
+  started: boolean;
 };
 
 /** Buttons for the status moves that make sense from the current status. */
@@ -48,18 +60,26 @@ export function StatusActions({
   id,
   status,
   hasEmail,
+  policy,
 }: {
   id: string;
   status: BookingStatus;
   hasEmail: boolean;
+  policy: PolicyFacts;
 }) {
   const [pending, start] = useTransition();
-  const move = (to: Exclude<Move, "completed">) =>
+  const move = (to: Exclude<Move, "completed">, cancelReason?: CancelReason) =>
     new Promise<boolean>((resolve) =>
       start(async () =>
-        resolve(handleResult(await setBookingStatus({ id, status: to }), MESSAGES[to])),
+        resolve(
+          handleResult(await setBookingStatus({ id, status: to, cancelReason }), MESSAGES[to]),
+        ),
       ),
     );
+  const kept =
+    policy.paidCents > 0
+      ? `the ${formatPeso(policy.paidCents)} paid is kept, not refunded`
+      : "nothing was paid";
   const emailNote = hasEmail ? " The client will get an email." : "";
 
   return (
@@ -79,12 +99,19 @@ export function StatusActions({
         </>
       )}
       {status === "confirmed" && <CompleteDialog id={id} hasEmail={hasEmail} />}
-      {["pending_payment", "pending", "confirmed"].includes(status) && (
+      {status === "confirmed" && policy.started && (
         <ConfirmMove
-          label="Cancel booking"
-          title="Cancel this booking?"
-          description={`The time becomes free again.${emailNote}`}
-          onConfirm={() => move("cancelled")}
+          label="Mark no-show"
+          title="The client didn't come?"
+          description={`Policy 1.7: a no-show can't be rescheduled and ${kept}. They're welcome to make a new booking.`}
+          onConfirm={() => move("no_show")}
+        />
+      )}
+      {["pending_payment", "pending", "confirmed"].includes(status) && (
+        <CancelDialog
+          emailNote={emailNote}
+          policy={policy}
+          onConfirm={(reason) => move("cancelled", reason)}
         />
       )}
     </div>
@@ -162,6 +189,88 @@ function CompleteDialog({ id, hasEmail }: { id: string; hasEmail: boolean }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * "Cancel booking" asks why (studio policy 1.6–1.8) and says what the policy
+ * means for the money: a client cancellation keeps what was paid; force majeure
+ * refunds everything (the booking is then flagged for a refund check).
+ */
+function CancelDialog({
+  emailNote,
+  policy,
+  onConfirm,
+}: {
+  emailNote: string;
+  policy: PolicyFacts;
+  onConfirm: (reason: CancelReason) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState<CancelReason>("client");
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setReason("client");
+      }}
+    >
+      <AlertDialogTrigger asChild>
+        <Button type="button" variant="outline" className="text-destructive hover:text-destructive">
+          Cancel booking
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+          <AlertDialogDescription>The time becomes free again.{emailNote}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-sm font-semibold">Why?</legend>
+          {CANCEL_REASONS.map((r) => (
+            <label
+              key={r.value}
+              className="flex cursor-pointer items-start gap-3 rounded-2xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-accent/50"
+            >
+              <input
+                type="radio"
+                name="cancel-reason"
+                value={r.value}
+                checked={reason === r.value}
+                onChange={() => setReason(r.value)}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <span>
+                <span className="block font-medium">{r.label}</span>
+                <span className="block text-muted-foreground">{r.hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <p role="status" className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">
+          {cancelAdvice(reason, policy)}
+        </p>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busy}>Keep it</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={busy}
+            onClick={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              const done = await onConfirm(reason);
+              setBusy(false);
+              if (done) setOpen(false);
+            }}
+          >
+            {busy && <Loader2Icon className="animate-spin" aria-hidden />}
+            Cancel booking
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

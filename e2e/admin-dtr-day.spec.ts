@@ -2,8 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Time record → By day (the whole team on one date), the Payroll page's
- * blank-day warning and the grouped menu, against the DEV Supabase project.
+ * The Payroll page (the whole team on one date, payslips saved with the day),
+ * old Time record links and the grouped menu, against the DEV Supabase project.
  * Needs E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD and the service role key.
  */
 const email = process.env.E2E_ADMIN_EMAIL;
@@ -53,6 +53,8 @@ test.afterAll(async () => {
     await sb.from("payslips").delete().in("employee_id", list);
     await sb.from("employees").delete().in("id", list);
   }
+  // Saving a day saved this test cut-off's payroll (2024 is a test-only year).
+  await sb.from("payroll_periods").delete().eq("period_start", CUTOFF);
 });
 
 async function signIn(page: Page) {
@@ -63,27 +65,33 @@ async function signIn(page: Page) {
   await expect(page).toHaveURL(/\/admin$/);
 }
 
-test("by day: the whole team on one date, saving only what changed", async ({ page }) => {
+/** A person's row on the day sheet (the payslip list below has their name too). */
+const dayRow = (page: Page, name: string) => page.locator("form li").filter({ hasText: name });
+
+test("payroll: one day for the whole team, saving only what changed", async ({ page }) => {
   test.setTimeout(60_000);
   await signIn(page);
-  await page.goto(`/admin/dtr/day?date=${DATE}`);
-  await expect(
-    page.getByRole("navigation", { name: "Time record view" }).getByRole("link", {
-      name: /By day/,
-    }),
-  ).toHaveAttribute("aria-current", "page");
+  await page.goto(`/admin/payroll?date=${DATE}`);
   await page.waitForLoadState("networkidle"); // let React hydrate before changing the form
+  // 2024 is a finished cut-off: saving asks first (see the next test).
+  page.on("dialog", (d) => void d.accept());
 
-  // AM fills its usual times; absent has none.
+  // AM fills its usual times (shown in the row; "Edit" opens them); absent has none.
   await page.getByLabel(`Status, ${ANA}`).selectOption("am");
-  await expect(page.getByLabel(`Time in, ${ANA}`)).toHaveValue("09:30");
-  await expect(page.getByLabel(`Time out, ${ANA}`)).toHaveValue("17:30");
+  await expect(dayRow(page, ANA)).toContainText("9:30 AM – 5:30 PM");
+  await dayRow(page, ANA)
+    .getByRole("button", { name: /Edit times and note/ })
+    .click();
+  await expect(dayRow(page, ANA).getByLabel("Time in", { exact: true })).toHaveValue("09:30");
   await page.getByLabel(`Status, ${BEN}`).selectOption("absent");
-  await page.getByLabel(`Note, ${BEN}`).fill("Sick");
+  await dayRow(page, BEN)
+    .getByRole("button", { name: /Edit times and note/ })
+    .click();
+  await dayRow(page, BEN).getByLabel("Note", { exact: true }).fill("Sick");
   await expect(page.getByText("2 changes")).toBeVisible();
 
   await page.getByRole("button", { name: "Save day" }).click();
-  await expect(page.getByText(/Time record saved for/)).toBeVisible();
+  await expect(page.getByText(/saved\. Payslips are updated\./)).toBeVisible();
 
   // Only the two changed rows were written: real staff on the list are untouched.
   const { data } = await admin()
@@ -105,15 +113,26 @@ test("by day: the whole team on one date, saving only what changed", async ({ pa
     note: "Sick",
   });
 
+  // One save: the cut-off's payslips were saved too, and are listed below the day.
+  const { data: slip } = await admin()
+    .from("payslips")
+    .select("days_present, gross_pay, payroll_period:payroll_periods!inner(period_start)")
+    .eq("employee_id", ids[ANA]!)
+    .eq("payroll_period.period_start", CUTOFF)
+    .single();
+  expect(slip).toMatchObject({ days_present: 1, gross_pay: 650 });
+  const payslips = page.getByRole("list", { name: "Payslips" });
+  await expect(payslips.getByRole("listitem").filter({ hasText: ANA })).toContainText("₱650.00");
+
   await page.reload();
   await expect(page.getByLabel(`Status, ${ANA}`)).toHaveValue("am");
-  await expect(page.getByLabel(`Note, ${BEN}`)).toHaveValue("Sick");
+  await expect(dayRow(page, BEN)).toContainText("Sick");
 
-  // Setting a row back to "Not recorded" removes it.
+  // Setting a row back to "Not set" removes it.
   await page.waitForLoadState("networkidle");
-  await page.getByLabel(`Status, ${BEN}`).selectOption({ label: "Not recorded" });
+  await page.getByLabel(`Status, ${BEN}`).selectOption({ label: "Not set" });
   await page.getByRole("button", { name: "Save day" }).click();
-  await expect(page.getByText(/Time record saved for/)).toBeVisible();
+  await expect(page.getByText(/saved\. Payslips are updated\./)).toBeVisible();
   const { count } = await admin()
     .from("attendance_logs")
     .select("employee_id", { count: "exact", head: true })
@@ -122,21 +141,63 @@ test("by day: the whole team on one date, saving only what changed", async ({ pa
   expect(count).toBe(1);
 });
 
-test("payroll: warns about blank days before saving", async ({ page }) => {
-  await signIn(page);
-  await page.goto(`/admin/payroll?cutoff=${CUTOFF}`);
-  const blank = page.getByRole("region", { name: "Some days on the time record are blank" });
-  await expect(blank).toBeVisible();
-  // Ana has one day recorded, so 14 of the cut-off's 15 days are blank.
-  await expect(blank.getByRole("listitem").filter({ hasText: ANA })).toContainText("14 days");
-  await expect(blank.getByRole("link", { name: `Fill in ${ANA}'s days` })).toHaveAttribute(
-    "href",
-    `/admin/dtr?cutoff=${CUTOFF}&employee=${ids[ANA]}`,
-  );
+test("a past cut-off: warns first, then redoes only the edited person's payslip", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const sb = admin();
+  const payslipOf = async (id: string) =>
+    (
+      await sb
+        .from("payslips")
+        .select("net_pay, payroll_period:payroll_periods!inner(period_start)")
+        .eq("employee_id", id)
+        .eq("payroll_period.period_start", CUTOFF)
+        .maybeSingle()
+    ).data;
+  // Ben has a saved payslip in this (2024, so finished) cut-off from the test above.
+  expect(await payslipOf(ids[BEN]!)).not.toBeNull();
+  const anaBefore = Number((await payslipOf(ids[ANA]!))!.net_pay);
+  // Since then Ben left (deactivated): he's no longer on the day sheet.
+  await sb.from("employees").update({ is_active: false }).eq("id", ids[BEN]!);
 
-  await page.getByRole("button", { name: /^Save (payroll|again)$/ }).click();
-  await expect(page.getByRole("alertdialog")).toContainText(/still blank/);
-  await page.getByRole("button", { name: "Cancel" }).click();
+  await signIn(page);
+  await page.goto(`/admin/payroll?date=${DATE}`);
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel(`Status, ${ANA}`).selectOption("absent");
+
+  // Saving asks first, naming whose payslip changes; saying no saves nothing.
+  const warnings: string[] = [];
+  page.once("dialog", (d) => {
+    warnings.push(d.message());
+    void d.dismiss();
+  });
+  await page.getByRole("button", { name: "Save day" }).click();
+  await expect.poll(() => warnings.length).toBe(1);
+  expect(warnings[0]).toContain(`already over and paid. Saving changes the payslip of ${ANA}.`);
+  const { data: before } = await sb
+    .from("attendance_logs")
+    .select("status")
+    .eq("employee_id", ids[ANA]!)
+    .eq("work_date", DATE)
+    .single();
+  expect(before!.status).toBe("am");
+
+  page.once("dialog", (d) => void d.accept());
+  await page.getByRole("button", { name: "Save day" }).click();
+  await expect(page.getByText(/saved\. Payslips are updated\./)).toBeVisible({ timeout: 15_000 });
+
+  // Ana's payslip is redone without her ₱650 day; Ben keeps his saved payslip
+  // although he's no longer active.
+  expect(Number((await payslipOf(ids[ANA]!))!.net_pay)).toBe(anaBefore - 650);
+  expect(await payslipOf(ids[BEN]!)).not.toBeNull();
+});
+
+test("old Time record → By day links open the Payroll page", async ({ page }) => {
+  await signIn(page);
+  await page.goto(`/admin/dtr/day?date=${DATE}`);
+  await expect(page).toHaveURL(new RegExp(`/admin/payroll\\?date=${DATE}$`));
+  await expect(page.getByRole("heading", { level: 1, name: "Payroll" })).toBeVisible();
 });
 
 test("menu: grouped into Bookings, Team, Website and Admin", async ({ page }, testInfo) => {
@@ -148,7 +209,6 @@ test("menu: grouped into Bookings, Team, Website and Admin", async ({ page }, te
   }
   await expect(nav.getByRole("group", { name: "Team" }).getByRole("link")).toHaveText([
     "Employees",
-    "Time record",
     "Payroll",
   ]);
 });

@@ -21,6 +21,7 @@ import { TextAreaField, TextField } from "@/components/admin/form-fields";
 import { handleResult } from "@/components/admin/form-utils";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
+import { RESCHEDULE_CUTOFF_HOURS } from "@/lib/booking/policy";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatPeso } from "@/lib/utils/money";
 import { rescheduleRequestSchema, type RescheduleRequestInput } from "@/lib/validations/booking";
@@ -114,6 +115,10 @@ export function BookingSelfService({
             </Button>
           )}
         </div>
+
+        {booking.rescheduleBlocked && !openRequest && (
+          <p className="mt-3 text-sm text-muted-foreground">{booking.rescheduleBlocked}</p>
+        )}
 
         {openRequest && (
           <p
@@ -224,7 +229,8 @@ function RescheduleForm({
     >
       <p className="text-sm text-muted-foreground">
         Tell us what works better. We&apos;ll check our calendar and get back to you; your booking
-        stays as it is until we confirm a new time.
+        stays as it is until we confirm a new time. A booking can be rescheduled once, up to{" "}
+        {RESCHEDULE_CUTOFF_HOURS} hours before it starts.
       </p>
       {notice && (
         <p className="rounded-2xl bg-blush px-4 py-3 text-sm font-semibold text-foreground">

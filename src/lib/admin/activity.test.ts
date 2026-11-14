@@ -25,3 +25,17 @@ describe("activityHref", () => {
     expect(activityHref("client.anonymise", "client", "c1")).toBe("/admin/clients/c1");
   });
 });
+
+describe("describeActivity: automatic deletion", () => {
+  it("says how much was deleted, without names", () => {
+    expect(describeActivity("privacy.auto_delete", { clients: 3, student_ids: 0 })).toBe(
+      "Deleted 3 clients' details after the keeping period",
+    );
+    expect(describeActivity("privacy.auto_delete", { clients: 1, student_ids: 2 })).toBe(
+      "Deleted 1 client's details after the keeping period, removed 2 student ID photos",
+    );
+    expect(describeActivity("privacy.auto_delete", { clients: 0, student_ids: 1 })).toBe(
+      "Removed 1 student ID photo",
+    );
+  });
+});

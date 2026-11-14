@@ -8,17 +8,21 @@ import {
   isScheduleClash,
   STAFF_SCHEDULE_ERRORS,
 } from "@/lib/booking/booking-errors";
+import { chargeLine } from "@/lib/booking/charges";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fail, ok, type ActionResult } from "@/lib/utils/action-result";
 import {
   adminBookingEditSchema,
   adminBookingSchema,
   adminNotesSchema,
+  bookingChargeSchema,
   bookingIdSchema,
   bookingStatusSchema,
   bookingVatSchema,
   deleteBookingSchema,
+  paymentIdSchema,
   recordPaymentSchema,
+  removeChargeSchema,
   reviewStudentIdSchema,
 } from "@/lib/validations/admin-booking";
 import { CONSENT_VERSION } from "@/lib/validations/booking";
@@ -36,6 +40,7 @@ import {
   type MonthSlotsPayload,
 } from "@/server/queries/availability-slots";
 import { loadBookingRecord } from "@/server/queries/booking-record";
+import { emailReceipt, loadReceipt } from "@/server/receipts";
 
 /** The booking line added when a booking is moved (see services.reschedule_fee_cents). */
 const RESCHEDULE_FEE_NAME = "Rescheduling fee";
@@ -114,17 +119,41 @@ export async function createAdminBooking(input: unknown): Promise<ActionResult<{
     });
     const record = await loadBookingRecord({ id: data.booking_id });
     if (record) await notifyBookingConfirmed(record);
+    // A payment taken while booking them in gets its receipt too.
+    if (record?.email && v.payment) {
+      const { data: paid } = await ctx.supabase
+        .from("payments")
+        .select("id")
+        .eq("booking_id", data.booking_id)
+        .eq("status", "paid");
+      for (const p of paid ?? []) await emailReceipt(p.id);
+    }
     revalidate(TAGS.bookings);
     return ok({ id: data.booking_id });
   });
 }
 
-/** Confirm / decline / complete / cancel. The DB trigger rejects moves that don't make sense. */
+/**
+ * Confirm / decline / complete / cancel / no-show. The DB trigger rejects moves
+ * that don't make sense. Cancelling records why (studio policy 1.6–1.8): force
+ * majeure flags the booking for a full refund of what was paid.
+ */
 export async function setBookingStatus(input: unknown): Promise<ActionResult> {
-  return adminAction(bookingStatusSchema, input, async ({ id, status, photosUrl }, ctx) => {
+  return adminAction(bookingStatusSchema, input, async (v, ctx) => {
+    const { id, status, photosUrl } = v;
+    const cancelReason = status === "cancelled" ? (v.cancelReason ?? "client") : null;
+    let refund = false;
+    if (cancelReason === "force_majeure") {
+      const before = await loadBookingRecord({ id });
+      refund = (before?.summary.paidCents ?? 0) > 0;
+    }
     const { data, error } = await ctx.supabase
       .from("bookings")
-      .update({ status })
+      .update({
+        status,
+        ...(cancelReason ? { cancel_reason: cancelReason } : {}),
+        ...(refund ? { needs_refund_review: true } : {}),
+      })
       .eq("id", id)
       .select("id")
       .maybeSingle();
@@ -138,7 +167,7 @@ export async function setBookingStatus(input: unknown): Promise<ActionResult> {
       `booking.${status}`,
       "booking",
       id,
-      photos ? { photos_url: photos } : undefined,
+      photos ? { photos_url: photos } : cancelReason ? { reason: cancelReason } : undefined,
     );
     const record = await loadBookingRecord({ id });
     if (record && status === "confirmed") await notifyBookingConfirmed(record);
@@ -152,7 +181,9 @@ export async function setBookingStatus(input: unknown): Promise<ActionResult> {
 }
 
 /** GCash or cash received outside the website (e.g. the balance on the day). */
-export async function recordPayment(input: unknown): Promise<ActionResult> {
+export async function recordPayment(
+  input: unknown,
+): Promise<ActionResult<{ receiptEmailed: boolean }>> {
   return adminAction(recordPaymentSchema, input, async (v, ctx) => {
     const record = await loadBookingRecord({ id: v.bookingId });
     if (!record) return fail("Booking not found.");
@@ -165,22 +196,28 @@ export async function recordPayment(input: unknown): Promise<ActionResult> {
       return fail("That's more than the balance.", { amount: ["That's more than the balance."] });
     }
     // payments have no admin insert policy: written with the service role after assertAdmin().
-    const { error } = await createAdminClient().from("payments").insert({
-      booking_id: v.bookingId,
-      provider: v.provider,
-      amount_cents: v.amountCents,
-      status: "paid",
-      paid_at: new Date().toISOString(),
-      reference: v.reference,
-      recorded_by: ctx.admin.userId,
-    });
+    const { data: payment, error } = await createAdminClient()
+      .from("payments")
+      .insert({
+        booking_id: v.bookingId,
+        provider: v.provider,
+        amount_cents: v.amountCents,
+        status: "paid",
+        paid_at: new Date().toISOString(),
+        reference: v.reference,
+        recorded_by: ctx.admin.userId,
+      })
+      .select("id")
+      .single();
     if (error) throw error;
     await audit(ctx, "payment.record", "booking", v.bookingId, {
       provider: v.provider,
       amount_cents: v.amountCents,
     });
+    // The receipt goes to the client straight away (studio policy 1.5).
+    const emailed = await emailReceipt(payment.id);
     revalidate(TAGS.bookings);
-    return ok(undefined);
+    return ok({ receiptEmailed: emailed });
   });
 }
 
@@ -241,6 +278,7 @@ export async function resendBookingEmail(input: unknown): Promise<ActionResult> 
     const record = await loadBookingRecord({ id });
     if (!record) return fail("Booking not found.");
     if (!record.email) return fail("This client has no email address.");
+    if (record.status === "no_show") return fail("There's no email for a no-show.");
     await resendLatestEmail(record);
     await audit(ctx, "booking.email_resent", "booking", id);
     return ok(undefined);
@@ -332,6 +370,17 @@ export async function updateAdminBooking(input: unknown): Promise<ActionResult<{
       }
       if (error.code === PG.check) return fail("Please check the client's name and phone.");
       throw error;
+    }
+
+    // Moved with the fee: the client has used their one reschedule (studio policy 1.4).
+    // A free move (fee unticked, e.g. force majeure) doesn't count.
+    const usedReschedule = moved && v.addRescheduleFee;
+    if (usedReschedule) {
+      const { error: markError } = await ctx.supabase
+        .from("bookings")
+        .update({ rescheduled_at: new Date().toISOString() })
+        .eq("id", v.bookingId);
+      if (markError) throw markError;
     }
 
     const record = await loadBookingRecord({ id: v.bookingId });
@@ -438,6 +487,101 @@ export async function resolveBookingRequest(input: unknown): Promise<ActionResul
     if (!data) return fail("This request was already handled.");
     await audit(ctx, "booking.request_resolved", "booking", data.booking_id);
     revalidate(TAGS.bookings);
+    return ok(undefined);
+  });
+}
+
+const CHARGE_ERRORS: Record<string, string> = {
+  booking_not_found: "Booking not found.",
+  booking_closed: "Charges can only be added to bookings that are waiting, confirmed or completed.",
+  charge_not_found: "That charge is no longer on this booking.",
+  invalid_add_ons: "A booking can have up to 20 lines. Remove one first.",
+};
+
+const chargeError = (message: string) =>
+  Object.entries(CHARGE_ERRORS).find(([code]) => message.includes(code))?.[1];
+
+/**
+ * Adds an extra charge after a shoot (studio policy 3.2, 4.4, 5.1, 7.8): a
+ * booking line priced from Settings (or typed, for damage), so it counts in the
+ * total, VAT and balance. Works on completed bookings too.
+ */
+export async function addBookingCharge(input: unknown): Promise<ActionResult> {
+  return adminAction(bookingChargeSchema, input, async (v, ctx) => {
+    const { data: prices, error: pricesError } = await ctx.supabase
+      .from("business_settings")
+      .select(
+        "cleaning_fee_cents, backdrop_paper_yard_cents, extra_person_cents, storage_day_cents",
+      )
+      .single();
+    if (pricesError) throw pricesError;
+    const line = chargeLine(
+      { kind: v.kind, quantity: v.quantity, amountCents: v.amountCents, note: v.note },
+      prices,
+    );
+    if (line.priceCents <= 0) {
+      return fail("This charge is set to ₱0 in Settings → Extra charges.");
+    }
+
+    const { error } = await createAdminClient().rpc("admin_add_booking_charge", {
+      p_booking_id: v.bookingId,
+      p_name: line.name,
+      p_price_cents: line.priceCents,
+    });
+    if (error) {
+      const message = chargeError(error.message);
+      if (message) return fail(message);
+      throw error;
+    }
+    await audit(ctx, "booking.charge_add", "booking", v.bookingId, {
+      charge: line.name,
+      price_cents: line.priceCents,
+    });
+    revalidate(TAGS.bookings);
+    return ok(undefined);
+  });
+}
+
+/** Removes an extra charge (or the rescheduling fee) added by mistake. */
+export async function removeBookingCharge(input: unknown): Promise<ActionResult> {
+  return adminAction(removeChargeSchema, input, async ({ bookingId, lineId }, ctx) => {
+    const { data: line, error: lineError } = await ctx.supabase
+      .from("booking_add_ons")
+      .select("name, price_cents")
+      .eq("id", lineId)
+      .eq("booking_id", bookingId)
+      .maybeSingle();
+    if (lineError) throw lineError;
+    if (!line) return fail(CHARGE_ERRORS.charge_not_found!);
+
+    const { error } = await createAdminClient().rpc("admin_remove_booking_charge", {
+      p_booking_id: bookingId,
+      p_line_id: lineId,
+    });
+    if (error) {
+      const message = chargeError(error.message);
+      if (message) return fail(message);
+      throw error;
+    }
+    await audit(ctx, "booking.charge_remove", "booking", bookingId, {
+      charge: line.name,
+      price_cents: line.price_cents,
+    });
+    revalidate(TAGS.bookings);
+    return ok(undefined);
+  });
+}
+
+/** Emails one payment's receipt (PDF attached) to the client again. */
+export async function emailPaymentReceipt(input: unknown): Promise<ActionResult> {
+  return adminAction(paymentIdSchema, input, async ({ paymentId }, ctx) => {
+    const receipt = await loadReceipt(paymentId);
+    if (!receipt) return fail("This payment has no receipt (it isn't paid).");
+    if (!receipt.record.email) return fail("This client has no email address.");
+    if (!(await emailReceipt(paymentId))) return fail("The receipt couldn't be sent. Try again.");
+    await audit(ctx, "payment.receipt_emailed", "booking", receipt.record.id, {
+      receipt: receipt.data.number,
+    });
     return ok(undefined);
   });
 }

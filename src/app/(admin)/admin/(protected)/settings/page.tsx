@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { PageHeader } from "@/components/admin/page-header";
-import { BookingRulesForm, LogoForm, StudioProfileForm } from "@/components/admin/settings-forms";
+import {
+  BookingRulesForm,
+  ChargePricesForm,
+  LogoForm,
+  StudioPolicyForm,
+  StudioProfileForm,
+} from "@/components/admin/settings-forms";
 import { FormSkeleton } from "@/components/admin/skeletons";
 import { requireAdmin } from "@/server/auth";
 import { getBusinessSettingsForAdmin } from "@/server/queries/settings";
@@ -15,7 +21,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="the studio"
         title="Settings"
-        description="Your studio profile, booking rules and logo."
+        description="Your studio profile, booking rules, extra charges, studio policy and logo."
       />
       <Suspense
         fallback={
@@ -43,6 +49,8 @@ async function Settings() {
         <div className="space-y-6">
           <StudioProfileForm settings={settings} />
           <BookingRulesForm settings={settings} />
+          <ChargePricesForm settings={settings} />
+          <StudioPolicyForm settings={settings} />
         </div>
         <LogoForm logoPath={settings.logo_path} />
       </div>

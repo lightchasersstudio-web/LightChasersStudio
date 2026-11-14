@@ -15,7 +15,8 @@ export type PaymentMethod = "gcash" | "cash" | "online";
 
 export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "online", label: "Online (PayMongo)" },
-  { value: "gcash", label: "GCash (sent to you)" },
+  // Maya and bank transfers (InstaPay/PESONet) are counted here too.
+  { value: "gcash", label: "GCash, Maya or bank (sent to you)" },
   { value: "cash", label: "Cash" },
 ];
 
@@ -66,6 +67,7 @@ export function reportEnd(now: Date): Date {
 
 function methodOf(provider: string): PaymentMethod {
   if (provider === "gcash" || provider === "cash") return provider;
+  if (provider === "maya" || provider === "bank_transfer") return "gcash";
   return "online";
 }
 

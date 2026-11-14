@@ -25,3 +25,18 @@ export function bookingTotals(input: {
         : Math.round(total / 2);
   return { subtotal, vat, total, deposit };
 }
+
+/** Down payment % per group (owner request 2026-11-12): events vs everything else. */
+export type DepositPercents = { studio: number; events: number };
+
+export function depositPercents(settings: {
+  default_deposit_percent: number;
+  events_deposit_percent: number;
+}): DepositPercents {
+  return { studio: settings.default_deposit_percent, events: settings.events_deposit_percent };
+}
+
+/** Mirrors public.deposit_percent_for(): `services.deposit_group` picks the %. */
+export function depositPercentFor(group: string | null | undefined, percents: DepositPercents) {
+  return group === "events" ? percents.events : percents.studio;
+}

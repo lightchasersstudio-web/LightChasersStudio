@@ -18,6 +18,9 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: () => ({
       insert: async () => ({ error: db.insertError }),
+      select: () => ({
+        eq: () => ({ maybeSingle: async () => ({ data: { id: "p-1" }, error: null }) }),
+      }),
       delete: () => ({ eq: async (...args: unknown[]) => db.deleted(...args) }),
       update: (values: unknown) => ({
         eq: async (...args: unknown[]) => db.processed(values, ...args),
@@ -30,6 +33,8 @@ vi.mock("@/server/queries/booking-record", () => ({
   loadBookingRecord: async () => ({ id: "b-1" }),
 }));
 vi.mock("@/server/booking-notifications", () => ({ notifyBookingReceived: notify }));
+const receipt = vi.fn();
+vi.mock("@/server/receipts", () => ({ emailReceipt: receipt }));
 
 const { POST } = await import("./route");
 
@@ -70,6 +75,7 @@ beforeEach(() => {
   db.deleted.mockReset().mockResolvedValue({ error: null });
   db.processed.mockReset().mockResolvedValue({ error: null });
   notify.mockReset();
+  receipt.mockReset();
 });
 
 describe("PayMongo webhook", () => {
@@ -95,6 +101,7 @@ describe("PayMongo webhook", () => {
       expect.any(String),
     );
     expect(notify).toHaveBeenCalledTimes(1);
+    expect(receipt).toHaveBeenCalledWith("p-1");
   });
 
   it("acknowledges a repeated event without settling it again", async () => {

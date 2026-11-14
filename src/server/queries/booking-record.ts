@@ -1,6 +1,7 @@
 import "server-only";
 
 import { summaryDays, summaryPeople, type BookingSummary } from "@/lib/booking/booking-summary";
+import { asCancelReason, type CancelReason } from "@/lib/booking/policy";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { BookingStatus } from "@/lib/booking/status";
 
@@ -19,6 +20,14 @@ export type BookingRecord = {
   reschedule: { feeCents: number; vatPercent: number };
   /** The package contract the client agreed to when booking online (null = none). */
   contract: { text: string; acceptedAt: string; signedName: string | null } | null;
+  /** The Studio Policy Manual wording the client agreed to (null = not asked). */
+  studioPolicy: { text: string; acceptedAt: string } | null;
+  /** Studio policy facts: when it was cancelled / marked no-show, why, and the one reschedule. */
+  policy: {
+    cancelledAt: string | null;
+    cancelReason: CancelReason | null;
+    rescheduledAt: string | null;
+  };
 };
 
 /**
@@ -32,7 +41,7 @@ export async function loadBookingRecord(
   const query = supabase
     .from("bookings")
     .select(
-      "id, reference_code, status, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contract_signed_name, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, contact_name, service:services(name, category, workshop_days, reschedule_fee_cents), add_ons:booking_add_ons(name, price_cents), attendees:booking_attendees(position, full_name, category, price_cents), client:clients(email), payments(amount_cents, status)",
+      "id, reference_code, status, start_at, end_at, has_end_time, contract_text, contract_accepted_at, contract_signed_name, policy_text, policy_accepted_at, location, price_cents, vat_cents, deposit_cents, hold_expires_at, needs_refund_review, cancelled_at, cancel_reason, rescheduled_at, contact_name, service:services(name, category, workshop_days, reschedule_fee_cents), add_ons:booking_add_ons(name, price_cents), attendees:booking_attendees(position, full_name, category, price_cents), client:clients(email), payments(amount_cents, status)",
     );
   const [{ data, error }, settings] = await Promise.all([
     "id" in where
@@ -54,6 +63,11 @@ export async function loadBookingRecord(
     holdExpiresAt: data.hold_expires_at,
     depositCents: data.deposit_cents,
     needsRefundReview: data.needs_refund_review,
+    policy: {
+      cancelledAt: data.cancelled_at,
+      cancelReason: asCancelReason(data.cancel_reason),
+      rescheduledAt: data.rescheduled_at,
+    },
     reschedule: {
       feeCents: data.service?.reschedule_fee_cents ?? 0,
       vatPercent: data.vat_cents > 0 ? settings.data.vat_percent : 0,
@@ -65,6 +79,10 @@ export async function loadBookingRecord(
             acceptedAt: data.contract_accepted_at,
             signedName: data.contract_signed_name,
           }
+        : null,
+    studioPolicy:
+      data.policy_text && data.policy_accepted_at
+        ? { text: data.policy_text, acceptedAt: data.policy_accepted_at }
         : null,
     summary: {
       reference: data.reference_code,

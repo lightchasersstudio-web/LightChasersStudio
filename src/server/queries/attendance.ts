@@ -134,6 +134,8 @@ export type DayAttendanceRow = {
   category: string | null;
   salaryType: string;
   salaryRate: number;
+  /** Pesos per overtime hour; null = overtime isn't paid. */
+  overtimeRate: number | null;
   /** null = nothing recorded for the day. */
   log: AttendanceLog | null;
 };
@@ -147,7 +149,7 @@ export async function getDayAttendance(date: string): Promise<DayAttendanceRow[]
   const [employees, logs] = await Promise.all([
     supabase
       .from("employees")
-      .select("id, full_name, position, category, salary_type, salary_rate")
+      .select("id, full_name, position, category, salary_type, salary_rate, overtime_rate")
       .eq("is_active", true)
       .is("deleted_at", null)
       .order("full_name"),
@@ -182,6 +184,7 @@ export async function getDayAttendance(date: string): Promise<DayAttendanceRow[]
     category: e.category,
     salaryType: e.salary_type,
     salaryRate: Number(e.salary_rate),
+    overtimeRate: e.overtime_rate === null ? null : Number(e.overtime_rate),
     log: byEmployee.get(e.id) ?? null,
   }));
 }

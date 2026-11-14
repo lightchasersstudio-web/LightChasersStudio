@@ -20,13 +20,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
+import { centsToPesoInput } from "@/lib/utils/money";
 import {
   bookingRulesSchema,
+  chargePricesSchema,
+  studioPolicySchema,
   studioProfileSchema,
   type BookingRulesInput,
+  type ChargePricesInput,
+  type StudioPolicyInput,
   type StudioProfileInput,
 } from "@/lib/validations/settings";
-import { saveBookingRules, saveLogo, saveStudioProfile } from "@/server/actions/settings";
+import {
+  saveBookingRules,
+  saveChargePrices,
+  saveLogo,
+  saveStudioPolicy,
+  saveStudioProfile,
+} from "@/server/actions/settings";
 import type { BusinessSettings } from "@/server/queries/settings";
 
 function SaveButton({
@@ -229,9 +240,11 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
       slotIntervalMinutes: String(settings.slot_interval_minutes) as "15" | "30" | "60",
       bufferMinutes: String(settings.buffer_minutes),
       defaultDepositPercent: String(settings.default_deposit_percent),
+      eventsDepositPercent: String(settings.events_deposit_percent),
       vatPercent: String(settings.vat_percent),
       holdMinutes: String(settings.hold_minutes),
       maxConcurrentBookings: String(settings.max_concurrent_bookings),
+      personalDataDays: String(settings.personal_data_days),
     },
   });
   const { control } = form;
@@ -293,9 +306,16 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
             <TextField
               control={control}
               name="defaultDepositPercent"
-              label="Default deposit (%)"
+              label="Studio down payment (%)"
               inputMode="numeric"
-              description="Services can override this with a fixed amount."
+              description="Portraits, studio, product and other non-event packages."
+            />
+            <TextField
+              control={control}
+              name="eventsDepositPercent"
+              label="Events down payment (%)"
+              inputMode="numeric"
+              description="Weddings, prenups and the Photobooth. Pick each package's group in Services; a fixed amount there overrides both."
             />
             <TextField
               control={control}
@@ -318,11 +338,151 @@ export function BookingRulesForm({ settings }: { settings: BusinessSettings }) {
               inputMode="numeric"
               description="Usually 1. Outside events (weddings, prenups) are one per day and don't count here; set each package's type in Services."
             />
+            <TextField
+              control={control}
+              name="personalDataDays"
+              label="Delete client details after (days)"
+              inputMode="numeric"
+              description="Days after their last booking (studio policy 7.2). Not while a booking, refund, unpaid balance or request is open. Amounts and receipts stay. 0 = never."
+            />
           </div>
         </CardContent>
         <CardFooter className="justify-end">
           <SaveButton pending={form.formState.isSubmitting} dirty={form.formState.isDirty}>
             Save booking rules
+          </SaveButton>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * The Studio Policy Manual & Client Agreement. Clients booking a studio package
+ * must tick "I agree" to it on Review & pay; each booking keeps the copy agreed to.
+ */
+export function StudioPolicyForm({ settings }: { settings: BusinessSettings }) {
+  const form = useForm<StudioPolicyInput, unknown, z.output<typeof studioPolicySchema>>({
+    resolver: zodResolver(studioPolicySchema),
+    defaultValues: { studioPolicy: settings.studio_policy },
+  });
+  useUnsavedChangesWarning(form.formState.isDirty);
+
+  async function onSubmit() {
+    const values = form.getValues();
+    if (handleResult(await saveStudioPolicy(values), "Studio policy saved.", form))
+      form.reset(values);
+  }
+
+  return (
+    <Card id="studio-policy" className="scroll-mt-24">
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        noValidate
+        className="flex flex-col gap-(--card-spacing)"
+      >
+        <CardHeader>
+          <CardTitle>Studio policy</CardTitle>
+          <CardDescription>
+            Shown on the last booking step for studio packages (booking type “Studio” in Services),
+            below the package contract. Clients must tick “I agree” to book. Bookings keep the
+            wording they agreed to, so editing it only affects new bookings. Leave it empty to stop
+            asking.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TextAreaField
+            control={form.control}
+            name="studioPolicy"
+            label="Studio Policy Manual & Client Agreement"
+            rows={18}
+            maxLength={60000}
+            description="Plain text. Blank lines separate paragraphs."
+          />
+        </CardContent>
+        <CardFooter className="justify-end">
+          <SaveButton pending={form.formState.isSubmitting} dirty={form.formState.isDirty}>
+            Save studio policy
+          </SaveButton>
+        </CardFooter>
+      </form>
+    </Card>
+  );
+}
+
+/** Preset prices for extra charges after a shoot (studio policy 3.2, 4.4, 5.1, 7.8). */
+export function ChargePricesForm({ settings }: { settings: BusinessSettings }) {
+  const form = useForm<ChargePricesInput, unknown, z.output<typeof chargePricesSchema>>({
+    resolver: zodResolver(chargePricesSchema),
+    defaultValues: {
+      cleaningFee: centsToPesoInput(settings.cleaning_fee_cents),
+      backdropPaperYard: centsToPesoInput(settings.backdrop_paper_yard_cents),
+      extraPerson: centsToPesoInput(settings.extra_person_cents),
+      storageDay: centsToPesoInput(settings.storage_day_cents),
+    },
+  });
+  const { control } = form;
+  useUnsavedChangesWarning(form.formState.isDirty);
+
+  async function onSubmit() {
+    const values = form.getValues();
+    if (handleResult(await saveChargePrices(values), "Extra charge prices saved.", form))
+      form.reset(values);
+  }
+
+  return (
+    <Card id="extra-charges" className="scroll-mt-24">
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        noValidate
+        className="flex flex-col gap-(--card-spacing)"
+      >
+        <CardHeader>
+          <CardTitle>Extra charges</CardTitle>
+          <CardDescription>
+            Preset prices staff can add to a booking after a shoot (booking page → Payments → Add a
+            charge). Before VAT. Damage is typed in each time.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <TextField
+              control={control}
+              name="cleaningFee"
+              label="Cleaning fee"
+              prefix="₱"
+              inputMode="decimal"
+              description="Studio left dirty (policy 4.4)."
+            />
+            <TextField
+              control={control}
+              name="backdropPaperYard"
+              label="Backdrop paper, per yard"
+              prefix="₱"
+              inputMode="decimal"
+              description="Soiled or torn seamless paper cut off (3.2)."
+            />
+            <TextField
+              control={control}
+              name="extraPerson"
+              label="Extra person, each"
+              prefix="₱"
+              inputMode="decimal"
+              description="Beyond the package limit or 8 people (5.1)."
+            />
+            <TextField
+              control={control}
+              name="storageDay"
+              label="Storage of left-behind items, per day"
+              prefix="₱"
+              inputMode="decimal"
+              description="After the free 24 hours (7.8)."
+            />
+          </div>
+        </CardContent>
+        <CardFooter className="justify-end">
+          <SaveButton pending={form.formState.isSubmitting} dirty={form.formState.isDirty}>
+            Save prices
           </SaveButton>
         </CardFooter>
       </form>

@@ -64,6 +64,8 @@ const SIMPLE: Record<string, string> = {
   "blackout.remove": "Removed a day off",
   "settings.profile": "Updated the studio profile",
   "settings.booking_rules": "Changed the booking rules",
+  "settings.studio_policy": "Edited the studio policy",
+  "settings.charge_prices": "Changed the extra charge prices",
 };
 
 const BENEFIT_LABEL: Record<string, string> = {
@@ -75,11 +77,22 @@ const BENEFIT_LABEL: Record<string, string> = {
 /** One line for the Activity page: what was done, plus the item's name when known. */
 export function describeActivity(action: string, metadata: Meta, reference?: string): string {
   const benefit = BENEFIT_LABEL[String(metadata.benefit)];
+  if (action === "privacy.auto_delete") {
+    const n = Number(metadata.clients ?? 0);
+    const ids = Number(metadata.student_ids ?? 0);
+    return [
+      n > 0 && `Deleted ${n} ${n === 1 ? "client's" : "clients'"} details after the keeping period`,
+      ids > 0 && `removed ${ids} student ID ${ids === 1 ? "photo" : "photos"}`,
+    ]
+      .filter(Boolean)
+      .join(", ")
+      .replace(/^r/, "R");
+  }
   const base =
     ((benefit && action === "employee.benefit_on" && `Turned on ${benefit}`) ||
       (benefit && action === "employee.benefit_off" && `Turned off ${benefit}`) ||
       SIMPLE[action]) ??
-    (action.startsWith("booking.") || action === "payment.record"
+    (action.startsWith("booking.") || action.startsWith("payment.")
       ? describeHistoryEntry(action, metadata)
       : action);
   const name =

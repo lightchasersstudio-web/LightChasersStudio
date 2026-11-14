@@ -149,7 +149,7 @@ test("time record: fill a cut-off, mark an absence, overnight shift, totals", as
   expect(count).toBe(14);
 });
 
-test("time record: steps bar and Save & next go through the team", async ({ page }) => {
+test("time record: Save & next goes through the team", async ({ page }) => {
   test.setTimeout(60_000);
   const NEXT = `${RUN} Santos`; // sorts right after NAME
   await admin().from("employees").update({ is_active: true }).eq("id", employeeId);
@@ -169,11 +169,9 @@ test("time record: steps bar and Save & next go through the team", async ({ page
 
   await signIn(page);
   await page.goto(`/admin/dtr?cutoff=${CUTOFF}&employee=${employeeId}`);
-  const steps = page.getByRole("navigation", { name: /Payroll steps/ });
-  await expect(steps).toContainText("Record days");
-  await expect(steps.getByRole("link", { name: /^Step 2:/ })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Payroll" }).last()).toHaveAttribute(
     "href",
-    `/admin/payroll?cutoff=${CUTOFF}`,
+    "/admin/payroll",
   );
   await page.waitForLoadState("networkidle"); // let React hydrate before changing the form
 

@@ -2,13 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { addDays, format, parseISO } from "date-fns";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  CalendarCheckIcon,
-  Loader2Icon,
-  MoonIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, Loader2Icon, PencilIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -17,37 +11,39 @@ import { toast } from "sonner";
 import type { z } from "zod";
 
 import { handleResult } from "@/components/admin/form-utils";
-import { ShiftNote } from "@/components/admin/payroll/attendance-sheet";
 import { useUnsavedChangesWarning } from "@/components/admin/use-unsaved-changes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   cutoffFor,
+  cutoffLabel,
   DAY_STATUSES,
   formatMinutes,
   hasTimes,
+  isDayStatus,
   isShift,
   minutesWorked,
   type DayStatus,
 } from "@/lib/payroll/cutoff";
-import { isTimeOutEdited } from "@/lib/payroll/daily-pay";
+import { computeDailyPay } from "@/lib/payroll/daily-pay";
 import { afterStatusChange, timeOutForNewTimeIn } from "@/lib/payroll/day-entry";
-import { amountToInput, formatAmount, parseAmount } from "@/lib/payroll/money";
+import { pastCutoffWarning } from "@/lib/payroll/flow";
+import {
+  amountToInput,
+  formatAmount,
+  formatAmountExact,
+  parseAmount,
+  toPesos,
+} from "@/lib/payroll/money";
 import { cn } from "@/lib/utils";
 import { attendanceDaySchema, type AttendanceTeamDayInput } from "@/lib/validations/attendance";
 import { saveAttendanceDay } from "@/server/actions/attendance";
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** "Present" with no times yet starts at 9:00 AM for one normal day. */
+const USUAL_START = "09:00";
 
 const STATUS_TONE: Record<string, string> = {
   rest_day: "bg-muted/60",
@@ -62,6 +58,8 @@ export type DayStaff = {
   position: string;
   /** Their daily rate today: new records start with it. */
   currentRate: number;
+  /** Pesos per overtime hour; null = overtime isn't paid. */
+  overtimeRate: number | null;
   log: {
     status: DayStatus;
     timeIn: string | null;
@@ -71,13 +69,27 @@ export type DayStaff = {
   } | null;
 };
 
-const dayHref = (date: string) => `/admin/dtr/day?date=${date}`;
+export const payrollDayHref = (date: string) => `/admin/payroll?date=${date}`;
 const shiftDate = (date: string, days: number) =>
   format(addDays(parseISO(date), days), "yyyy-MM-dd");
 
+/** "13:30" → "1:30 PM" */
+function clock(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number) as [number, number];
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** "09:00" + 480 → "17:00" */
+function addMinutes(hhmm: string, minutes: number): string {
+  const [h, m] = hhmm.split(":").map(Number) as [number, number];
+  const t = (h * 60 + m + minutes) % 1440;
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
 /**
- * Time record → By day: every active employee on one date, one row each.
- * Saves only the rows that changed.
+ * Payroll → one day for the whole team: pick each person's status (times fill
+ * in from the shift), "Edit" for times, rate and a note. Saving the day also
+ * updates the cut-off's payslips. Saves only the rows that changed.
  */
 export function DayAttendanceSheet({
   date,
@@ -119,20 +131,43 @@ export function DayAttendanceSheet({
   const rows = useWatch({ control, name: "rows" });
   const dirty = form.formState.isDirty;
   useUnsavedChangesWarning(dirty);
-
-  const [fillIn, setFillIn] = useState("09:00");
-  const [fillOut, setFillOut] = useState("17:00");
+  // Rows showing their times, rate and note.
+  const [editing, setEditing] = useState<Set<number>>(new Set());
+  const toggle = (i: number) =>
+    setEditing((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   const set = (path: Parameters<typeof form.setValue>[0], value: string) =>
     form.setValue(path, value, { shouldDirty: true });
 
   const original = (i: number) => JSON.stringify(form.formState.defaultValues?.rows?.[i]?.day);
   const changedCount = (rows ?? []).filter((r, i) => JSON.stringify(r.day) !== original(i)).length;
+  const blankCount = (rows ?? []).filter((r) => r.day.status === "").length;
 
-  const minutesFor = (d: AttendanceTeamDayInput["rows"][number]["day"] | undefined) =>
-    d && hasTimes(d.status) && TIME.test(d.timeIn) && TIME.test(d.timeOut) && d.timeIn !== d.timeOut
-      ? minutesWorked(d.timeIn, d.timeOut)
-      : 0;
+  /** A row's pay for the day (centavos), worked out like the payslips do. */
+  function payFor(i: number): number {
+    const d = rows?.[i]?.day;
+    if (!d || !isDayStatus(d.status)) return 0;
+    const timed = hasTimes(d.status);
+    const minutes =
+      timed && TIME.test(d.timeIn) && TIME.test(d.timeOut) && d.timeIn !== d.timeOut
+        ? minutesWorked(d.timeIn, d.timeOut)
+        : 0;
+    return computeDailyPay({
+      status: d.status,
+      minutes,
+      dailyRate: parseAmount(d.rate) ?? 0,
+      shiftMinutes: shift,
+      overtimeRate: staff[i]!.overtimeRate,
+    }).payCents;
+  }
+  const pays = fields.map((_, i) => payFor(i));
+  const dayTotal = pays.reduce((sum, p) => sum + p, 0);
+  const paidCount = pays.filter((p) => p > 0).length;
 
   function pickStatus(i: number, next: string) {
     const before = form.getValues(`rows.${i}.day`);
@@ -140,6 +175,11 @@ export function DayAttendanceSheet({
       current: amountToInput(staff[i]!.currentRate),
       amPm: amPmRateInput,
     });
+    // Present with no times yet: one normal day from 9:00 AM.
+    if (next === "present" && !TIME.test(after.timeIn) && !TIME.test(after.timeOut)) {
+      after.timeIn = USUAL_START;
+      after.timeOut = addMinutes(USUAL_START, shift);
+    }
     set(`rows.${i}.day.status`, after.status);
     set(`rows.${i}.day.timeIn`, after.timeIn);
     set(`rows.${i}.day.timeOut`, after.timeOut);
@@ -148,55 +188,49 @@ export function DayAttendanceSheet({
   }
 
   function fillBlank(status: "present" | "rest_day") {
-    if (status === "present" && (!TIME.test(fillIn) || !TIME.test(fillOut) || fillIn === fillOut)) {
-      toast.error("Enter a time in and a different time out first.");
-      return;
-    }
-    let filled = 0;
     form.getValues("rows").forEach((r, i) => {
-      if (r.day.status !== "") return;
-      pickStatus(i, status);
-      if (status === "present") {
-        set(`rows.${i}.day.timeIn`, fillIn);
-        set(`rows.${i}.day.timeOut`, fillOut);
-      }
-      filled += 1;
+      if (r.day.status === "") pickStatus(i, status);
     });
-    toast(
-      filled
-        ? `Marked ${filled} ${filled === 1 ? "person" : "people"} ${status === "present" ? "present" : "on rest day"}. Save to keep it.`
-        : "Everyone already has something recorded.",
-    );
   }
 
   async function onSubmit() {
     const values = form.getValues();
     const changed = values.rows.filter((r, i) => JSON.stringify(r.day) !== original(i));
+    // A cut-off that's over is already paid: say whose payslip changes first.
+    const cutoff = cutoffFor(date);
+    if (cutoff.end < today) {
+      const names = changed.map((r) => staff.find((s) => s.id === r.employeeId)?.name ?? "");
+      if (!window.confirm(pastCutoffWarning(cutoffLabel(cutoff), names))) return;
+    }
     const result = await saveAttendanceDay({ date, rows: changed });
     const label = format(parseISO(date), "EEE d MMM");
-    if (handleResult(result, `Time record saved for ${label}.`)) form.reset(values);
+    if (handleResult(result, `${label} saved. Payslips are updated.`)) {
+      form.reset(values);
+      setEditing(new Set());
+    }
   }
 
   function jumpTo(next: string) {
     if (!next || next === date) return;
     if (dirty && !window.confirm("You have unsaved changes. Leave without saving?")) return;
-    router.push(dayHref(next));
+    router.push(payrollDayHref(next));
   }
 
   const busy = form.formState.isSubmitting;
-  const cutoffStart = cutoffFor(date).start;
 
   return (
     <form
-      onSubmit={form.handleSubmit(onSubmit, () =>
-        toast.error("Some rows need a time in, time out or rate."),
-      )}
+      onSubmit={form.handleSubmit(onSubmit, (errors) => {
+        // Open the rows that need fixing.
+        setEditing((prev) => new Set([...prev, ...Object.keys(errors.rows ?? {}).map(Number)]));
+        toast.error("Some rows need a time in and time out.");
+      })}
       noValidate
       className="space-y-4"
     >
       <div className="flex flex-wrap items-center gap-2">
         <Button asChild variant="outline" size="icon-lg">
-          <Link href={dayHref(shiftDate(date, -1))} aria-label="Previous day">
+          <Link href={payrollDayHref(shiftDate(date, -1))} aria-label="Previous day">
             <ArrowLeftIcon aria-hidden />
           </Link>
         </Button>
@@ -204,7 +238,7 @@ export function DayAttendanceSheet({
           {format(parseISO(date), "EEE d MMM yyyy")}
         </h2>
         <Button asChild variant="outline" size="icon-lg">
-          <Link href={dayHref(shiftDate(date, 1))} aria-label="Next day">
+          <Link href={payrollDayHref(shiftDate(date, 1))} aria-label="Next day">
             <ArrowRightIcon aria-hidden />
           </Link>
         </Button>
@@ -220,236 +254,204 @@ export function DayAttendanceSheet({
         />
         {date !== today && (
           <Button asChild variant="ghost">
-            <Link href={dayHref(today)}>Today</Link>
+            <Link href={payrollDayHref(today)}>Today</Link>
           </Button>
         )}
       </div>
 
-      <div className="flex flex-col gap-3 rounded-3xl border bg-card p-4 lg:flex-row lg:flex-wrap lg:items-end">
-        <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
-          <div className="grid gap-1.5">
-            <Label htmlFor="day-fill-in">Usual time in</Label>
-            <Input
-              id="day-fill-in"
-              type="time"
-              value={fillIn}
-              onChange={(e) => setFillIn(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="day-fill-out">Usual time out</Label>
-            <Input
-              id="day-fill-out"
-              type="time"
-              value={fillOut}
-              onChange={(e) => setFillOut(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => fillBlank("present")}>
-            <CalendarCheckIcon aria-hidden />
-            Mark blank rows present
+      {blankCount > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          {blankCount === staff.length ? "Everyone" : `The other ${blankCount}`}:
+          <Button type="button" variant="outline" size="sm" onClick={() => fillBlank("present")}>
+            Present
           </Button>
-          <Button type="button" variant="outline" onClick={() => fillBlank("rest_day")}>
-            <MoonIcon aria-hidden />
-            Mark blank rows rest day
+          <Button type="button" variant="outline" size="sm" onClick={() => fillBlank("rest_day")}>
+            Rest day
           </Button>
-        </div>
-        <p className="text-sm text-muted-foreground lg:basis-full">
-          Fills only people with nothing recorded for this day. AM, PM and AM/PM fill in their own
-          times; change anyone&apos;s row after.
         </p>
-      </div>
+      )}
 
-      <div className="overflow-hidden rounded-3xl border bg-card">
-        <Table>
-          <TableHeader className="max-xl:sr-only">
-            <TableRow>
-              <TableHead className="pl-5">Employee</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Time in</TableHead>
-              <TableHead>Time out</TableHead>
-              <TableHead className="pr-6 text-right">Hours</TableHead>
-              <TableHead>Daily rate</TableHead>
-              <TableHead className="pr-5">Note</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {fields.map((field, i) => {
-              const person = staff[i]!;
-              const d = rows?.[i]?.day;
-              const timed = hasTimes(d?.status ?? "");
-              const edited = d ? isTimeOutEdited(d.status, d.timeIn, d.timeOut) : false;
-              const rate = parseAmount(d?.rate ?? "");
-              const specialRate = timed && rate !== null && rate !== person.currentRate;
-              const who = person.name;
-              return (
-                <TableRow
-                  key={field.id}
-                  className={cn(
-                    // Phones: each person is a small card (2 columns) instead of a wide row.
-                    "grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 xl:table-row xl:p-0",
-                    STATUS_TONE[d?.status ?? ""],
-                  )}
-                >
-                  <TableCell className="col-span-2 self-center p-0 xl:py-2 xl:pl-5">
-                    <Link
-                      href={`/admin/dtr?cutoff=${cutoffStart}&employee=${person.id}`}
-                      className="font-semibold underline-offset-4 hover:underline"
+      <ul className="divide-y overflow-hidden rounded-3xl border bg-card">
+        {fields.map((field, i) => {
+          const person = staff[i]!;
+          const d = rows?.[i]?.day;
+          const status = d?.status ?? "";
+          const timed = hasTimes(status);
+          const open = editing.has(i);
+          const minutes =
+            d && timed && TIME.test(d.timeIn) && TIME.test(d.timeOut) && d.timeIn !== d.timeOut
+              ? minutesWorked(d.timeIn, d.timeOut)
+              : 0;
+          const rate = parseAmount(d?.rate ?? "");
+          const specialRate = timed && rate !== null && rate !== person.currentRate;
+          const who = person.name;
+          return (
+            <li key={field.id} className={cn("px-4 py-3 sm:px-5", STATUS_TONE[status])}>
+              <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-2 sm:grid-cols-[minmax(9rem,1fr)_11rem_minmax(0,1.4fr)_6.5rem_auto]">
+                <div className="min-w-0">
+                  <p className="font-semibold break-words">{who}</p>
+                  <p className="text-sm text-muted-foreground">{person.position}</p>
+                </div>
+                <Controller
+                  control={control}
+                  name={`rows.${i}.day.status`}
+                  render={({ field: f }) => (
+                    <NativeSelect
+                      name={f.name}
+                      ref={f.ref}
+                      value={f.value}
+                      onBlur={f.onBlur}
+                      aria-label={`Status, ${who}`}
+                      className="w-36 sm:w-full"
+                      onChange={(e) => pickStatus(i, e.target.value)}
                     >
-                      {who}
-                    </Link>
-                    <span className="block text-sm text-muted-foreground">{person.position}</span>
-                  </TableCell>
-                  <TableCell className="col-span-2 p-0 sm:col-span-1 xl:py-2">
-                    <Controller
-                      control={control}
-                      name={`rows.${i}.day.status`}
-                      render={({ field: f }) => (
-                        <NativeSelect
-                          name={f.name}
-                          ref={f.ref}
-                          value={f.value}
-                          onBlur={f.onBlur}
-                          aria-label={`Status, ${who}`}
-                          className="w-full xl:w-36"
-                          onChange={(e) => pickStatus(i, e.target.value)}
-                        >
-                          <NativeSelectOption value="">Not recorded</NativeSelectOption>
-                          {DAY_STATUSES.map((s) => (
-                            <NativeSelectOption key={s.value} value={s.value}>
-                              {s.label}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
+                      <NativeSelectOption value="">Not set</NativeSelectOption>
+                      {DAY_STATUSES.map((s) => (
+                        <NativeSelectOption key={s.value} value={s.value}>
+                          {s.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  )}
+                />
+                <p className="col-span-2 text-sm text-muted-foreground sm:col-span-1">
+                  {timed && TIME.test(d?.timeIn ?? "") && TIME.test(d?.timeOut ?? "") ? (
+                    <>
+                      <span className="text-foreground">
+                        {clock(d!.timeIn)} – {clock(d!.timeOut)}
+                      </span>{" "}
+                      · {formatMinutes(minutes)}
+                      {status === "present" && minutes > shift && (
+                        <> · {formatMinutes(minutes - shift)} overtime</>
                       )}
-                    />
-                  </TableCell>
-                  {(["timeIn", "timeOut"] as const).map((name) => (
-                    <TableCell key={name} className={cn("p-0 xl:py-2", !timed && "max-xl:hidden")}>
+                      {status === "present" && minutes > 0 && minutes < shift && (
+                        <> · {formatMinutes(shift - minutes)} short</>
+                      )}
+                      {isShift(status) && <> · full day</>}
+                    </>
+                  ) : null}
+                  {specialRate && <> · rate {formatAmount(rate!)}</>}
+                  {d?.note && !open && <span className="block truncate">“{d.note}”</span>}
+                </p>
+                <p
+                  className={cn(
+                    "text-right tabular-nums max-sm:col-start-2 max-sm:row-start-2",
+                    pays[i]! > 0 ? "font-semibold" : "text-muted-foreground",
+                  )}
+                  aria-label={`Pay for the day, ${who}`}
+                >
+                  {status === "" ? "—" : formatAmountExact(toPesos(pays[i]!))}
+                </p>
+                {status !== "" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="col-start-2 row-start-1 justify-self-end sm:col-start-auto sm:row-start-auto"
+                    aria-expanded={open}
+                    aria-label={`${open ? "Hide" : "Edit"} times and note, ${who}`}
+                    onClick={() => toggle(i)}
+                  >
+                    <PencilIcon aria-hidden />
+                    {open ? "Done" : "Edit"}
+                  </Button>
+                )}
+              </div>
+
+              {open && status !== "" && (
+                <div className="mt-3 grid gap-3 rounded-2xl bg-background/70 p-3 sm:grid-cols-4">
+                  {timed &&
+                    (["timeIn", "timeOut"] as const).map((name) => (
                       <Controller
+                        key={name}
                         control={control}
                         name={`rows.${i}.day.${name}`}
                         render={({ field: f, fieldState }) => (
-                          <div>
-                            <span className="mb-1 block text-xs text-muted-foreground xl:sr-only">
+                          <div className="grid gap-1.5">
+                            <Label htmlFor={`${name}-${i}`}>
                               {name === "timeIn" ? "Time in" : "Time out"}
-                            </span>
+                            </Label>
                             <Input
                               {...f}
+                              id={`${name}-${i}`}
                               type="time"
-                              disabled={!timed}
-                              aria-label={`${name === "timeIn" ? "Time in" : "Time out"}, ${who}`}
                               aria-invalid={fieldState.invalid}
-                              className="xl:w-32"
                               onChange={(e) => {
                                 f.onChange(e);
                                 if (name !== "timeIn") return;
                                 // Shifts: a new time in moves the time out with it.
-                                const out = timeOutForNewTimeIn(
-                                  form.getValues(`rows.${i}.day.status`),
-                                  e.target.value,
-                                );
+                                const out = timeOutForNewTimeIn(status, e.target.value);
                                 if (out) set(`rows.${i}.day.timeOut`, out);
                               }}
                             />
-                            {name === "timeOut" && edited && (
-                              <span className="mt-1 block text-xs text-terracotta-ink">
-                                Edited (not the usual times)
-                              </span>
-                            )}
                             {fieldState.error && (
-                              <p role="alert" className="mt-1 text-xs text-destructive">
+                              <p role="alert" className="text-xs text-destructive">
                                 {fieldState.error.message}
                               </p>
                             )}
                           </div>
                         )}
                       />
-                    </TableCell>
-                  ))}
-                  <TableCell
-                    className={cn(
-                      "self-center p-0 text-sm tabular-nums xl:py-2 xl:pr-6 xl:text-right",
-                      !timed && "max-xl:hidden",
-                    )}
-                  >
-                    <span className="text-muted-foreground xl:hidden">Hours: </span>
-                    {timed ? formatMinutes(minutesFor(d)) : "—"}
-                    {d?.status === "present" && <ShiftNote minutes={minutesFor(d)} shift={shift} />}
-                    {isShift(d?.status ?? "") && (
-                      <span className="text-xs text-muted-foreground xl:block">
-                        <span className="xl:hidden"> · </span>full day
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className={cn("p-0 xl:py-2", !timed && "max-xl:hidden")}>
+                    ))}
+                  {timed && (
                     <Controller
                       control={control}
                       name={`rows.${i}.day.rate`}
                       render={({ field: f, fieldState }) => (
-                        <div className={cn(!timed && "xl:invisible")}>
-                          <span className="mb-1 block text-xs text-muted-foreground xl:sr-only">
-                            Daily rate
-                          </span>
-                          <div className="relative">
-                            <span
-                              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground"
-                              aria-hidden
-                            >
-                              ₱
-                            </span>
-                            <Input
-                              {...f}
-                              inputMode="decimal"
-                              autoComplete="off"
-                              disabled={!timed}
-                              aria-label={`Daily rate, ${who}`}
-                              aria-invalid={fieldState.invalid}
-                              className="pl-7 tabular-nums xl:w-28"
-                            />
-                          </div>
-                          {specialRate && !fieldState.error && (
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                              Usual {formatAmount(person.currentRate)}
-                            </span>
-                          )}
-                          {fieldState.error && (
-                            <p role="alert" className="mt-1 text-xs text-destructive">
+                        <div className="grid gap-1.5">
+                          <Label htmlFor={`rate-${i}`}>Daily rate (₱)</Label>
+                          <Input
+                            {...f}
+                            id={`rate-${i}`}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            aria-invalid={fieldState.invalid}
+                            className="tabular-nums"
+                          />
+                          {fieldState.error ? (
+                            <p role="alert" className="text-xs text-destructive">
                               {fieldState.error.message}
                             </p>
+                          ) : (
+                            specialRate && (
+                              <span className="text-xs text-muted-foreground">
+                                Usual {formatAmount(person.currentRate)}
+                              </span>
+                            )
                           )}
                         </div>
                       )}
                     />
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "col-span-2 p-0 xl:py-2 xl:pr-5",
-                      !d?.note && !d?.status && "max-xl:hidden",
+                  )}
+                  <Controller
+                    control={control}
+                    name={`rows.${i}.day.note`}
+                    render={({ field: f }) => (
+                      <div className={cn("grid gap-1.5", !timed && "sm:col-span-4")}>
+                        <Label htmlFor={`note-${i}`}>Note</Label>
+                        <Input {...f} id={`note-${i}`} maxLength={200} placeholder="Optional" />
+                      </div>
                     )}
-                  >
-                    <Controller
-                      control={control}
-                      name={`rows.${i}.day.note`}
-                      render={({ field: f }) => (
-                        <Input
-                          {...f}
-                          maxLength={200}
-                          placeholder="Note"
-                          aria-label={`Note, ${who}`}
-                          className="xl:min-w-40"
-                        />
-                      )}
-                    />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+                  />
+                </div>
+              )}
+            </li>
+          );
+        })}
+        <li className="flex flex-wrap items-baseline justify-between gap-x-4 bg-muted/60 px-4 py-3 sm:px-5">
+          <span>
+            <span className="font-semibold">Pay for this day</span>
+            <span className="text-sm text-muted-foreground">
+              {" "}
+              · {paidCount} {paidCount === 1 ? "person" : "people"} · before SSS, PhilHealth and
+              Pag-IBIG
+            </span>
+          </span>
+          <span className="font-heading text-lg font-semibold tabular-nums">
+            {formatAmountExact(toPesos(dayTotal))}
+          </span>
+        </li>
+      </ul>
 
       <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-2">
         {dirty && (

@@ -3,7 +3,6 @@ import {
   CalendarDaysIcon,
   CircleHelpIcon,
   ClipboardListIcon,
-  ClockIcon,
   HistoryIcon,
   IdCardIcon,
   CameraIcon,
@@ -37,7 +36,6 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Team",
     items: [
       { href: "/admin/employees", label: "Employees", icon: IdCardIcon },
-      { href: "/admin/dtr", label: "Time record", icon: ClockIcon },
       { href: "/admin/payroll", label: "Payroll", icon: WalletIcon },
     ],
   },

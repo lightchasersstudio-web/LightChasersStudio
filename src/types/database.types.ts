@@ -349,6 +349,9 @@ export type Database = {
         Row: {
           admin_notes: string | null
           blocked_until: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          rescheduled_at: string | null
           client_id: string
           contract_accepted_at: string | null
           contract_text: string | null
@@ -371,6 +374,11 @@ export type Database = {
           reminder_sent_at: string | null
           service_id: string
           source: string
+          policy_accepted_at: string | null
+          policy_text: string | null
+          sensitive_shoot: boolean
+          pets_or_messy: boolean
+          bts_opt_out: boolean
           special_requests: string | null
           start_at: string
           status: Database["public"]["Enums"]["booking_status"]
@@ -380,6 +388,9 @@ export type Database = {
         Insert: {
           admin_notes?: string | null
           blocked_until: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          rescheduled_at?: string | null
           client_id: string
           contract_accepted_at?: string | null
           contract_text?: string | null
@@ -402,6 +413,11 @@ export type Database = {
           reminder_sent_at?: string | null
           service_id: string
           source?: string
+          policy_accepted_at?: string | null
+          policy_text?: string | null
+          sensitive_shoot?: boolean
+          pets_or_messy?: boolean
+          bts_opt_out?: boolean
           special_requests?: string | null
           start_at: string
           status?: Database["public"]["Enums"]["booking_status"]
@@ -411,6 +427,9 @@ export type Database = {
         Update: {
           admin_notes?: string | null
           blocked_until?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          rescheduled_at?: string | null
           client_id?: string
           contract_accepted_at?: string | null
           contract_text?: string | null
@@ -433,6 +452,11 @@ export type Database = {
           reminder_sent_at?: string | null
           service_id?: string
           source?: string
+          policy_accepted_at?: string | null
+          policy_text?: string | null
+          sensitive_shoot?: boolean
+          pets_or_messy?: boolean
+          bts_opt_out?: boolean
           special_requests?: string | null
           start_at?: string
           status?: Database["public"]["Enums"]["booking_status"]
@@ -461,11 +485,18 @@ export type Database = {
           about: string | null
           address: string | null
           buffer_minutes: number
+          backdrop_paper_yard_cents: number
+          cleaning_fee_cents: number
+          extra_person_cents: number
+          storage_day_cents: number
+          studio_policy: string
+          personal_data_days: number
           allow_multiple_per_day: boolean
           business_name: string
           city: string
           currency: string
           default_deposit_percent: number
+          events_deposit_percent: number
           email: string | null
           facebook_url: string | null
           hold_minutes: number
@@ -489,11 +520,18 @@ export type Database = {
           about?: string | null
           address?: string | null
           buffer_minutes?: number
+          backdrop_paper_yard_cents?: number
+          cleaning_fee_cents?: number
+          extra_person_cents?: number
+          storage_day_cents?: number
+          studio_policy?: string
+          personal_data_days?: number
           allow_multiple_per_day?: boolean
           business_name?: string
           city?: string
           currency?: string
           default_deposit_percent?: number
+          events_deposit_percent?: number
           email?: string | null
           facebook_url?: string | null
           hold_minutes?: number
@@ -517,11 +555,18 @@ export type Database = {
           about?: string | null
           address?: string | null
           buffer_minutes?: number
+          backdrop_paper_yard_cents?: number
+          cleaning_fee_cents?: number
+          extra_person_cents?: number
+          storage_day_cents?: number
+          studio_policy?: string
+          personal_data_days?: number
           allow_multiple_per_day?: boolean
           business_name?: string
           city?: string
           currency?: string
           default_deposit_percent?: number
+          events_deposit_percent?: number
           email?: string | null
           facebook_url?: string | null
           hold_minutes?: number
@@ -809,6 +854,8 @@ export type Database = {
           provider_checkout_id: string | null
           provider_payment_id: string | null
           purpose: string
+          receipt_number: string | null
+          received_from: string | null
           raw: Json | null
           recorded_by: string | null
           reference: string | null
@@ -826,6 +873,8 @@ export type Database = {
           provider_checkout_id?: string | null
           provider_payment_id?: string | null
           purpose?: string
+          receipt_number?: string | null
+          received_from?: string | null
           raw?: Json | null
           recorded_by?: string | null
           reference?: string | null
@@ -843,6 +892,8 @@ export type Database = {
           provider_checkout_id?: string | null
           provider_payment_id?: string | null
           purpose?: string
+          receipt_number?: string | null
+          received_from?: string | null
           raw?: Json | null
           recorded_by?: string | null
           reference?: string | null
@@ -1119,6 +1170,7 @@ export type Database = {
           cover_image_path: string | null
           created_at: string
           deposit_cents: number | null
+          deposit_group: string
           description: string | null
           duration_minutes: number | null
           id: string
@@ -1153,6 +1205,7 @@ export type Database = {
           cover_image_path?: string | null
           created_at?: string
           deposit_cents?: number | null
+          deposit_group?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
@@ -1187,6 +1240,7 @@ export type Database = {
           cover_image_path?: string | null
           created_at?: string
           deposit_cents?: number | null
+          deposit_group?: string
           description?: string | null
           duration_minutes?: number | null
           id?: string
@@ -1314,6 +1368,7 @@ export type Database = {
         }
         Returns: number
       }
+      clients_past_retention: { Args: never; Returns: string[] }
       clear_past_student_ids: {
         Args: never
         Returns: {
@@ -1344,6 +1399,15 @@ export type Database = {
           reference_code: string
           status: Database["public"]["Enums"]["booking_status"]
         }[]
+      }
+      deposit_percent_for: { Args: { p_deposit_group: string }; Returns: number }
+      admin_add_booking_charge: {
+        Args: { p_booking_id: string; p_name: string; p_price_cents: number }
+        Returns: undefined
+      }
+      admin_remove_booking_charge: {
+        Args: { p_booking_id: string; p_line_id: string }
+        Returns: undefined
       }
       delete_booking: {
         Args: { p_booking_id: string }
@@ -1414,6 +1478,7 @@ export type Database = {
         | "pending"
         | "confirmed"
         | "completed"
+        | "no_show"
         | "cancelled"
         | "declined"
         | "expired"
@@ -1561,6 +1626,7 @@ export const Constants = {
         "pending",
         "confirmed",
         "completed",
+        "no_show",
         "cancelled",
         "declined",
         "expired",

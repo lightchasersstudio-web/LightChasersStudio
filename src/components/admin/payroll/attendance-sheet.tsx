@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  cutoffLabel,
   DAY_STATUSES,
   dayTotals,
   formatMinutes,
@@ -39,11 +40,14 @@ import {
   isDayStatus,
   isShift,
   minutesWorked,
+  parseCutoff,
 } from "@/lib/payroll/cutoff";
 import { isTimeOutEdited } from "@/lib/payroll/daily-pay";
 import { afterStatusChange, timeOutForNewTimeIn } from "@/lib/payroll/day-entry";
+import { pastCutoffWarning } from "@/lib/payroll/flow";
 import { amountToInput, formatAmount, parseAmount } from "@/lib/payroll/money";
 import { cn } from "@/lib/utils";
+import { businessToday } from "@/lib/utils/business-date";
 import { attendanceSheetSchema, type AttendanceSheetInput } from "@/lib/validations/attendance";
 import { saveAttendance } from "@/server/actions/attendance";
 import type { AttendanceLog } from "@/server/queries/attendance";
@@ -205,6 +209,11 @@ export function AttendanceSheet({
     // "Save & next" carries where to go once the save succeeds; "Save" stays.
     const submitter = (event?.nativeEvent as SubmitEvent | undefined)?.submitter;
     const target = submitter instanceof HTMLElement ? submitter.dataset.goTo : undefined;
+    // A cut-off that's over is already paid: say whose payslip changes first.
+    const period = parseCutoff(cutoff);
+    if (period && period.end < businessToday()) {
+      if (!window.confirm(pastCutoffWarning(cutoffLabel(period), [employeeName]))) return;
+    }
     const result = await saveAttendance(values);
     if (handleResult(result, `Time record saved for ${employeeName}.`, form)) {
       form.reset(values);

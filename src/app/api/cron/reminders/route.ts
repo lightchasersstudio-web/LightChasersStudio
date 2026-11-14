@@ -1,20 +1,11 @@
-import { timingSafeEqual } from "node:crypto";
-
-import { getServerEnv } from "@/lib/env.server";
 import { businessTomorrowRange } from "@/lib/utils/business-date";
 import { sendShootReminder } from "@/server/booking-notifications";
+import { refuseUnlessCron } from "@/server/cron-auth";
 import {
   claimReminder,
   listRemindersDue,
   loadBookingRecord,
 } from "@/server/queries/booking-record";
-
-/** Constant-time "Bearer <CRON_SECRET>" check. */
-function authorised(header: string | null, secret: string) {
-  const expected = Buffer.from(`Bearer ${secret}`);
-  const given = Buffer.from(header ?? "");
-  return given.length === expected.length && timingSafeEqual(given, expected);
-}
 
 /**
  * Daily at 9:00 AM Manila (vercel.json): "See you tomorrow!" to every confirmed
@@ -22,11 +13,8 @@ function authorised(header: string | null, secret: string) {
  * (bookings.reminder_sent_at, cleared if its time moves).
  */
 export async function GET(req: Request) {
-  const secret = getServerEnv().CRON_SECRET;
-  if (!secret) return new Response("Reminders not configured", { status: 503 });
-  if (!authorised(req.headers.get("authorization"), secret)) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const refused = refuseUnlessCron(req);
+  if (refused) return refused;
 
   const ids = await listRemindersDue(businessTomorrowRange());
   let sent = 0;
