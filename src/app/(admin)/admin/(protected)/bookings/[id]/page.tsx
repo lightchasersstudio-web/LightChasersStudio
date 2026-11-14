@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
 import { BookingCharges } from "@/components/admin/bookings/booking-charges";
+import { CheckInCard } from "@/components/admin/bookings/check-in-card";
 import { BookingRequests } from "@/components/admin/bookings/booking-requests";
 import { BookingVat } from "@/components/admin/bookings/booking-vat";
 import { ContactActions } from "@/components/admin/bookings/contact-actions";
@@ -41,6 +42,7 @@ import { BUSINESS_TZ } from "@/lib/utils/business-date";
 import { formatPeso } from "@/lib/utils/money";
 import { requireAdmin } from "@/server/auth";
 import { getBookingForAdmin, listBookingHistory } from "@/server/queries/bookings";
+import { getCheckIn } from "@/server/queries/check-in";
 
 export const metadata: Metadata = { title: "Booking" };
 
@@ -57,7 +59,7 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
   const { id } = await params;
   const b = /^[0-9a-f-]{36}$/i.test(id) ? await getBookingForAdmin(id) : null;
   if (!b) notFound();
-  const history = await listBookingHistory(b.id);
+  const [history, checkIn] = await Promise.all([listBookingHistory(b.id), getCheckIn(b.id)]);
   const editable = ["pending", "confirmed"].includes(b.status);
   const balance = Math.max(b.price_cents - b.paidCents, 0);
   const active = ["pending_payment", "pending", "confirmed"].includes(b.status);
@@ -150,6 +152,10 @@ async function Booking({ params }: Pick<PageProps<"/admin/bookings/[id]">, "para
               >
                 {closedNote}
               </p>
+            )}
+            {/* Shoot day: ID, inspections, balance, security deposit (also on the Today page). */}
+            {checkIn && ["pending", "confirmed", "completed"].includes(b.status) && (
+              <CheckInCard b={checkIn} compact />
             )}
 
             <section aria-labelledby="contact" className="space-y-3 rounded-3xl border bg-card p-5">

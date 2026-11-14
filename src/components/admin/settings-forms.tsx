@@ -419,6 +419,7 @@ export function ChargePricesForm({ settings }: { settings: BusinessSettings }) {
       backdropPaperYard: centsToPesoInput(settings.backdrop_paper_yard_cents),
       extraPerson: centsToPesoInput(settings.extra_person_cents),
       storageDay: centsToPesoInput(settings.storage_day_cents),
+      securityDeposit: centsToPesoInput(settings.security_deposit_cents),
     },
   });
   const { control } = form;
@@ -477,6 +478,14 @@ export function ChargePricesForm({ settings }: { settings: BusinessSettings }) {
               prefix="₱"
               inputMode="decimal"
               description="After the free 24 hours (7.8)."
+            />
+            <TextField
+              control={control}
+              name="securityDeposit"
+              label="Security deposit (refundable)"
+              prefix="₱"
+              inputMode="decimal"
+              description="For pets or messy materials (3.9). Collected and returned on the Today page."
             />
           </div>
         </CardContent>

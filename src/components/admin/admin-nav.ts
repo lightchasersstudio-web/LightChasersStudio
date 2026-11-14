@@ -2,6 +2,7 @@ import {
   CalendarClockIcon,
   CalendarDaysIcon,
   CircleHelpIcon,
+  ClipboardCheckIcon,
   ClipboardListIcon,
   HistoryIcon,
   IdCardIcon,
@@ -26,6 +27,7 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Bookings",
     items: [
       { href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon },
+      { href: "/admin/today", label: "Today", icon: ClipboardCheckIcon },
       { href: "/admin/calendar", label: "Calendar", icon: CalendarDaysIcon },
       { href: "/admin/bookings", label: "Bookings", icon: ClipboardListIcon },
       { href: "/admin/clients", label: "Clients", icon: UsersRoundIcon },

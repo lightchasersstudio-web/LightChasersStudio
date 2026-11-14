@@ -127,8 +127,15 @@ function AddChargeDialog({ bookingId, prices }: { bookingId: string; prices: Cha
     prices,
   );
 
-  async function onSubmit(values: z.output<typeof bookingChargeSchema>) {
-    if (handleResult(await addBookingCharge(values), "Charge added. The balance is updated.", form))
+  // Send what was typed: the server checks it again with the same schema.
+  async function onSubmit() {
+    if (
+      handleResult(
+        await addBookingCharge(form.getValues()),
+        "Charge added. The balance is updated.",
+        form,
+      )
+    )
       setOpen(false);
   }
 

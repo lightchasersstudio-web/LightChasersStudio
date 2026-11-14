@@ -18,10 +18,22 @@ import { RECORDED_PROVIDERS } from "@/lib/payments/providers";
 import { recordPayment, saveAdminNotes } from "@/server/actions/admin-bookings";
 
 /** GCash, Maya, bank transfer or cash received outside the website (e.g. the balance on the day). */
-export function RecordPaymentForm({ bookingId }: { bookingId: string }) {
+export function RecordPaymentForm({
+  bookingId,
+  amount = "",
+  stacked = false,
+  onRecorded,
+}: {
+  bookingId: string;
+  /** Pre-filled amount, e.g. the balance on the day. */
+  amount?: string;
+  /** One field per line (in a pop-up). */
+  stacked?: boolean;
+  onRecorded?: () => void;
+}) {
   const form = useForm<RecordPaymentInput, unknown, z.output<typeof recordPaymentSchema>>({
     resolver: zodResolver(recordPaymentSchema),
-    defaultValues: { bookingId, provider: "gcash", amount: "", reference: "" },
+    defaultValues: { bookingId, provider: "gcash", amount, reference: "" },
   });
 
   async function onSubmit() {
@@ -32,6 +44,7 @@ export function RecordPaymentForm({ bookingId }: { bookingId: string }) {
         : "Payment recorded.";
     if (handleResult(result, message, form)) {
       form.reset({ bookingId, provider: "gcash", amount: "", reference: "" });
+      onRecorded?.();
     }
   }
 
@@ -39,7 +52,9 @@ export function RecordPaymentForm({ bookingId }: { bookingId: string }) {
     <form
       onSubmit={form.handleSubmit(onSubmit)}
       noValidate
-      className="grid gap-4 sm:grid-cols-[11rem_1fr_1fr_auto] sm:items-start"
+      className={
+        stacked ? "grid gap-4" : "grid gap-4 sm:grid-cols-[11rem_1fr_1fr_auto] sm:items-start"
+      }
     >
       <SelectField
         control={form.control}
@@ -55,7 +70,11 @@ export function RecordPaymentForm({ bookingId }: { bookingId: string }) {
         inputMode="decimal"
       />
       <TextField control={form.control} name="reference" label="Ref. no." placeholder="Optional" />
-      <Button type="submit" className="sm:mt-7" disabled={form.formState.isSubmitting}>
+      <Button
+        type="submit"
+        className={stacked ? undefined : "sm:mt-7"}
+        disabled={form.formState.isSubmitting}
+      >
         {form.formState.isSubmitting && <Loader2Icon className="animate-spin" aria-hidden />}
         Record payment
       </Button>

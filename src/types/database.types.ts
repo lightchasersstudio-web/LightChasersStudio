@@ -374,6 +374,15 @@ export type Database = {
           reminder_sent_at: string | null
           service_id: string
           source: string
+          id_checked_at: string | null
+          inspected_in_at: string | null
+          inspected_out_at: string | null
+          security_deposit_cents: number | null
+          security_deposit_method: string | null
+          security_deposit_collected_at: string | null
+          security_deposit_returned_cents: number | null
+          security_deposit_returned_at: string | null
+          security_deposit_note: string | null
           policy_accepted_at: string | null
           policy_text: string | null
           sensitive_shoot: boolean
@@ -413,6 +422,15 @@ export type Database = {
           reminder_sent_at?: string | null
           service_id: string
           source?: string
+          id_checked_at?: string | null
+          inspected_in_at?: string | null
+          inspected_out_at?: string | null
+          security_deposit_cents?: number | null
+          security_deposit_method?: string | null
+          security_deposit_collected_at?: string | null
+          security_deposit_returned_cents?: number | null
+          security_deposit_returned_at?: string | null
+          security_deposit_note?: string | null
           policy_accepted_at?: string | null
           policy_text?: string | null
           sensitive_shoot?: boolean
@@ -452,6 +470,15 @@ export type Database = {
           reminder_sent_at?: string | null
           service_id?: string
           source?: string
+          id_checked_at?: string | null
+          inspected_in_at?: string | null
+          inspected_out_at?: string | null
+          security_deposit_cents?: number | null
+          security_deposit_method?: string | null
+          security_deposit_collected_at?: string | null
+          security_deposit_returned_cents?: number | null
+          security_deposit_returned_at?: string | null
+          security_deposit_note?: string | null
           policy_accepted_at?: string | null
           policy_text?: string | null
           sensitive_shoot?: boolean
@@ -489,6 +516,7 @@ export type Database = {
           cleaning_fee_cents: number
           extra_person_cents: number
           storage_day_cents: number
+          security_deposit_cents: number
           studio_policy: string
           personal_data_days: number
           allow_multiple_per_day: boolean
@@ -524,6 +552,7 @@ export type Database = {
           cleaning_fee_cents?: number
           extra_person_cents?: number
           storage_day_cents?: number
+          security_deposit_cents?: number
           studio_policy?: string
           personal_data_days?: number
           allow_multiple_per_day?: boolean
@@ -559,6 +588,7 @@ export type Database = {
           cleaning_fee_cents?: number
           extra_person_cents?: number
           storage_day_cents?: number
+          security_deposit_cents?: number
           studio_policy?: string
           personal_data_days?: number
           allow_multiple_per_day?: boolean

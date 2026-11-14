@@ -43,3 +43,14 @@ export function businessTomorrowRange(now: Date = new Date()): { from: string; t
     to: new Date(end.getTime()).toISOString(),
   };
 }
+
+/** One studio day ("YYYY-MM-DD") as [start, end) ISO timestamps. */
+export function businessDayRange(date: string): { from: string; to: string } {
+  const day = tzDate(date);
+  const start = new TZDate(day.getFullYear(), day.getMonth(), day.getDate(), BUSINESS_TZ);
+  const end = new TZDate(day.getFullYear(), day.getMonth(), day.getDate() + 1, BUSINESS_TZ);
+  return {
+    from: new Date(start.getTime()).toISOString(),
+    to: new Date(end.getTime()).toISOString(),
+  };
+}

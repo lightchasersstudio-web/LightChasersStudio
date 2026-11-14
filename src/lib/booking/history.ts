@@ -41,6 +41,23 @@ export function describeHistoryEntry(action: string, metadata: Meta): string {
     const verb = action === "booking.charge_add" ? "Added a charge" : "Removed a charge";
     return `${verb}: ${String(metadata.charge ?? "")} ${formatPeso(Number(metadata.price_cents ?? 0))}`;
   }
+  if (action === "booking.check_in") return `Ticked: ${String(metadata.step ?? "check-in step")}`;
+  if (action === "booking.check_in_undo") {
+    return `Unticked: ${String(metadata.step ?? "check-in step")}`;
+  }
+  if (action.startsWith("booking.deposit_")) {
+    const amount = formatPeso(Number(metadata.amount_cents ?? 0));
+    const by = PROVIDERS[String(metadata.provider)];
+    if (action === "booking.deposit_collect") {
+      return `Collected a ${amount} security deposit${by ? ` (${by})` : ""}`;
+    }
+    if (action === "booking.deposit_return") {
+      const kept = Number(metadata.kept_cents ?? 0);
+      return `Returned ${amount} of the security deposit${kept > 0 ? `, kept ${formatPeso(kept)}` : " in full"}`;
+    }
+    if (action === "booking.deposit_undo")
+      return `Removed a ${amount} security deposit recorded by mistake`;
+  }
   if (action === "payment.receipt_emailed") {
     return `Emailed receipt ${String(metadata.receipt ?? "")} to the client`;
   }

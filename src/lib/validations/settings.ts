@@ -131,11 +131,14 @@ export const chargePricesSchema = z
     backdropPaperYard: chargePrice,
     extraPerson: chargePrice,
     storageDay: chargePrice,
+    // Refundable deposit for messy materials or pets (policy 3.9), suggested when collecting.
+    securityDeposit: chargePrice,
   })
   .transform((v) => ({
     cleaning_fee_cents: v.cleaningFee,
     backdrop_paper_yard_cents: v.backdropPaperYard,
     extra_person_cents: v.extraPerson,
     storage_day_cents: v.storageDay,
+    security_deposit_cents: v.securityDeposit,
   }));
 export type ChargePricesInput = z.input<typeof chargePricesSchema>;

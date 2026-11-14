@@ -54,12 +54,14 @@ describe("chargePricesSchema", () => {
       backdropPaperYard: "600",
       extraPerson: "",
       storageDay: "50.50",
+      securityDeposit: "2000",
     });
     expect(r).toEqual({
       cleaning_fee_cents: 50_000,
       backdrop_paper_yard_cents: 60_000,
       extra_person_cents: 0,
       storage_day_cents: 5_050,
+      security_deposit_cents: 200_000,
     });
   });
 
@@ -70,6 +72,7 @@ describe("chargePricesSchema", () => {
         backdropPaperYard: "0",
         extraPerson: "0",
         storageDay: "0",
+        securityDeposit: "0",
       }).success,
     ).toBe(false);
   });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CHARGE_KIND_VALUES, chargeNeedsAmount } from "@/lib/booking/charges";
+import { CHECK_IN_STEP_VALUES } from "@/lib/booking/check-in";
 import { RECORDED_PROVIDER_VALUES } from "@/lib/payments/providers";
 import { businessDateTimeToIso } from "@/lib/utils/business-date";
 import { pesosToCents } from "@/lib/utils/money";
@@ -237,3 +238,31 @@ export const reviewStudentIdSchema = z.object({
   attendeeId: z.uuid(),
   status: z.enum(["accepted", "rejected"]),
 });
+
+/** Tick or untick a shoot-day check-in step (Today page, booking page). */
+export const checkInStepSchema = z.object({
+  bookingId: z.uuid(),
+  step: z.enum(CHECK_IN_STEP_VALUES),
+  done: z.boolean(),
+});
+
+/** The refundable security deposit for messy materials or pets (policy 3.9). */
+export const collectDepositSchema = z
+  .object({
+    bookingId: z.uuid(),
+    amount: pesoString,
+    method: z.enum(RECORDED_PROVIDER_VALUES, "Pick how it was paid."),
+  })
+  .refine((v) => v.amount > 0, { message: "Enter the amount received.", path: ["amount"] })
+  .transform(({ amount, ...v }) => ({ ...v, amountCents: amount }));
+export type CollectDepositInput = z.input<typeof collectDepositSchema>;
+
+/** Giving it back at check-out; anything kept needs a reason (cleaning, repairs). */
+export const returnDepositSchema = z
+  .object({
+    bookingId: z.uuid(),
+    returned: pesoString,
+    note: optionalText(200),
+  })
+  .transform(({ returned, ...v }) => ({ ...v, returnedCents: returned }));
+export type ReturnDepositInput = z.input<typeof returnDepositSchema>;
