@@ -80,3 +80,21 @@ export const WEEKDAYS = [
   "Friday",
   "Saturday",
 ] as const;
+
+/**
+ * Which down payment % a package uses (`services.deposit_group`, owner request
+ * 2026-11-12): events = weddings, prenups and the Photobooth; the rest = studio.
+ */
+export const DEPOSIT_GROUPS = [
+  { value: "studio", label: "Studio" },
+  { value: "events", label: "Events" },
+] as const;
+export type DepositGroup = (typeof DEPOSIT_GROUPS)[number]["value"];
+export const DEPOSIT_GROUP_VALUES = DEPOSIT_GROUPS.map((g) => g.value) as [
+  DepositGroup,
+  ...DepositGroup[],
+];
+
+export function asDepositGroup(value: string | null | undefined): DepositGroup {
+  return value === "events" ? "events" : "studio";
+}

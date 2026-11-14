@@ -74,6 +74,13 @@ describe("serviceSchema", () => {
     expect(serviceSchema.parse({ ...service, lengthHours: "4" }).duration_minutes).toBeNull();
   });
 
+  it("saves the down payment group (studio unless set)", () => {
+    expect(serviceSchema.parse(service).deposit_group).toBe("studio");
+    expect(serviceSchema.parse({ ...service, depositGroup: "events" }).deposit_group).toBe(
+      "events",
+    );
+  });
+
   it("saves the booking type; workshops are always excluded", () => {
     expect(serviceSchema.parse(service).booking_category).toBe("outside");
     expect(serviceSchema.parse({ ...service, bookingCategory: "excluded" }).booking_category).toBe(
@@ -379,10 +386,29 @@ describe("bookingRulesSchema", () => {
     slotIntervalMinutes: "30",
     bufferMinutes: "30",
     defaultDepositPercent: "30",
+    eventsDepositPercent: "50",
     vatPercent: "12",
     holdMinutes: "20",
     maxConcurrentBookings: "3",
+    personalDataDays: "7",
   } as const;
+
+  it("saves a separate events down payment %", () => {
+    const saved = bookingRulesSchema.parse(rules);
+    expect(saved.default_deposit_percent).toBe(30);
+    expect(saved.events_deposit_percent).toBe(50);
+    expect(bookingRulesSchema.safeParse({ ...rules, eventsDepositPercent: "101" }).success).toBe(
+      false,
+    );
+  });
+
+  it("saves how long client details are kept (0 = never deleted)", () => {
+    expect(bookingRulesSchema.parse(rules).personal_data_days).toBe(7);
+    expect(bookingRulesSchema.parse({ ...rules, personalDataDays: "0" }).personal_data_days).toBe(
+      0,
+    );
+    expect(bookingRulesSchema.safeParse({ ...rules, personalDataDays: "-1" }).success).toBe(false);
+  });
 
   it("saves how many shoots can run at the same time", () => {
     expect(bookingRulesSchema.parse(rules).max_concurrent_bookings).toBe(3);

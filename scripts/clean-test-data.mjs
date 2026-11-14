@@ -84,12 +84,12 @@ if (staffIds.length) {
   if (staffPhotos.length) await sb.storage.from("employee-photos").remove(staffPhotos);
 }
 removed.employees = staffIds.length;
-// The payroll E2E test saves its payrolls in 2031 cut-offs.
+// E2E tests record days (and so save payrolls) only in test years: 2024 and
+// 2031 onwards. Real payrolls start in 2026.
 const e2ePayrolls = await sb
   .from("payroll_periods")
   .delete()
-  .gte("period_start", "2031-01-01")
-  .lt("period_start", "2032-01-01")
+  .or("period_start.lt.2025-01-01,period_start.gte.2031-01-01")
   .select("id");
 removed.payrolls = e2ePayrolls.data?.length ?? 0;
 // Test runs book from one computer and trip the 5-per-10-minutes limit; reset it.

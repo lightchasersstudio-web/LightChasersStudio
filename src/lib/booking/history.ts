@@ -12,6 +12,7 @@ const SIMPLE: Record<string, string> = {
   "booking.declined": "Declined the booking",
   "booking.completed": "Marked the booking completed",
   "booking.cancelled": "Cancelled the booking",
+  "booking.no_show": "Marked the booking a no-show",
   "booking.notes": "Updated the private notes",
   "booking.email_resent": "Resent the client email",
   "booking.refund_reviewed": "Marked the late payment as reviewed",
@@ -19,11 +20,30 @@ const SIMPLE: Record<string, string> = {
   "booking.vat_add": "Added VAT",
   "booking.vat_remove": "Removed VAT",
 };
-const PROVIDERS: Record<string, string> = { gcash: "GCash", cash: "cash", paymongo: "PayMongo" };
+const PROVIDERS: Record<string, string> = {
+  gcash: "GCash",
+  maya: "Maya",
+  bank_transfer: "bank transfer",
+  cash: "cash",
+  paymongo: "PayMongo",
+};
 
 /** One line for the booking History panel, from an audit_logs action + metadata. */
 export function describeHistoryEntry(action: string, metadata: Meta): string {
+  if (action === "booking.cancelled" && metadata.reason === "force_majeure") {
+    return "Cancelled the booking (force majeure: full refund)";
+  }
+  if (action === "booking.cancelled" && metadata.reason === "client") {
+    return "Cancelled the booking (the client cancelled)";
+  }
   if (SIMPLE[action]) return SIMPLE[action];
+  if (action === "booking.charge_add" || action === "booking.charge_remove") {
+    const verb = action === "booking.charge_add" ? "Added a charge" : "Removed a charge";
+    return `${verb}: ${String(metadata.charge ?? "")} ${formatPeso(Number(metadata.price_cents ?? 0))}`;
+  }
+  if (action === "payment.receipt_emailed") {
+    return `Emailed receipt ${String(metadata.receipt ?? "")} to the client`;
+  }
   if (action === "payment.record") {
     const provider = PROVIDERS[String(metadata.provider)] ?? "a";
     return `Recorded a ${provider} payment of ${formatPeso(Number(metadata.amount_cents ?? 0))}`;

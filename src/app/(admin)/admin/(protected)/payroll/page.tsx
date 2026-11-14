@@ -1,286 +1,154 @@
 import { TZDate } from "@date-fns/tz";
-import { format, parseISO } from "date-fns";
-import {
-  ArrowRightIcon,
-  CalendarX2Icon,
-  CircleCheckIcon,
-  FileDownIcon,
-  InfoIcon,
-  SlidersHorizontalIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
+import { format } from "date-fns";
+import { FileDownIcon, HistoryIcon, SlidersHorizontalIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { EmptyList } from "@/components/admin/lists/pager";
 import { PageHeader } from "@/components/admin/page-header";
-import { CutoffPicker } from "@/components/admin/payroll/cutoff-picker";
-import { PayrollSteps } from "@/components/admin/payroll/payroll-steps";
-import { PayrollTable } from "@/components/admin/payroll/payroll-table";
-import { SavePayrollButton } from "@/components/admin/payroll/save-payroll-button";
+import { DayAttendanceSheet } from "@/components/admin/payroll/day-attendance-sheet";
+import { PayslipList } from "@/components/admin/payroll/payslip-list";
 import { ListSkeleton } from "@/components/admin/skeletons";
 import { Button } from "@/components/ui/button";
-import { currentCutoff, cutoffLabel, parseCutoff, type Cutoff } from "@/lib/payroll/cutoff";
-import type { MissingDays } from "@/lib/payroll/flow";
-import { formatAmountExact } from "@/lib/payroll/money";
-import { payrollTotals, type Payslip } from "@/lib/payroll/payslip";
-import { BUSINESS_TZ } from "@/lib/utils/business-date";
+import { cutoffFor, cutoffLabel, parseCutoff } from "@/lib/payroll/cutoff";
+import { asSalaryType, salaryRates } from "@/lib/payroll/employees";
+import { BUSINESS_TZ, businessToday } from "@/lib/utils/business-date";
+import { dateString } from "@/lib/validations/shared";
 import { requireAdmin } from "@/server/auth";
-import { type getSavedPayroll, listSavedPayrolls } from "@/server/queries/payroll";
-import { getPayrollFlow } from "@/server/queries/payroll-flow";
+import { cutoffEnded } from "@/server/payroll-sync";
+import { getDayAttendance } from "@/server/queries/attendance";
+import { getContributionRates } from "@/server/queries/employees";
+import { computePayroll, getSavedPayroll } from "@/server/queries/payroll";
 
 export const metadata: Metadata = { title: "Payroll" };
 
+/**
+ * Payroll on one page (owner request 2026-11-14): pick a day, set who came,
+ * save; the cut-off's payslips below update by themselves.
+ */
 export default function PayrollPage({ searchParams }: PageProps<"/admin/payroll">) {
   return (
     <>
       <PageHeader
         eyebrow="pay day"
         title="Payroll"
-        description="Pick a cut-off to work out everyone's payslip from the time record, salaries and benefits. Review it, then save."
+        description="Pick a day, set who came, and save. The payslips below update by themselves."
         actions={
-          <Button asChild variant="outline" size="lg">
-            <Link href="/admin/payroll/settings">
-              <SlidersHorizontalIcon aria-hidden />
-              Payroll settings
-            </Link>
-          </Button>
+          <>
+            <Button asChild variant="outline" size="lg">
+              <Link href="/admin/payroll/history">
+                <HistoryIcon aria-hidden />
+                History
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg">
+              <Link href="/admin/payroll/settings">
+                <SlidersHorizontalIcon aria-hidden />
+                Payroll settings
+              </Link>
+            </Button>
+          </>
         }
       />
-      <Suspense fallback={<ListSkeleton rows={5} />}>
+      <Suspense fallback={<ListSkeleton rows={6} />}>
         <Payroll searchParams={searchParams} />
       </Suspense>
     </>
   );
 }
 
-const when = (iso: string) => format(new TZDate(iso, BUSINESS_TZ), "d MMM yyyy, h:mm a");
-
 async function Payroll({ searchParams }: Pick<PageProps<"/admin/payroll">, "searchParams">) {
   await requireAdmin();
   const params = await searchParams;
-  const current = currentCutoff();
-  const cutoff = parseCutoff(params.cutoff) ?? current;
-  const wantPreview = params.view === "preview";
+  const today = businessToday();
+  // ?date=YYYY-MM-DD; old links with ?cutoff= open that cut-off's first day.
+  const parsed = dateString.safeParse(params.date);
+  const date = parsed.success ? parsed.data : (parseCutoff(params.cutoff)?.start ?? today);
+  const cutoff = cutoffFor(date);
+  const ended = cutoffEnded(cutoff, today);
 
-  // `changed`: has anything changed since saving (time record, salaries, benefits, rates, staff)?
-  const [{ fresh, saved, changed, flow, missing }, recent] = await Promise.all([
-    getPayrollFlow(cutoff),
-    listSavedPayrolls(),
+  const [staff, rates, fresh, saved] = await Promise.all([
+    getDayAttendance(date),
+    getContributionRates(),
+    computePayroll(cutoff),
+    getSavedPayroll(cutoff),
   ]);
-  const showing: Payslip[] = saved && !wantPreview ? saved.payslips : fresh;
+  // A finished cut-off shows what was saved (later raises don't change past pay);
+  // a running one shows today's figures.
+  const payslips = ended && saved ? saved.payslips : fresh;
   const label = cutoffLabel(cutoff);
-  const href = (start: string) => `/admin/payroll?cutoff=${start}`;
+
+  if (staff.length === 0) {
+    return (
+      <EmptyList
+        title="No employees yet"
+        text="Add your team under Employees, then record their days here."
+      />
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <PayrollSteps cutoff={cutoff} flow={flow} page="payroll" />
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <CutoffPicker cutoff={cutoff} current={current} href={href} />
-        <div className="flex flex-wrap gap-2">
-          {saved && !wantPreview && (
-            <Button asChild variant="outline" size="lg">
+    <div className="space-y-10">
+      <DayAttendanceSheet
+        // A new day starts a fresh form.
+        key={date}
+        date={date}
+        today={today}
+        hoursPerDay={rates.hoursPerDay}
+        amPmRate={rates.amPmRate}
+        staff={staff.map((s) => ({
+          id: s.id,
+          name: s.name,
+          position: s.position,
+          currentRate: salaryRates(asSalaryType(s.salaryType), s.salaryRate, rates.workDaysPerMonth)
+            .daily,
+          overtimeRate: s.overtimeRate,
+          log: s.log && {
+            status: s.log.status,
+            timeIn: s.log.timeIn,
+            timeOut: s.log.timeOut,
+            dailyRate: s.log.dailyRate,
+            note: s.log.note,
+          },
+        }))}
+      />
+
+      <section aria-labelledby="payslips" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id="payslips" className="text-2xl font-semibold">
+              Payslips · {label}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {ended && saved
+                ? `This cut-off is over. Saved ${format(new TZDate(saved.savedAt, BUSINESS_TZ), "d MMM yyyy, h:mm a")}.`
+                : "Worked out from the days saved so far."}
+            </p>
+          </div>
+          {payslips.length > 0 && (
+            <Button asChild size="lg">
               {/* A route handler: a plain link opens the PDF in a new tab. */}
               <a href={`/admin/payroll/pdf?cutoff=${cutoff.start}`} target="_blank" rel="noopener">
                 <FileDownIcon aria-hidden />
-                All payslips (PDF)
+                Print all payslips
               </a>
             </Button>
           )}
-          {fresh.length > 0 && (!saved || changed || wantPreview) && (
-            <SavePayrollButton
-              cutoff={cutoff.start}
-              cutoffLabel={label}
-              replaces={saved !== null}
-              count={fresh.length}
-              blankDays={missing.reduce((n, m) => n + m.dates.length, 0)}
-            />
-          )}
         </div>
-      </div>
-
-      <Status cutoff={cutoff} saved={saved} changed={changed} preview={wantPreview} />
-      {missing.length > 0 && <BlankDays cutoff={cutoff} missing={missing} />}
-
-      {showing.length === 0 ? (
-        <EmptyList
-          title="No one to pay yet"
-          text="Add active employees under Employees, then come back to make their payslips."
-        />
-      ) : (
-        <>
-          <Totals payslips={showing} />
-          <PayrollTable
-            // key: a fresh dialog state when switching cut-off or view
-            key={`${cutoff.start}-${saved && !wantPreview ? "saved" : "preview"}`}
-            payslips={showing}
+        {payslips.length === 0 ? (
+          <p className="rounded-3xl border bg-card p-5 text-sm text-muted-foreground">
+            No payslips for this cut-off.
+          </p>
+        ) : (
+          <PayslipList
+            key={cutoff.start}
+            payslips={payslips}
             cutoffLabel={label}
             cutoffStart={cutoff.start}
-            saved={saved !== null && !wantPreview}
           />
-        </>
-      )}
-
-      {recent.length > 0 && (
-        <section aria-labelledby="recent-payrolls" className="pt-4">
-          <h2 id="recent-payrolls" className="mb-3 text-xl font-semibold">
-            Saved payrolls
-          </h2>
-          <ul className="divide-y overflow-hidden rounded-3xl border bg-card">
-            {recent.map((r) => {
-              const c = parseCutoff(r.start);
-              return (
-                <li key={r.start}>
-                  <Link
-                    href={href(r.start)}
-                    aria-current={r.start === cutoff.start ? "page" : undefined}
-                    className="grid grid-cols-[1fr_auto] gap-x-4 px-5 py-3 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[current=page]:bg-muted/70"
-                  >
-                    <span className="font-semibold">{c ? cutoffLabel(c) : r.start}</span>
-                    <span className="text-right font-semibold tabular-nums">
-                      {formatAmountExact(r.net)}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {r.count} payslips · saved {when(r.savedAt)}
-                    </span>
-                    <span className="text-right text-sm text-muted-foreground">net pay</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+        )}
+      </section>
     </div>
-  );
-}
-
-function Status({
-  cutoff,
-  saved,
-  changed,
-  preview,
-}: {
-  cutoff: Cutoff;
-  saved: Awaited<ReturnType<typeof getSavedPayroll>>;
-  changed: boolean;
-  preview: boolean;
-}) {
-  const box = "flex flex-wrap items-start gap-x-3 gap-y-2 rounded-2xl border p-4 text-sm";
-  if (!saved) {
-    return (
-      <p className={`${box} bg-card`}>
-        <InfoIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-        <span className="flex-1">
-          <strong>Preview, not saved yet.</strong> These payslips use today&apos;s time record,
-          salaries and benefits. Check the time record is complete, then save.
-        </span>
-      </p>
-    );
-  }
-  const by = saved.savedBy ? ` by ${saved.savedBy}` : "";
-  if (!changed) {
-    return (
-      <p className={`${box} border-sage bg-sage/15`}>
-        <CircleCheckIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-        <span className="flex-1">
-          <strong>Saved</strong> {when(saved.savedAt)}
-          {by}. Nothing has changed since.
-        </span>
-      </p>
-    );
-  }
-  return (
-    <div className={`${box} border-terracotta/40 bg-blush/40`}>
-      <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-terracotta-ink" aria-hidden />
-      <p className="flex-1">
-        <strong>The saved payroll is out of date.</strong> Days or pay changed after it was saved (
-        {when(saved.savedAt)}
-        {by}): time record, salaries, benefits, rates or staff.{" "}
-        {preview
-          ? "You're looking at the new figures. Save again to replace the saved payslips."
-          : "You're looking at the saved payslips."}
-      </p>
-      <Button asChild variant="outline" size="sm">
-        <Link href={`/admin/payroll?cutoff=${cutoff.start}${preview ? "" : "&view=preview"}`}>
-          {preview ? "Show saved payslips" : "Show new figures"}
-        </Link>
-      </Button>
-    </div>
-  );
-}
-
-/** Staff with blank days so far: blank days don't count in the payslip. */
-function BlankDays({ cutoff, missing }: { cutoff: Cutoff; missing: MissingDays[] }) {
-  const day = (d: string) => format(parseISO(d), "EEE d");
-  return (
-    <section
-      aria-labelledby="blank-days"
-      className="rounded-2xl border border-terracotta/40 bg-blush/40 p-4 text-sm"
-    >
-      <h2 id="blank-days" className="flex items-center gap-2 font-semibold">
-        <CalendarX2Icon className="size-4 shrink-0 text-terracotta-ink" aria-hidden />
-        Some days on the time record are blank
-      </h2>
-      <p className="mt-1 text-muted-foreground">
-        Blank days don&apos;t count in the payslip: daily-paid staff aren&apos;t paid for them, and
-        monthly-paid staff aren&apos;t marked absent. Fill them in first (Rest day if they were
-        off).
-      </p>
-      <ul className="mt-3 divide-y divide-terracotta/20">
-        {missing.map((m) => (
-          <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-            <span className="min-w-0 flex-1">
-              <span className="font-semibold">{m.name}</span>
-              <span className="text-muted-foreground">
-                {" "}
-                · {m.dates.length} {m.dates.length === 1 ? "day" : "days"}:{" "}
-                {m.dates.slice(0, 6).map(day).join(", ")}
-                {m.dates.length > 6 && ` +${m.dates.length - 6} more`}
-              </span>
-            </span>
-            <Button asChild variant="outline" size="sm">
-              <Link
-                href={`/admin/dtr?cutoff=${cutoff.start}&employee=${m.id}`}
-                aria-label={`Fill in ${m.name}'s days`}
-              >
-                Fill in
-                <ArrowRightIcon aria-hidden />
-              </Link>
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function Totals({ payslips }: { payslips: Payslip[] }) {
-  const t = payrollTotals(payslips);
-  const tiles = [
-    { label: "Employees", value: String(payslips.length) },
-    { label: "Gross pay", value: formatAmountExact(t.gross_pay) },
-    { label: "Deductions", value: formatAmountExact(t.total_deductions) },
-    { label: "Net pay", value: formatAmountExact(t.net_pay), strong: true },
-  ];
-  return (
-    <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {tiles.map((tile) => (
-        <div
-          key={tile.label}
-          className={
-            tile.strong
-              ? "rounded-3xl bg-primary p-4 text-primary-foreground"
-              : "rounded-3xl border bg-card p-4"
-          }
-        >
-          <dt className={tile.strong ? "text-sm opacity-90" : "text-sm text-muted-foreground"}>
-            {tile.label}
-          </dt>
-          <dd className="mt-1 font-heading text-2xl font-semibold tabular-nums">{tile.value}</dd>
-        </div>
-      ))}
-    </dl>
   );
 }

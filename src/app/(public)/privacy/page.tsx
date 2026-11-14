@@ -15,6 +15,7 @@ export const metadata: Metadata = {
 // before go-live (docs/HANDOFF.md). Bump CONSENT_VERSION when it changes.
 export default async function PrivacyPage() {
   const s = await getPublicSettings();
+  const days = s.personal_data_days;
   const contact = s.email ? (
     <a href={`mailto:${s.email}`} className="font-semibold underline underline-offset-4">
       {s.email}
@@ -116,12 +117,27 @@ export default async function PrivacyPage() {
 
           <div>
             <h2>How long we keep it</h2>
-            <p>
-              We keep booking and payment records for as long as we need them for your booking and
-              for the accounting and tax records the law requires. Student ID photos are deleted
-              after the workshop. You can ask us to delete your personal data sooner (see below); we
-              then remove your name and contact details but keep the amounts and dates our accounts
-              need.
+            {days > 0 ? (
+              <p>
+                We keep your personal details for {days === 7 ? "seven (7)" : days}{" "}
+                {days === 1 ? "day" : "days"} after your booking date, then delete them
+                automatically: your name, contact details, location, requests and anything else
+                about you. We keep them longer only while something is still open, such as an
+                upcoming booking, a refund, an unpaid balance or damage claim, or a request you sent
+                us. What the law requires us to keep stays: receipts (with the name they were issued
+                to) and the amounts, dates and references in our accounting records. Student ID
+                photos are deleted after the workshop. CCTV footage is kept for seven (7) days.
+              </p>
+            ) : (
+              <p>
+                We keep booking and payment records for as long as we need them for your booking and
+                for the accounting and tax records the law requires. Student ID photos are deleted
+                after the workshop.
+              </p>
+            )}
+            <p className="mt-3">
+              You can ask us to delete your personal data sooner (see below); we then remove your
+              name and contact details but keep the receipts, amounts and dates our accounts need.
             </p>
           </div>
 

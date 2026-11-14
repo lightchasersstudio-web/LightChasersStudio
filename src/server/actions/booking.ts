@@ -2,10 +2,16 @@
 
 import { BOOKING_ERRORS, bookingErrorCode, isScheduleClash } from "@/lib/booking/booking-errors";
 import { contractHash, packageContract } from "@/lib/booking/contract";
+import {
+  closedBookingNote,
+  needsStudioPolicy,
+  RESCHEDULE_BLOCK_MESSAGES,
+  rescheduleBlock,
+} from "@/lib/booking/policy";
 import { rescheduleFeeNotice } from "@/lib/booking/reschedule-fee";
 import { cleanSignature, signatureMatches } from "@/lib/booking/signature";
 import type { BookingSummary } from "@/lib/booking/booking-summary";
-import { bookingTotals } from "@/lib/booking/pricing";
+import { bookingTotals, depositPercentFor, depositPercents } from "@/lib/booking/pricing";
 import { attendeesCents, workshopPrices } from "@/lib/booking/workshop";
 import { getPublicEnv } from "@/lib/env";
 import { createCheckoutSession, paymongoConfigured } from "@/lib/payments/paymongo";
@@ -68,11 +74,14 @@ export async function submitBooking(
         supabase
           .from("services")
           .select(
-            "price_cents, deposit_cents, category, workshop_regular_enabled, workshop_early_bird_enabled, workshop_early_bird_price_cents, workshop_student_enabled, workshop_student_price_cents",
+            "price_cents, deposit_cents, deposit_group, category, workshop_regular_enabled, workshop_early_bird_enabled, workshop_early_bird_price_cents, workshop_student_enabled, workshop_student_price_cents",
           )
           .eq("id", v.serviceId)
           .maybeSingle(),
-        supabase.from("business_settings").select("default_deposit_percent, vat_percent").single(),
+        supabase
+          .from("business_settings")
+          .select("default_deposit_percent, events_deposit_percent, vat_percent")
+          .single(),
         supabase.from("add_ons").select("price_cents").in("id", v.addOnIds),
       ]);
       const { deposit } = bookingTotals({
@@ -84,7 +93,9 @@ export async function submitBooking(
         addOnsCents: (addOns ?? []).reduce((sum, a) => sum + a.price_cents, 0),
         vatPercent: settings?.vat_percent ?? 0,
         fixedDepositCents: service?.deposit_cents ?? null,
-        depositPercent: settings?.default_deposit_percent ?? 0,
+        depositPercent: settings
+          ? depositPercentFor(service?.deposit_group, depositPercents(settings))
+          : 0,
         payInFull: v.payInFull,
       });
       if (deposit > 0) return fail(NO_ONLINE_PAYMENT);
@@ -92,12 +103,31 @@ export async function submitBooking(
 
     // The package's contract: the client must have agreed to the wording that's
     // current now (checked before Turnstile so a retry doesn't waste the token).
-    const { data: terms, error: termsError } = await supabase
-      .from("services")
-      .select("contract")
-      .eq("id", v.serviceId)
-      .maybeSingle();
+    const [{ data: terms, error: termsError }, { data: rules, error: rulesError }] =
+      await Promise.all([
+        supabase
+          .from("services")
+          .select("contract, booking_category")
+          .eq("id", v.serviceId)
+          .maybeSingle(),
+        supabase.from("business_settings").select("studio_policy").single(),
+      ]);
     if (termsError) throw termsError;
+    if (rulesError) throw rulesError;
+    // Studio packages: the Studio Policy Manual, agreed to as it reads now.
+    const studio = needsStudioPolicy(terms?.booking_category);
+    const policy = studio ? packageContract(rules.studio_policy) : null;
+    if (policy) {
+      if (v.policyAccepted !== true) {
+        const message = "Please read the studio policy and tick to agree before booking.";
+        return fail(message, { policyAccepted: [message] });
+      }
+      if (v.policyHash !== contractHash(policy)) {
+        const message =
+          "The studio policy was just updated. Please read it again and tick to agree.";
+        return fail(message, { policyAccepted: [message] });
+      }
+    }
     const contract = packageContract(terms?.contract);
     if (contract) {
       if (!signatureMatches(v.contractSignature, v.fullName)) {
@@ -168,17 +198,27 @@ export async function submitBooking(
       return fail(BOOKING_ERRORS[code]!, field ? { [field]: [BOOKING_ERRORS[code]!] } : undefined);
     }
 
-    // Keep the exact wording they agreed to with the booking.
-    if (contract) {
+    // Keep the exact wording they agreed to with the booking, and what they told us.
+    const agreedAt = new Date().toISOString();
+    const extras = {
+      ...(contract && {
+        contract_text: contract,
+        contract_accepted_at: agreedAt,
+        contract_signed_name: cleanSignature(v.contractSignature!),
+      }),
+      ...(policy && { policy_text: policy, policy_accepted_at: agreedAt }),
+      ...(studio && {
+        sensitive_shoot: v.sensitiveShoot === true,
+        pets_or_messy: v.petsOrMessy === true,
+        bts_opt_out: v.btsOptOut === true,
+      }),
+    };
+    if (Object.keys(extras).length > 0) {
       const { error: saveError } = await supabase
         .from("bookings")
-        .update({
-          contract_text: contract,
-          contract_accepted_at: new Date().toISOString(),
-          contract_signed_name: cleanSignature(v.contractSignature!),
-        })
+        .update(extras)
         .eq("id", data.booking_id);
-      if (saveError) console.error("[submitBooking] save contract", saveError);
+      if (saveError) console.error("[submitBooking] save agreements", saveError);
     }
 
     if (data.deposit_cents > 0) {
@@ -290,11 +330,16 @@ export type ClientBookingView = {
   balanceCents: number;
   /** The balance can be paid online now (upcoming, active, big enough, PayMongo set up). */
   canPayBalance: boolean;
-  /** "Ask to reschedule" is offered (upcoming and active, no request waiting). */
+  /** "Ask to reschedule" is offered (upcoming and active, no request waiting, policy allows it). */
   canRequestChange: boolean;
+  /** Why rescheduling is closed (48-hour rule or already moved once), for an active booking. */
+  rescheduleBlocked: string | null;
+  /** What the studio policy means for a cancelled or no-show booking (refund or kept). */
+  policyNote: string | null;
   /** A reschedule request the studio hasn't handled yet. */
   openRequest: { createdAt: string; preferred: string | null } | null;
   contract: { text: string; acceptedAt: string; signedName: string | null } | null;
+  studioPolicy: { text: string; acceptedAt: string } | null;
   /** "Rescheduling costs ₱500 + 12% VAT, added to your balance." (null = free). */
   rescheduleNotice: string | null;
 };
@@ -321,6 +366,10 @@ async function clientView(record: OwnBooking): Promise<ClientBookingView> {
   const balanceCents = Math.max(record.summary.priceCents - record.summary.paidCents, 0);
   const active = isUpcomingActive(record);
   const openRequest = active ? await openRequestFor(record.id) : null;
+  const block = rescheduleBlock({
+    startAt: record.summary.startAt,
+    rescheduledAt: record.policy.rescheduledAt,
+  });
   return {
     summary: record.summary,
     status: record.status,
@@ -331,9 +380,21 @@ async function clientView(record: OwnBooking): Promise<ClientBookingView> {
       record.email !== null &&
       balanceCents >= MIN_ONLINE_BALANCE_CENTS &&
       paymongoConfigured(),
-    canRequestChange: active && !openRequest,
+    canRequestChange: active && !openRequest && !block,
+    rescheduleBlocked: active && !openRequest && block ? RESCHEDULE_BLOCK_MESSAGES[block] : null,
+    policyNote: closedBookingNote(
+      {
+        status: record.status,
+        startAt: record.summary.startAt,
+        cancelledAt: record.policy.cancelledAt,
+        cancelReason: record.policy.cancelReason,
+        paidCents: record.summary.paidCents,
+      },
+      "client",
+    ),
     openRequest,
     contract: record.contract,
+    studioPolicy: record.studioPolicy,
     rescheduleNotice: rescheduleFeeNotice(record.reschedule.feeCents, record.reschedule.vatPercent),
   };
 }
@@ -467,6 +528,12 @@ export async function requestReschedule(
     if (await openRequestFor(record.id)) {
       return fail("You've already asked to reschedule. We'll get back to you soon.");
     }
+    // Once per booking, up to 48 hours before the start (studio policy 1.4).
+    const block = rescheduleBlock({
+      startAt: record.summary.startAt,
+      rescheduledAt: record.policy.rescheduledAt,
+    });
+    if (block) return fail(RESCHEDULE_BLOCK_MESSAGES[block]);
     const { preferred, message } = parsed.data;
     const { data, error: insertError } = await createAdminClient()
       .from("booking_requests")

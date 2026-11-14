@@ -135,6 +135,8 @@ export const bookingClosedEmail = (
   b: BookingSummary,
   siteUrl: string,
   status: "declined" | "cancelled",
+  /** What happens to the money (studio policy), e.g. a full refund for force majeure. */
+  note?: string | null,
 ) =>
   clientEmail(
     b,
@@ -142,6 +144,22 @@ export const bookingClosedEmail = (
     `Your booking ${b.reference} was ${status}`,
     `Booking ${status}`,
     `your booking has been ${status}. Please contact us if you have any questions.`,
+    note ?? undefined,
+  );
+
+/** Sent with the receipt PDF attached, after each payment. */
+export const receiptEmail = (
+  b: BookingSummary,
+  siteUrl: string,
+  receipt: { number: string; amountCents: number; method: string },
+) =>
+  clientEmail(
+    b,
+    siteUrl,
+    `Receipt ${receipt.number} for booking ${b.reference}`,
+    "Payment received",
+    `thank you! We received ${formatPeso(receipt.amountCents)} (${receipt.method}) for your booking.`,
+    `Your receipt ${receipt.number} is attached as a PDF.`,
   );
 
 /** To the studio when a paid booking is waiting for review. */

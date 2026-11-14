@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 export const STATUS_TONES: Record<BookingStatus, string> = {
   confirmed: "bg-sage/30 text-foreground border-sage",
   completed: "bg-sage/20 text-foreground border-sage/60",
+  no_show: "bg-muted text-terracotta-ink border-terracotta/40",
   pending: "bg-blush text-terracotta-ink border-terracotta",
   pending_payment: "bg-muted/60 text-muted-foreground border-dashed border-muted-foreground/60",
   cancelled: "bg-muted text-muted-foreground border-transparent",

@@ -14,9 +14,10 @@ import {
   recordPaymentSchema,
   type RecordPaymentInput,
 } from "@/lib/validations/admin-booking";
+import { RECORDED_PROVIDERS } from "@/lib/payments/providers";
 import { recordPayment, saveAdminNotes } from "@/server/actions/admin-bookings";
 
-/** GCash or cash received outside the website (e.g. the balance on the day). */
+/** GCash, Maya, bank transfer or cash received outside the website (e.g. the balance on the day). */
 export function RecordPaymentForm({ bookingId }: { bookingId: string }) {
   const form = useForm<RecordPaymentInput, unknown, z.output<typeof recordPaymentSchema>>({
     resolver: zodResolver(recordPaymentSchema),
@@ -24,7 +25,12 @@ export function RecordPaymentForm({ bookingId }: { bookingId: string }) {
   });
 
   async function onSubmit() {
-    if (handleResult(await recordPayment(form.getValues()), "Payment recorded.", form)) {
+    const result = await recordPayment(form.getValues());
+    const message =
+      result.ok && result.data.receiptEmailed
+        ? "Payment recorded. The receipt was emailed to the client."
+        : "Payment recorded.";
+    if (handleResult(result, message, form)) {
       form.reset({ bookingId, provider: "gcash", amount: "", reference: "" });
     }
   }
@@ -33,16 +39,13 @@ export function RecordPaymentForm({ bookingId }: { bookingId: string }) {
     <form
       onSubmit={form.handleSubmit(onSubmit)}
       noValidate
-      className="grid gap-4 sm:grid-cols-[9rem_1fr_1fr_auto] sm:items-start"
+      className="grid gap-4 sm:grid-cols-[11rem_1fr_1fr_auto] sm:items-start"
     >
       <SelectField
         control={form.control}
         name="provider"
         label="Paid by"
-        options={[
-          { value: "gcash", label: "GCash" },
-          { value: "cash", label: "Cash" },
-        ]}
+        options={[...RECORDED_PROVIDERS]}
       />
       <TextField
         control={form.control}

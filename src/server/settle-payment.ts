@@ -4,6 +4,7 @@ import type { PaidEvent } from "@/lib/payments/paymongo";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyBalancePaid, notifyBookingReceived } from "@/server/booking-notifications";
 import { loadBookingRecord } from "@/server/queries/booking-record";
+import { emailReceipt } from "@/server/receipts";
 import type { Json } from "@/types/database.types";
 
 /**
@@ -55,6 +56,20 @@ export async function settlePaidEvent(
   if (data.booking_id && data.outcome === "balance_paid") {
     const record = await loadBookingRecord({ id: data.booking_id });
     if (record) await notifyBalancePaid(record);
+  }
+  // Every payment gets a receipt (studio policy 1.5), emailed with the PDF.
+  if (data.booking_id && !["unknown_booking", "duplicate"].includes(data.outcome)) {
+    // A failed receipt email must not fail the payment (PayMongo would retry it).
+    try {
+      const { data: payment } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("provider_payment_id", event.paymentId)
+        .maybeSingle();
+      if (payment) await emailReceipt(payment.id);
+    } catch (err) {
+      console.error("[settle payment] receipt email failed", event.reference, err);
+    }
   }
   if (data.outcome === "unknown_booking") {
     console.error("[settle payment] payment for unknown booking", event.reference);

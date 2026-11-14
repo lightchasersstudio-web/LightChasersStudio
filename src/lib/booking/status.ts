@@ -7,6 +7,7 @@ export const STATUS_LABELS: Record<BookingStatus, string> = {
   pending: "Needs review",
   confirmed: "Confirmed",
   completed: "Completed",
+  no_show: "No-show",
   cancelled: "Cancelled",
   declined: "Declined",
   expired: "Expired",

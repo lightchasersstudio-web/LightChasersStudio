@@ -77,11 +77,13 @@ describe("buildSalesMonths", () => {
         { paidAt: "2026-10-03T02:00:00.000Z", amountCents: 100_000, provider: "gcash" },
         { paidAt: "2026-10-04T02:00:00.000Z", amountCents: 50_000, provider: "cash" },
         { paidAt: "2026-10-05T02:00:00.000Z", amountCents: 25_000, provider: "gcash" },
+        { paidAt: "2026-10-06T02:00:00.000Z", amountCents: 10_000, provider: "maya" },
+        { paidAt: "2026-10-07T02:00:00.000Z", amountCents: 5_000, provider: "bank_transfer" },
       ],
       1,
       now,
     );
-    expect(oct!.byMethod).toEqual({ online: 300_000, gcash: 125_000, cash: 50_000 });
+    expect(oct!.byMethod).toEqual({ online: 300_000, gcash: 140_000, cash: 50_000 });
   });
 });
 

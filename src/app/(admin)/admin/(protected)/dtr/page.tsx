@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ArrowRightIcon, SlidersHorizontalIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -8,10 +8,7 @@ import { EmptyList } from "@/components/admin/lists/pager";
 import { PageHeader } from "@/components/admin/page-header";
 import { AttendanceSheet } from "@/components/admin/payroll/attendance-sheet";
 import { CutoffPicker } from "@/components/admin/payroll/cutoff-picker";
-import { DtrViewTabs } from "@/components/admin/payroll/dtr-view-tabs";
 import { EmployeePicker } from "@/components/admin/payroll/employee-picker";
-import { PayrollSavedNotice } from "@/components/admin/payroll/payroll-saved-notice";
-import { PayrollSteps } from "@/components/admin/payroll/payroll-steps";
 import { ListSkeleton } from "@/components/admin/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,11 +29,9 @@ import {
   type Cutoff,
 } from "@/lib/payroll/cutoff";
 import { asSalaryType, salaryRates } from "@/lib/payroll/employees";
-import { businessToday } from "@/lib/utils/business-date";
 import { requireAdmin } from "@/server/auth";
-import { getAttendance, type getCutoffSummary } from "@/server/queries/attendance";
+import { getAttendance, getCutoffSummary } from "@/server/queries/attendance";
 import { getContributionRates } from "@/server/queries/employees";
-import { getPayrollFlow } from "@/server/queries/payroll-flow";
 
 export const metadata: Metadata = { title: "Time record" };
 
@@ -46,14 +41,14 @@ export default function DtrPage({ searchParams }: PageProps<"/admin/dtr">) {
   return (
     <>
       <PageHeader
-        eyebrow="who worked when"
+        eyebrow="one person, whole cut-off"
         title="Time record"
-        description="Who worked when. Fill in the whole team day by day, or one person's whole cut-off; hours are worked out from the time in and out."
+        description="Every day of one cut-off for one person, to fix several days at once. For everyone on one day, use Payroll."
         actions={
           <Button asChild variant="outline" size="lg">
-            <Link href="/admin/payroll/settings">
-              <SlidersHorizontalIcon aria-hidden />
-              Payroll settings
+            <Link href="/admin/payroll">
+              <ArrowLeftIcon aria-hidden />
+              Payroll
             </Link>
           </Button>
         }
@@ -75,10 +70,7 @@ async function Dtr({ searchParams }: Pick<PageProps<"/admin/dtr">, "searchParams
       ? params.employee
       : null;
 
-  const { summary, flow } = await getPayrollFlow(cutoff);
-  // "By day" opens today when it's in this cut-off, else the cut-off's first day.
-  const today = businessToday();
-  const dayViewDate = today >= cutoff.start && today <= cutoff.end ? today : cutoff.start;
+  const summary = await getCutoffSummary(cutoff);
   const selectedIndex = employeeId ? summary.findIndex((s) => s.id === employeeId) : -1;
   const selected = selectedIndex >= 0 ? summary[selectedIndex] : undefined;
   const href = (start: string) =>
@@ -90,8 +82,6 @@ async function Dtr({ searchParams }: Pick<PageProps<"/admin/dtr">, "searchParams
 
   return (
     <div className="space-y-6">
-      <PayrollSteps cutoff={cutoff} flow={flow} page="record" />
-      <DtrViewTabs view="person" date={dayViewDate} cutoffStart={cutoff.start} />
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <CutoffPicker cutoff={cutoff} current={current} href={href} />
         {selected && (
@@ -102,8 +92,6 @@ async function Dtr({ searchParams }: Pick<PageProps<"/admin/dtr">, "searchParams
           />
         )}
       </div>
-
-      <PayrollSavedNotice cutoff={cutoff} flow={flow} />
 
       {selected ? (
         <Sheet
@@ -163,7 +151,7 @@ async function Sheet({
         amPmRate={rates.amPmRate}
         prev={prev}
         next={next}
-        payrollHref={`/admin/payroll?cutoff=${cutoff.start}`}
+        payrollHref={`/admin/payroll?date=${cutoff.start}`}
         currentRate={
           salaryRates(
             asSalaryType(employee.salaryType),

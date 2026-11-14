@@ -30,9 +30,11 @@ export type PublicSettings = Pick<
   | "instagram_url"
   | "tiktok_url"
   | "default_deposit_percent"
+  | "events_deposit_percent"
   | "vat_percent"
   | "hold_minutes"
   | "max_advance_days"
+  | "personal_data_days"
 >;
 
 export async function getPublicSettings(): Promise<PublicSettings> {
@@ -42,11 +44,24 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   const { data, error } = await createPublicClient()
     .from("business_settings")
     .select(
-      "business_name, tagline, about, logo_path, email, phone, address, city, maps_url, facebook_url, instagram_url, tiktok_url, default_deposit_percent, vat_percent, hold_minutes, max_advance_days",
+      "business_name, tagline, about, logo_path, email, phone, address, city, maps_url, facebook_url, instagram_url, tiktok_url, default_deposit_percent, events_deposit_percent, vat_percent, hold_minutes, max_advance_days, personal_data_days",
     )
     .single();
   if (error) throw error;
   return data;
+}
+
+/** The Studio Policy Manual wording (Admin → Settings), or "" when none is set. */
+export async function getStudioPolicy(): Promise<string> {
+  "use cache";
+  cacheTag(TAGS.settings);
+  cacheLife("days");
+  const { data, error } = await createPublicClient()
+    .from("business_settings")
+    .select("studio_policy")
+    .single();
+  if (error) throw error;
+  return data.studio_policy;
 }
 
 /** Active packages. The workshop is booked from its own button, so it's left out here. */

@@ -31,9 +31,10 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { formatSummaryWhen } from "@/lib/booking/booking-summary";
 import { rescheduleFeeNotice } from "@/lib/booking/reschedule-fee";
+import { needsStudioPolicy, SHOOT_FLAGS, STUDIO_POLICY_TITLE } from "@/lib/booking/policy";
 import { signatureMatches } from "@/lib/booking/signature";
 import { addOnOffered, sessionEndAt } from "@/lib/booking/package-length";
-import { bookingTotals } from "@/lib/booking/pricing";
+import { bookingTotals, type DepositPercents, depositPercentFor } from "@/lib/booking/pricing";
 import {
   attendeesCents,
   defaultCategory,
@@ -110,6 +111,8 @@ export type WizardService = Pick<
   | "summary"
   | "price_cents"
   | "deposit_cents"
+  | "deposit_group"
+  | "booking_category"
   | "duration_minutes"
 > & {
   /** The package's contract (null = none) and its fingerprint (see lib/booking/contract). */
@@ -124,23 +127,27 @@ export function BookingWizard({
   addOns,
   initialServiceId,
   businessName,
-  depositPercent,
+  depositPercents,
   vatPercent,
   holdMinutes,
   paymentMethods,
   maxAdvanceDays,
+  studioPolicy = null,
   workshop = null,
 }: {
   services: WizardService[];
   addOns: PublicAddOn[];
   initialServiceId: string | null;
   businessName: string;
-  depositPercent: number;
+  /** Down payment % for studio packages and events; each package says which it uses. */
+  depositPercents: DepositPercents;
   vatPercent: number;
   holdMinutes: number;
   /** How clients can pay on PayMongo's page, e.g. "GCash or Maya". */
   paymentMethods: string;
   maxAdvanceDays: number;
+  /** The Studio Policy Manual studio packages must agree to, and its fingerprint (null = none). */
+  studioPolicy?: { text: string; hash: string } | null;
   /**
    * Workshop flow: one fixed-price workshop (services[0]) at the time the admin
    * set, paid half or in full.
@@ -185,6 +192,11 @@ export function BookingWizard({
     contractAccepted: false,
     contractHash: "",
     contractSignature: "",
+    policyAccepted: false,
+    policyHash: "",
+    sensitiveShoot: false,
+    petsOrMessy: false,
+    btsOptOut: false,
     website: "",
     ...(workshop && { payInFull: false, refundRuleAccepted: false }),
   });
@@ -284,6 +296,9 @@ export function BookingWizard({
   /** Index of a step by id (-1 when this flow doesn't have it). */
   const at = (id: Step["id"]) => STEPS.findIndex((s) => s.id === id);
   const service = services.find((s) => s.id === serviceId);
+  // Studio packages: the Studio Policy Manual on Review & pay + a few questions on Shoot details.
+  const studio = needsStudioPolicy(service?.booking_category);
+  const policy = studio ? studioPolicy : null;
   // Each add-on lists the packages it goes with (e.g. extensions only for the Photobooth).
   const offeredAddOns = service ? addOns.filter((a) => addOnOffered(a, service.id)) : [];
   const chosenAddOns = offeredAddOns.filter((a) => addOnIds.includes(a.id));
@@ -301,7 +316,7 @@ export function BookingWizard({
         addOnsCents: chosenAddOns.reduce((sum, a) => sum + a.price_cents, 0),
         vatPercent,
         fixedDepositCents: service.deposit_cents,
-        depositPercent,
+        depositPercent: depositPercentFor(service.deposit_group, depositPercents),
         payInFull,
       })
     : { subtotal: 0, vat: 0, total: 0, deposit: 0 };
@@ -418,6 +433,23 @@ export function BookingWizard({
     } else {
       form.setValue("contractAccepted", false);
       form.setValue("contractHash", "");
+    }
+    if (policy) {
+      if (!form.getValues("policyAccepted")) {
+        form.setError(
+          "policyAccepted",
+          { message: "Please read the studio policy and tick to agree before booking." },
+          { shouldFocus: true },
+        );
+        return;
+      }
+      form.setValue("policyHash", policy.hash);
+    } else {
+      form.setValue("policyAccepted", false);
+      form.setValue("policyHash", "");
+    }
+    if (!studio) {
+      for (const flag of SHOOT_FLAGS) form.setValue(flag.name, false);
     }
     startSubmit(async () => {
       // Send the raw form strings: the server re-validates with the same schema.
@@ -610,7 +642,7 @@ export function BookingWizard({
                     people={people}
                     packageCents={attendeesCents(people_, workshop.prices)}
                     vatPercent={vatPercent}
-                    depositPercent={depositPercent}
+                    depositPercent={depositPercentFor(service.deposit_group, depositPercents)}
                   />
                 )}
 
@@ -819,6 +851,7 @@ export function BookingWizard({
                       rows={4}
                       maxLength={2000}
                     />
+                    {studio && <ShootFlags form={form} />}
                   </FieldGroup>
                 )}
 
@@ -978,6 +1011,7 @@ export function BookingWizard({
                         fullName={form.getValues("fullName")}
                       />
                     )}
+                    {policy && <StudioPolicyAgreement form={form} text={policy.text} />}
                     <Turnstile key={turnstileKey} onToken={onToken} />
                   </div>
                 )}
@@ -1541,6 +1575,102 @@ function PackageContract({
               />
               <span className="text-sm">
                 I have read and agree to the <strong>{packageName}</strong> contract above.
+              </span>
+            </label>
+            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+          </Field>
+        )}
+      />
+    </section>
+  );
+}
+
+/** Studio packages: what the studio must know ahead (policy 3.8, 3.9, 7.4). */
+function ShootFlags({ form }: { form: UseFormReturn<Values, unknown, Output> }) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="mb-1 text-sm font-semibold">Let us know ahead (optional)</legend>
+      {SHOOT_FLAGS.map((flag) => (
+        <Controller
+          key={flag.name}
+          control={form.control}
+          name={flag.name}
+          render={({ field }) => (
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-card p-4 has-[:checked]:border-primary has-[:checked]:bg-accent/50">
+              <input
+                type="checkbox"
+                checked={Boolean(field.value)}
+                onChange={(e) => field.onChange(e.target.checked)}
+                onBlur={field.onBlur}
+                ref={field.ref}
+                aria-describedby={`${flag.name}-hint`}
+                className="mt-0.5 size-5 shrink-0 accent-primary"
+              />
+              <span className="text-sm">
+                <span className="block font-medium">{flag.label}</span>
+                <span id={`${flag.name}-hint`} className="block text-muted-foreground">
+                  {flag.hint}
+                </span>
+              </span>
+            </label>
+          )}
+        />
+      ))}
+    </fieldset>
+  );
+}
+
+/**
+ * The Studio Policy Manual on Review & pay (studio packages): the full wording in
+ * a scrollable box and a required "I agree" tick (checked again on the server).
+ */
+function StudioPolicyAgreement({
+  form,
+  text,
+}: {
+  form: UseFormReturn<Values, unknown, Output>;
+  text: string;
+}) {
+  const id = "studio-policy";
+  return (
+    <section aria-labelledby={`${id}-title`} className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id={`${id}-title`} className="text-lg font-semibold">
+          {STUDIO_POLICY_TITLE}
+        </h3>
+        <span className="text-xs text-muted-foreground">Scroll to read it all</span>
+      </div>
+      <div
+        id={id}
+        tabIndex={0}
+        role="document"
+        aria-label={STUDIO_POLICY_TITLE}
+        className="max-h-80 overflow-y-auto rounded-2xl border bg-card p-4 text-sm leading-relaxed whitespace-pre-line focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:p-5"
+      >
+        {text}
+      </div>
+      <Controller
+        control={form.control}
+        name="policyAccepted"
+        render={({ field, fieldState }) => (
+          <Field data-invalid={fieldState.invalid}>
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-card p-4 has-[:checked]:border-primary has-[:checked]:bg-accent/50">
+              <input
+                type="checkbox"
+                checked={Boolean(field.value)}
+                onChange={(e) => {
+                  field.onChange(e.target.checked);
+                  if (e.target.checked) form.clearErrors("policyAccepted");
+                }}
+                onBlur={field.onBlur}
+                ref={field.ref}
+                aria-invalid={fieldState.invalid}
+                aria-describedby={id}
+                className="mt-0.5 size-5 shrink-0 accent-primary"
+              />
+              <span className="text-sm">
+                I have read, understood and agree to the <strong>{STUDIO_POLICY_TITLE}</strong>{" "}
+                above.
               </span>
             </label>
             {fieldState.invalid && <FieldError errors={[fieldState.error]} />}

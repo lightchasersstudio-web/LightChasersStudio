@@ -9,6 +9,7 @@ const STATUSES = [
   "pending",
   "confirmed",
   "completed",
+  "no_show",
   "cancelled",
   "declined",
   "expired",

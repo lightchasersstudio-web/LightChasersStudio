@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CHARGE_KIND_VALUES, chargeNeedsAmount } from "@/lib/booking/charges";
+import { RECORDED_PROVIDER_VALUES } from "@/lib/payments/providers";
 import { businessDateTimeToIso } from "@/lib/utils/business-date";
 import { pesosToCents } from "@/lib/utils/money";
 import { CONTACT_METHODS, type ContactMethod } from "@/lib/validations/booking";
@@ -177,16 +179,47 @@ export const bookingIdSchema = z.object({ id: z.uuid() });
 /** Status changes staff make by hand (the DB trigger still enforces which moves are allowed). */
 export const bookingStatusSchema = z.object({
   id: z.uuid(),
-  status: z.enum(["confirmed", "declined", "completed", "cancelled"]),
+  status: z.enum(["confirmed", "declined", "completed", "cancelled", "no_show"]),
   /** Marking completed: link to the client's photos (e.g. Google Drive), sent in the thank-you email. */
   photosUrl: optionalUrl.optional(),
+  /** Cancelling: by the client (down payment kept) or force majeure (refund everything). */
+  cancelReason: z.enum(["client", "force_majeure"]).optional(),
 });
 export type BookingStatusInput = z.input<typeof bookingStatusSchema>;
+
+/** Staff add an extra charge after a shoot (cleaning, backdrop paper, extra people, …). */
+export const bookingChargeSchema = z
+  .object({
+    bookingId: z.uuid(),
+    kind: z.enum(CHARGE_KIND_VALUES, "Pick what the charge is for."),
+    quantity: intString(1, 100),
+    // Damage and "other" only: the amount (before VAT) and what it's for.
+    amount: z.string().trim().default(""),
+    note: optionalText(60),
+  })
+  .transform((v, ctx) => {
+    if (!chargeNeedsAmount(v.kind)) return { ...v, amountCents: null };
+    const cents = pesosToCents(v.amount);
+    if (cents === null || cents <= 0) {
+      ctx.addIssue({ code: "custom", path: ["amount"], message: "Enter the amount, like 1500." });
+      return z.NEVER;
+    }
+    if (!v.note) {
+      ctx.addIssue({ code: "custom", path: ["note"], message: "Say what it's for." });
+      return z.NEVER;
+    }
+    return { ...v, amountCents: cents };
+  });
+export type BookingChargeInput = z.input<typeof bookingChargeSchema>;
+
+export const removeChargeSchema = z.object({ bookingId: z.uuid(), lineId: z.uuid() });
+
+export const paymentIdSchema = z.object({ paymentId: z.uuid() });
 
 export const recordPaymentSchema = z
   .object({
     bookingId: z.uuid(),
-    provider: z.enum(["gcash", "cash"], "Pick GCash or cash."),
+    provider: z.enum(RECORDED_PROVIDER_VALUES, "Pick how it was paid."),
     amount: pesoString,
     reference: optionalText(100),
   })

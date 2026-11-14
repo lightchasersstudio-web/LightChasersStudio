@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cutoffFor, dayStatusLabel } from "@/lib/payroll/cutoff";
+import { dayStatusLabel } from "@/lib/payroll/cutoff";
 import {
   DAILY_PAYROLL_NOTE,
   endsNextDay,
@@ -31,7 +31,7 @@ export function DailyPayrollReport({ report, today }: { report: DailyPayroll; to
   const { date, filter, rows, total, paidCount, subtotals } = report;
   const dayLabel = format(parseISO(date), "EEEE, d MMMM yyyy");
   const pdfHref = `/admin/reports/payroll/pdf?date=${date}${filter === "all" ? "" : `&category=${filter}`}`;
-  const dtrHref = `/admin/dtr?cutoff=${cutoffFor(date).start}`;
+  const dtrHref = `/admin/payroll?date=${date}`;
   const filterHref = (f: DailyPayrollFilter) => {
     const q = new URLSearchParams();
     if (date !== today) q.set("payDate", date);

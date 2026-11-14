@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bookingTotals } from "./pricing";
+import { bookingTotals, depositPercentFor, depositPercents } from "./pricing";
 
 describe("bookingTotals", () => {
   it("adds 12% VAT on package + add-ons and takes the deposit from the total", () => {
@@ -50,5 +50,15 @@ describe("bookingTotals", () => {
     };
     expect(bookingTotals({ ...base, payInFull: false }).deposit).toBe(50_001);
     expect(bookingTotals({ ...base, payInFull: true }).deposit).toBe(100_001);
+  });
+});
+
+describe("depositPercentFor", () => {
+  const percents = depositPercents({ default_deposit_percent: 30, events_deposit_percent: 50 });
+
+  it("uses the events % for event packages and the studio % for the rest", () => {
+    expect(depositPercentFor("events", percents)).toBe(50);
+    expect(depositPercentFor("studio", percents)).toBe(30);
+    expect(depositPercentFor(null, percents)).toBe(30);
   });
 });

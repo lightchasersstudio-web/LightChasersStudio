@@ -16,7 +16,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { WORKSHOP_MAX_DAYS } from "@/lib/booking/workshop";
-import { asBookingCategory, BOOKING_CATEGORIES, PACKAGE_CATEGORIES } from "@/lib/catalog";
+import {
+  asBookingCategory,
+  asDepositGroup,
+  BOOKING_CATEGORIES,
+  DEPOSIT_GROUPS,
+  PACKAGE_CATEGORIES,
+} from "@/lib/catalog";
 import { centsToPesoInput } from "@/lib/utils/money";
 import {
   serviceSchema,
@@ -43,6 +49,7 @@ export function ServiceForm({ service }: { service?: Service }) {
             service.duration_minutes === null ? "" : String(service.duration_minutes / 60),
           price: centsToPesoInput(service.price_cents),
           depositMode: service.deposit_cents === null ? "default" : "fixed",
+          depositGroup: asDepositGroup(service.deposit_group),
           deposit: service.deposit_cents === null ? "" : centsToPesoInput(service.deposit_cents),
           rescheduleFee:
             service.reschedule_fee_cents > 0 ? centsToPesoInput(service.reschedule_fee_cents) : "",
@@ -63,6 +70,7 @@ export function ServiceForm({ service }: { service?: Service }) {
           lengthHours: "",
           price: "",
           depositMode: "default",
+          depositGroup: "studio",
           deposit: "",
           rescheduleFee: "",
           inclusions: "",
@@ -97,6 +105,7 @@ export function ServiceForm({ service }: { service?: Service }) {
     earlyBirdEnabled,
     studentEnabled,
     bookingCategory,
+    depositGroup,
   ] = useWatch({
     control,
     name: [
@@ -107,6 +116,7 @@ export function ServiceForm({ service }: { service?: Service }) {
       "earlyBirdEnabled",
       "studentEnabled",
       "bookingCategory",
+      "depositGroup",
     ],
   });
 
@@ -280,11 +290,24 @@ export function ServiceForm({ service }: { service?: Service }) {
                   name="depositMode"
                   label="Deposit"
                   options={[
-                    { value: "default", label: "Use the default deposit %" },
+                    { value: "default", label: "Use the down payment %" },
                     { value: "fixed", label: "Fixed amount" },
                   ]}
-                  description="The default % is set in Settings."
+                  description="The studio and events % are set in Settings → Booking rules."
                 />
+                {depositMode === "default" && category !== "workshop" && (
+                  <SelectField
+                    control={control}
+                    name="depositGroup"
+                    label="Down payment group"
+                    options={[...DEPOSIT_GROUPS]}
+                    description={
+                      depositGroup === "events"
+                        ? "Uses the events down payment % (weddings, prenups, Photobooth)."
+                        : "Uses the studio down payment %."
+                    }
+                  />
+                )}
                 {depositMode === "fixed" && (
                   <TextField
                     control={control}

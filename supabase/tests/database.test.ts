@@ -1540,6 +1540,96 @@ describe.skipIf(!url)("database (RLS + booking rules)", () => {
       });
     });
 
+    it("finds clients past the keeping period, unless something is still open", async () => {
+      await inRollback(async (c) => {
+        const s = await setupFixtures(c, 1);
+        await actAs(c, "service_role");
+        const b = (await adminBook(c, s.portrait, manila(150, 10))).rows[0]!;
+        await c.query("reset role");
+        await c.query("update public.business_settings set personal_data_days = 7");
+        // A shoot 10 days ago, done and fully paid.
+        await c.query(
+          `update public.bookings set start_at = now() - interval '10 days',
+             end_at = now() - interval '10 days' + interval '1 hour',
+             blocked_until = now() - interval '10 days' + interval '1 hour',
+             status = 'completed' where id = $1`,
+          [b.booking_id],
+        );
+        const { rows: bk } = await c.query(
+          "select client_id, price_cents, contact_name from public.bookings where id = $1",
+          [b.booking_id],
+        );
+        const { client_id: client, price_cents: price, contact_name: name } = bk[0];
+        await c.query(
+          `insert into public.payments (booking_id, provider, amount_cents, status, paid_at)
+           values ($1, 'cash', $2, 'paid', now())`,
+          [b.booking_id, price],
+        );
+        const due = async () => {
+          await actAs(c, "service_role");
+          const { rows } = await c.query("select * from public.clients_past_retention() as id");
+          await c.query("reset role");
+          return rows.map((r) => r.id).includes(client);
+        };
+
+        // Receipts keep who paid (a record the law requires).
+        const { rows: paid } = await c.query(
+          "select received_from from public.payments where booking_id = $1",
+          [b.booking_id],
+        );
+        expect(paid[0].received_from).toBe(name);
+
+        expect(await due()).toBe(true);
+
+        // An unpaid balance (a damage charge) keeps them.
+        await c.query(
+          "update public.bookings set price_cents = price_cents + 50000 where id = $1",
+          [b.booking_id],
+        );
+        expect(await due()).toBe(false);
+        await c.query("update public.bookings set price_cents = $2 where id = $1", [
+          b.booking_id,
+          price,
+        ]);
+
+        // A refund being checked keeps them.
+        await c.query("update public.bookings set needs_refund_review = true where id = $1", [
+          b.booking_id,
+        ]);
+        expect(await due()).toBe(false);
+        await c.query("update public.bookings set needs_refund_review = false where id = $1", [
+          b.booking_id,
+        ]);
+
+        // Within the 7 days, or with the setting at 0, they stay.
+        await c.query("update public.business_settings set personal_data_days = 30");
+        expect(await due()).toBe(false);
+        await c.query("update public.business_settings set personal_data_days = 0");
+        expect(await due()).toBe(false);
+        await c.query("update public.business_settings set personal_data_days = 7");
+
+        // Once deleted, they aren't found again; the receipt name stays.
+        await actAs(c, "service_role");
+        await c.query("select * from public.anonymise_client($1)", [client]);
+        await c.query("reset role");
+        expect(await due()).toBe(false);
+        const { rows: after } = await c.query(
+          "select received_from from public.payments where booking_id = $1",
+          [b.booking_id],
+        );
+        expect(after[0].received_from).toBe(name);
+
+        // Only the server may ask.
+        for (const role of ["anon", "authenticated"] as const) {
+          await actAs(c, role);
+          expect(await expectFailure(c, "select * from public.clients_past_retention()")).toMatch(
+            /permission denied/,
+          );
+          await c.query("reset role");
+        }
+      });
+    });
+
     it("clears student ID photos only once the workshop is over", async () => {
       await inRollback(async (c) => {
         const s = await setupFixtures(c, 2);

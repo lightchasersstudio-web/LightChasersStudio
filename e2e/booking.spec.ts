@@ -63,8 +63,10 @@ test("Book now on a package opens the wizard with it chosen and walks to payment
   await page.waitForTimeout(1000);
   expect(submits, "booking submitted before Pay was clicked").toBe(0);
   await expect(page.getByRole("button", { name: /Pay .* deposit|Request booking/ })).toBeEnabled();
-  await expect(page.getByText("Package price")).toBeVisible();
+  await expect(page.getByText("Package price", { exact: true })).toBeVisible();
   await expect(page.getByText(name).first()).toBeVisible();
+  // Sign and agree to the package contract and the studio policy, when shown.
+  await agreeToTerms(page, "E2E Client Wizard");
   const submit = page.getByRole("button", { name: /Pay .* deposit|Request booking/ });
   await submit.click();
   // Without a PayMongo key the server refuses before holding a slot.
@@ -139,3 +141,61 @@ test("the browser Back button steps back through the wizard before leaving it", 
   await page.goBack();
   await expect(page).not.toHaveURL(/\/book/); // only now does Back leave the wizard
 });
+
+test("studio packages must agree to the studio policy, shown below the contract", async ({
+  page,
+}) => {
+  // Count booking submits: nothing may be sent while the policy isn't ticked.
+  let submits = 0;
+  page.on("request", (r) => {
+    if (r.method() === "POST" && (r.postData() ?? "").includes('"fullName"')) submits++;
+  });
+  await page.goto("/book?service=family-portrait-session");
+  await page.getByLabel("Full name").fill("E2E Client Policy");
+  await page.getByLabel("Email").fill("e2e-policy@example.com");
+  await page.getByLabel("Mobile number").fill("0917 123 4567");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Package" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await pickFirstFreeTime(page);
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Shoot details: the questions the studio must know ahead (policy 3.8, 3.9, 7.4).
+  await expect(page.getByRole("checkbox", { name: /nude or sensitive shoot/ })).toBeVisible();
+  await page.getByRole("checkbox", { name: /pets or messy materials/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Review & pay: the policy comes after the package contract.
+  await expect(page.getByText(/We hold this time for/)).toBeVisible();
+  const policy = page.getByRole("document", { name: "Studio Policy Manual & Client Agreement" });
+  await expect(policy).toContainText("1.2 Down Payment");
+  const contract = page.getByRole("document", { name: /contract$/ });
+  if (await contract.isVisible()) {
+    const [contractBox, policyBox] = [await contract.boundingBox(), await policy.boundingBox()];
+    expect(policyBox!.y).toBeGreaterThan(contractBox!.y);
+    await page.getByLabel("Sign by typing your full name").fill("E2E Client Policy");
+    await page.getByRole("checkbox", { name: /contract above/ }).check();
+  }
+
+  // Not ticked: booking is refused in the browser, nothing is sent.
+  await page.getByRole("button", { name: /Pay .* deposit|Request booking/ }).click();
+  await expect(
+    page.getByText("Please read the studio policy and tick to agree before booking."),
+  ).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /Studio Policy Manual/ })).toBeFocused();
+  expect(submits).toBe(0);
+});
+
+/** Review & pay: sign + tick the package contract and tick the studio policy, when the package has them. */
+async function agreeToTerms(page: Page, fullName: string) {
+  // The step slides in: wait for its content before looking for the terms.
+  await expect(page.getByText(/We hold (this time|your seats?) for/)).toBeVisible();
+  const signature = page.getByLabel("Sign by typing your full name");
+  if (await signature.isVisible()) {
+    await signature.fill(fullName);
+    await page.getByRole("checkbox", { name: /contract above/ }).check();
+  }
+  const policy = page.getByRole("checkbox", { name: /Studio Policy Manual/ });
+  if (await policy.isVisible()) await policy.check();
+}

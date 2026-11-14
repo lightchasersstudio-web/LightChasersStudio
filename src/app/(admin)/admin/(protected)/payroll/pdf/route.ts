@@ -5,18 +5,22 @@ import { z } from "zod";
 
 import { cutoffLabel, parseCutoff } from "@/lib/payroll/cutoff";
 import { BUSINESS_TZ } from "@/lib/utils/business-date";
+import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/server/auth";
+import { cutoffEnded, syncPayroll } from "@/server/payroll-sync";
 import { loadBrand, pdfResponse } from "@/server/pdf/kit";
 import { PayslipsDocument } from "@/server/pdf/payslips";
 import { getSavedPayroll } from "@/server/queries/payroll";
 
 /**
- * GET /admin/payroll/pdf?cutoff=YYYY-MM-01|16[&employee=<id>] — the saved
- * payslips of a cut-off (all of them, a page each, or one employee's).
- * Only saved payrolls print, so a PDF always matches what was saved. Admins only.
+ * GET /admin/payroll/pdf?cutoff=YYYY-MM-01|16[&employee=<id>] — a cut-off's
+ * payslips (all of them, a page each, or one employee's). Printing saves them
+ * first while the cut-off is still running (or was never saved), so a PDF
+ * always matches what is saved. A finished cut-off prints as saved. Admins only.
  */
 export async function GET(req: Request) {
-  if (!(await assertAdmin())) return new Response("Not allowed", { status: 401 });
+  const admin = await assertAdmin();
+  if (!admin) return new Response("Not allowed", { status: 401 });
   const params = new URL(req.url).searchParams;
   const cutoff = parseCutoff(params.get("cutoff"));
   if (!cutoff) return new Response("Use ?cutoff=YYYY-MM-01 or YYYY-MM-16", { status: 400 });
@@ -25,8 +29,13 @@ export async function GET(req: Request) {
     return new Response("Not found", { status: 404 });
   }
 
-  const [saved, brand] = await Promise.all([getSavedPayroll(cutoff), loadBrand()]);
-  if (!saved) return new Response("Save this cut-off's payroll first.", { status: 404 });
+  let saved = await getSavedPayroll(cutoff);
+  if (!saved || !cutoffEnded(cutoff)) {
+    await syncPayroll(cutoff, { admin, supabase: await createClient() });
+    saved = await getSavedPayroll(cutoff);
+  }
+  if (!saved) return new Response("No one to pay in this cut-off.", { status: 404 });
+  const brand = await loadBrand();
   const payslips = employee
     ? saved.payslips.filter((p) => p.employee_id === employee)
     : saved.payslips;

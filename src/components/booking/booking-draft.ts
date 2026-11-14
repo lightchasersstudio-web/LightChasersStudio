@@ -20,6 +20,9 @@ const FIELDS = [
   "location",
   "participants",
   "specialRequests",
+  "sensitiveShoot",
+  "petsOrMessy",
+  "btsOptOut",
 ] as const satisfies readonly (keyof PublicBookingInput)[];
 
 export type BookingDraft = Partial<Pick<PublicBookingInput, (typeof FIELDS)[number]>>;

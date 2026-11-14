@@ -6,15 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fail, ok, type ActionResult } from "@/lib/utils/action-result";
 import { anonymiseClientSchema, namesMatch } from "@/lib/validations/privacy";
 import { adminAction, audit, revalidate, TAGS } from "@/server/admin-action";
-
-const STUDENT_IDS = "student-ids";
-
-/** Deletes student-ID photos the database just let go of; a failure only leaves files behind. */
-async function removeStudentIds(paths: string[]) {
-  if (paths.length === 0) return;
-  const { error } = await createAdminClient().storage.from(STUDENT_IDS).remove(paths);
-  if (error) console.error("[privacy] remove student IDs", paths, error);
-}
+import { removeStudentIds } from "@/server/privacy";
 
 /**
  * Owner only: delete a client's personal data on request (RA 10173). Names and

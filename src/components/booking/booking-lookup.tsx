@@ -77,6 +77,11 @@ export function BookingLookup({
         )}
         <BookingCard summary={booking.summary} status={booking.status} />
         <BookingCountdown booking={booking} />
+        {booking.policyNote && (
+          <p className="rounded-2xl bg-accent px-4 py-3 text-sm text-accent-foreground">
+            {booking.policyNote}
+          </p>
+        )}
         {booking.status === "pending_payment" && booking.holdExpiresAt && (
           <p className="text-center text-sm text-muted-foreground">
             Your time is held until {manilaTime(booking.holdExpiresAt)} while the deposit is paid.
@@ -102,6 +107,13 @@ export function BookingLookup({
             acceptedAt={booking.contract.acceptedAt}
             signedName={booking.contract.signedName}
             title="The contract you agreed to"
+          />
+        )}
+        {booking.studioPolicy && (
+          <AgreedContract
+            text={booking.studioPolicy.text}
+            acceptedAt={booking.studioPolicy.acceptedAt}
+            title="The studio policy you agreed to"
           />
         )}
         <p className="text-center text-sm text-muted-foreground">

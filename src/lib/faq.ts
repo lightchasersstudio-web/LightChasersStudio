@@ -14,7 +14,11 @@ export const faqTopicLabel = (topic: string) =>
 
 /** Placeholders an answer can use; filled from the studio settings on the page. */
 export const FAQ_TOKENS = [
-  { token: "{deposit_percent}", meaning: "default deposit %" },
+  { token: "{deposit_percent}", meaning: "studio down payment %" },
+  {
+    token: "{events_deposit_percent}",
+    meaning: "events down payment % (weddings, prenups, Photobooth)",
+  },
   { token: "{vat_percent}", meaning: "VAT %" },
   { token: "{hold_minutes}", meaning: "minutes a time is held while paying" },
   { token: "{max_advance_days}", meaning: "how many days ahead clients can book" },
@@ -24,6 +28,7 @@ export const FAQ_TOKENS = [
 
 export type FaqSettings = {
   default_deposit_percent: number;
+  events_deposit_percent: number;
   vat_percent: number;
   hold_minutes: number;
   max_advance_days: number;
@@ -35,6 +40,7 @@ export type FaqSettings = {
 export function fillFaqTokens(text: string, s: FaqSettings): string {
   const values: Record<string, string> = {
     deposit_percent: String(s.default_deposit_percent),
+    events_deposit_percent: String(s.events_deposit_percent),
     vat_percent: String(s.vat_percent),
     hold_minutes: String(s.hold_minutes),
     max_advance_days: String(s.max_advance_days),

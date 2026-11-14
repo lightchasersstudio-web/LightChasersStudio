@@ -11,7 +11,14 @@ import { paymentsMockEnabled } from "@/lib/payments/mock";
 /** Trial mode saves emails here instead of sending them (see /admin/trial-emails). */
 export const MOCK_EMAIL_DIR = path.join(process.cwd(), ".mock-emails");
 
-export type Email = { to: string; subject: string; html: string; text: string };
+export type Email = {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  /** Files to attach, e.g. a receipt PDF. */
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
+};
 
 let gmail: Transporter | undefined;
 
@@ -43,7 +50,12 @@ export async function sendEmail(email: Email): Promise<void> {
           MOCK_EMAIL_DIR,
           `${at.replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}.json`,
         ),
-        JSON.stringify({ at, ...email }),
+        // Attachments are listed by name only (the preview page shows the email).
+        JSON.stringify({
+          at,
+          ...email,
+          attachments: email.attachments?.map((a) => a.filename),
+        }),
       );
     } catch (error) {
       console.error("[email] trial preview not saved", error);
@@ -58,7 +70,14 @@ export async function sendEmail(email: Email): Promise<void> {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: EMAIL_FROM, ...email }),
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        ...email,
+        attachments: email.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content.toString("base64"),
+        })),
+      }),
     });
     if (!res.ok) console.error("[email]", res.status, await res.text());
   } catch (error) {
