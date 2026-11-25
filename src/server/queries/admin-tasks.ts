@@ -14,8 +14,7 @@ export type AdminTask = {
 
 /**
  * Things waiting on an admin that live outside the booking list: client
- * reschedule requests and student IDs to accept or reject. (Payroll saves by
- * itself when days are saved, so it never waits here.)
+ * reschedule requests and student IDs to accept or reject.
  */
 export async function getAdminTasks(): Promise<AdminTask[]> {
   const supabase = await createClient();

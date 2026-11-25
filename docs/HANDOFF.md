@@ -1,6 +1,6 @@
 # Handoff: Light Chasers Studio booking site
 
-_Last updated: 2026-10-30. Phases 0–7 are on `main`: the extras (PRs #8–#21) and branch `complete-features` (merged 2026-10-30), which added Phase 6 (bookings table, clients, activity), privacy (policy page, delete a client's data), the workshop loose ends, Phase 7 hardening and the known small fixes. QR Ph payments work in PayMongo test mode; Turnstile is live._
+_Last updated: 2026-11-25. Phases 0–7 are on `main`, plus the owner's requests from November (client self-service, contracts, booking categories, studio policy, the Today check-in page). Payroll was built in November and **removed on 2026-11-25** (it moved to the studio's POS system). We're in **Phase 8 (deploy)**. QR Ph payments work in PayMongo test mode; Turnstile is live._
 
 This document says where the project stands: what's built, what's verified, what's left, and the decisions and limits a new person needs to know. For first-time setup on a new machine, see [`SETUP.md`](SETUP.md). For the full product spec and roadmap, see [`master-prompt.md`](master-prompt.md). For coding rules and architecture notes, see [`../CLAUDE.md`](../CLAUDE.md).
 
@@ -10,33 +10,40 @@ A booking website for **Light Chasers Studio**, a photography studio in Zamboang
 
 ## Where we left off
 
-- **Phases 0–5 are built, verified and merged into `main`** (Phase 5 = PR #7), plus booking extras, booking management, package lengths, Gmail sending, package highlights, a security upgrade, the workshop and its rework (PRs #8–#21, latest on 2026-10-28).
-- **Merged 2026-10-30: branch `complete-features`** (merge `f98888c`), see [2026-10-30](#2026-10-30-finishing-branch-complete-features): Phase 6 admin pages, privacy, workshop loose ends, Phase 7 hardening and small fixes. Not yet clicked through signed in on the live site (Bookings, Clients, Activity, delete data, the "workshop moved" email).
-- **Emails work** from the studio Gmail. **Bot protection (Turnstile) is on** (both keys set, checked 2026-10-30). **Payments:** QR Ph works end to end in PayMongo **test mode** on the live site (webhook verified, booking marked paid). Going live needs the live key and a live webhook; Maya, GCash and cards wait on PayMongo's approval (see [Next steps](#next-steps)).
-- **Hosting:** Vercel deploys from `main`, using the **dev** Supabase project for now. A separate production database is still Phase 8.
-- **The dev database** has every migration applied, including the branch's (latest `20261030000200_purge_rate_limits.sql`, 2026-10-30).
+- **Phases 0–7 are built, verified and merged into `main`.** Since then (2026-11-05 → 11-14, PRs #22–#32) the owner's requests were added: client self-service and shoot reminders, package contracts with a typed signature, multi-day workshops, FAQ editing, a rescheduling fee, booking categories, the studio policy manual, events deposits, no-shows, receipts, 7-day personal data retention and the Today check-in page with a security deposit. See [Since 2026-10-30](#since-2026-10-30).
+- **Open on 2026-11-25:** PR #33 (Next.js 16.4.3 → 16.4.6, security fixes) and branch `remove-payroll` (payroll, staff and time records removed from the site; the data stays in the database).
+- **Emails work** from the studio Gmail. **Bot protection (Turnstile) is on.** **Payments:** QR Ph works end to end in PayMongo **test mode** on the live site. Going live needs the live key and a live webhook; Maya, GCash and cards wait on PayMongo's approval (see [Next steps](#next-steps)).
+- **Hosting:** Vercel deploys from `main`, using the **dev** Supabase project for now. A separate production database is the main Phase 8 task left.
+- **The dev database** should have every migration up to `20261114000300_check_in_security_deposit.sql`; this wasn't re-checked on 2026-11-25 (the Supabase CLI isn't linked on this machine).
 
 ## Roadmap status
 
-| Phase | What                                                                        | Status                       | PR                         |
-| ----- | --------------------------------------------------------------------------- | ---------------------------- | -------------------------- |
-| 0     | Foundation: project setup, design system, env, linting                      | ✅ Done                      | #1                         |
-| 1     | Database: schema, RLS, booking functions, storage, seed, types              | ✅ Done, pushed to dev DB    | #2                         |
-| 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified | #3                         |
-| 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                      | #4                         |
-| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                      | #5                         |
-| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Merged, needs owner keys  | #7                         |
-| —     | Extras: add-ons, VAT, reviews, FAQ, sales report, dashboard, trial mode     | ✅ Done                      | #8–#12                     |
-| —     | Booking management: edit, history, owner delete, monthly CSV                | ✅ Done                      | #13                        |
-| —     | Package lengths + add-on rules, real sales report                           | ✅ Done                      | #14                        |
-| —     | Emails from the studio Gmail                                                | ✅ Done, working on dev      | #15                        |
-| —     | Package highlights (photo row, own reel), before/after slider removed       | ✅ Done                      | #16                        |
-| —     | Security: Next.js 16.4.3, dependency patches (`npm audit`: 0)               | ✅ Done                      | #17                        |
-| —     | Workshop booking (base for the other developer)                             | ✅ Done                      | #18                        |
-| —     | Workshop rework, home workshop banner, framed portfolio                     | ✅ Done                      | #19, #21                   |
-| 6     | Admin: bookings table, clients, activity log, privacy anonymise             | ✅ Done                      | branch `complete-features` |
-| 7     | Hardening: CSP/HSTS, error pages, sitemap/robots, Lighthouse fixes          | ✅ Done                      | branch `complete-features` |
-| 8     | Deploy: Vercel + production Supabase                                        | ⏳ Vercel (dev DB) running   |                            |
+| Phase | What                                                                        | Status                            | PR                         |
+| ----- | --------------------------------------------------------------------------- | --------------------------------- | -------------------------- |
+| 0     | Foundation: project setup, design system, env, linting                      | ✅ Done                           | #1                         |
+| 1     | Database: schema, RLS, booking functions, storage, seed, types              | ✅ Done, pushed to dev DB         | #2                         |
+| 2     | Admin auth: login, route protection, admin shell, create-admin script       | ✅ Done, real login verified      | #3                         |
+| 3     | Admin content: services, availability, portfolio, settings, account         | ✅ Done                           | #4                         |
+| 4     | Public site: home, services, portfolio, about, contact, 404, hero animation | ✅ Done                           | #5                         |
+| 5     | Booking flow + admin calendar, staff bookings, payments, emails             | ✅ Merged, needs owner keys       | #7                         |
+| —     | Extras: add-ons, VAT, reviews, FAQ, sales report, dashboard, trial mode     | ✅ Done                           | #8–#12                     |
+| —     | Booking management: edit, history, owner delete, monthly CSV                | ✅ Done                           | #13                        |
+| —     | Package lengths + add-on rules, real sales report                           | ✅ Done                           | #14                        |
+| —     | Emails from the studio Gmail                                                | ✅ Done, working on dev           | #15                        |
+| —     | Package highlights (photo row, own reel), before/after slider removed       | ✅ Done                           | #16                        |
+| —     | Security: Next.js 16.4.3, dependency patches (`npm audit`: 0)               | ✅ Done                           | #17                        |
+| —     | Workshop booking (base for the other developer)                             | ✅ Done                           | #18                        |
+| —     | Workshop rework, home workshop banner, framed portfolio                     | ✅ Done                           | #19, #21                   |
+| 6     | Admin: bookings table, clients, activity log, privacy anonymise             | ✅ Done                           | branch `complete-features` |
+| 7     | Hardening: CSP/HSTS, error pages, sitemap/robots, Lighthouse fixes          | ✅ Done                           | branch `complete-features` |
+| —     | Workshop slideshow photos                                                   | ✅ Done                           | `workshop-slideshow`       |
+| —     | Client self-service, reminders, contracts, multi-day workshops, FAQ admin   | ✅ Done                           | #22–#24                    |
+| —     | Mobile fixes, booking categories, photos-ready email                        | ✅ Done                           | #26–#29                    |
+| —     | Payroll, staff, time records                                                | 🗑️ Removed 2026-11-25 (POS)       | #30–#32, `remove-payroll`  |
+| —     | Studio policy, events deposit, no-shows, receipts, 7-day data retention     | ✅ Done                           | #32                        |
+| —     | Today check-in page + security deposit                                      | ✅ Done                           | `today-check-in`           |
+| —     | Security: Next.js 16.4.6                                                    | ⏳ Open                           | #33                        |
+| 8     | Deploy: Vercel + production Supabase                                        | ⏳ In progress (Vercel on dev DB) |                            |
 
 ## What's built
 
@@ -204,6 +211,22 @@ All owner decisions from 2026-10-28. Migrations `20261028000100` to `000600`, al
 - **Admin → Services → the workshop → Home page slideshow:** add photos (up to 12, resized in the browser, location data removed), move them up/down, remove them. Each change saves at once and shows on the home banner right away; removing a photo deletes the file. With no photos there, the banner keeps its automatic pick (cover photo, then upright portfolio photos).
 - **Data:** `services.workshop_slides` (migration `20261030000300_workshop_slides.sql`, applied to dev). `scripts/copy-catalog.mjs` copies these files too.
 
+### Since 2026-10-30
+
+Details for each are in [`../CLAUDE.md`](../CLAUDE.md) (Current progress).
+
+- **Client self-service + reminders** (`20261105000100`): after looking up a booking on `/booking`, the client can pay the balance online, message the studio, or ask to reschedule (staff see the request on the booking and mark it handled). A daily Vercel cron emails confirmed bookings the day before the shoot (needs `CRON_SECRET`).
+- **Package contracts + signature** (`20261105000200`, `…500`): each package can have a contract (Admin → Services → Contract). Clients read it on Review & pay, tick "I agree" and sign by typing their full name; the agreed wording is saved on the booking.
+- **Multi-day workshops** (`20261105000300`): up to 3 days, still one booking and one payment.
+- **FAQ in admin** (`20261105000500`): `/admin/faq` edits the questions on `/faq`.
+- **Rescheduling fee** (`20261105000600`): set per package; added as a line when staff move a booking with the box ticked.
+- **Booking categories** (`20261106000200`): studio sessions one at a time, outside events (weddings, prenups) one per day, Photobooth and workshops excluded. Enforced in the database for every booking path.
+- **Photos-ready email:** "Mark completed" can include a link to the photos.
+- **Studio policy manual** (`20261112000100`–`300`, `20261114000100`): studio packages must agree to it on Review & pay; studio shoots ask about sensitive shoots, pets/messy sets and behind-the-scenes. Separate down payment % for studio and events, reschedule once up to 48 h before, cancel reasons, a **no-show** status, extra charges, and **receipts** (AR-YYYY-NNNNN PDF, emailed on every payment; staff can record GCash, Maya, bank or cash).
+- **Personal data kept 7 days** (`20261114000200`): a daily cron deletes clients' personal details once their bookings are over (Settings → Booking rules; 0 = never). Money records stay.
+- **Today page + security deposit** (`20261114000300`): `/admin/today` lists the day's shoots with check-in steps (ID checked, inspections), the balance and the refundable security deposit.
+- **Payroll: built, then removed (2026-11-25).** Employees, time records (DTR), payslips and payroll history were built 2026-11-09 → 11-14, then removed from the site because the studio now does payroll and time-in in its POS system. **The tables and staff photos are kept in the database** (`employees`, `employee_benefits`, `contribution_settings`, `attendance_logs`, `payroll_periods`, `payslips`, bucket `employee-photos`); payroll records are expected to be kept for 3 years. Drop them with one migration once the owner confirms the POS has everything. Old payroll lines still show in Activity.
+
 ## Managing data
 
 - **Two databases.** The dev project (`mkpjxrhjynbjuiovloiy`) is for testing and keeps all test bookings. The production project starts **empty** at go-live; never test there.
@@ -219,8 +242,8 @@ All owner decisions from 2026-10-28. Migrations `20261028000100` to `000600`, al
 
 | Check                 | Command                                                                           | Last result                                                |
 | --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 162 unit tests (2026-10-30)                    |
-| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ 51 passing against the dev project (2026-10-30)         |
+| Full project check    | `npm run check` (typecheck, lint, SQL parse, unit tests, build)                   | ✅ passing, 233 unit tests (2026-11-25, `remove-payroll`)  |
+| Database rules        | `npm run test:db` (needs `DATABASE_URL_TEST`)                                     | ✅ passing against the dev project (not re-run 2026-11-25) |
 | Public site (browser) | `npm run test:e2e -- e2e/public-site.spec.ts`                                     | ✅ passing on desktop and phone (Pixel 7), touch included  |
 | Admin flows (browser) | `e2e/admin-content.spec.ts` (needs an admin login, see below)                     | ✅ passing, includes public-page refresh after edits       |
 | Booking (browser)     | `e2e/booking.spec.ts`, `e2e/admin-bookings.spec.ts`                               | ✅ wizard up to payment; staff booking, share, pay, cancel |
@@ -261,10 +284,12 @@ The workshop sign-up was checked by hand on 2026-10-28 (3 people: Regular, Early
 - **Unknown service URLs** (e.g. `/services/does-not-exist`) show the 404 page but return HTTP 200 with a `noindex` tag. That's how Next.js 16 handles pages generated on demand. Unmatched paths return a real 404.
 - **The dev site uses sample photos** (`npm run data:sample-photos`). Remove them with `-- --remove` and upload the studio's own photos (star a few as "featured") before go-live.
 - **Seed content is placeholder.** Real prices, packages, hours and the "about" text must come from the owner. The workshop's summary still says "Placeholder: describe the workshop…" (it shows on the home banner).
-- **Dependencies:** `npm audit` (2026-10-30): 3 low-severity issues, all inside the `shadcn` command-line tool (not shipped to the site); the suggested fix downgrades shadcn, so they're left.
+- **Dependencies:** `npm audit` (2026-11-25): Next.js 16.4.3 has 7 moderate advisories (several in `use cache`), fixed by PR #33 (16.4.6). Until it's merged, `next build` and `next dev` stop once with a security notice and go through when run again. After #33, 6 moderate issues remain in `minimatch` and `hono`, only inside development tools (ESLint, the shadcn CLI).
 - **The hero swipe** is tested in Chrome (desktop and Android emulation) but not yet on a real iPhone in Safari.
-- **The GitHub CLI (`gh`) isn't installed** on the main dev machine, so PRs are opened from the GitHub website.
+- **The GitHub CLI (`gh`)** is installed and signed in on the main dev machine (2026-11-25), so PRs can be opened from the terminal.
 - **Workshop loose ends:** the admin calendar shows each sign-up as its own block at the workshop time; unused student-ID uploads (someone uploads, then doesn't book) stay in the bucket; editing a workshop booking in the admin doesn't change its people or categories; after the workshop the banner can flash briefly on load until it's switched off.
+- **Payroll data left in the database** (see [Since 2026-10-30](#since-2026-10-30)): drop the tables and the `employee-photos` bucket once the owner OKs it.
+- **Not automated (owner to decide):** opening hours stay 8 AM–7 PM (the studio policy says 9–5), per-package capacity.
 - **CSP and the Vercel toolbar:** the Vercel toolbar on preview deployments is blocked by the CSP (add `https://vercel.live` if it's wanted).
 
 ## Next steps
@@ -284,4 +309,6 @@ The workshop sign-up was checked by hand on 2026-10-28 (3 people: Regular, Early
 
 **Check the merged work on the live site (owner, signed in):** open Bookings, Clients and Activity; make one QR Ph test booking (the new security headers mustn't block booking or the Cloudflare check); set a new workshop date (the 29 October one has passed, so the banner and button hide themselves).
 
-**Phase 8 (go-live):** production Supabase project (`npm run db:push` to it, then `scripts/copy-catalog.mjs`), point Vercel at it, real content, sample photos removed, Supabase backups on.
+**Merge first:** PR #33 (Next.js security fix) and the `remove-payroll` PR.
+
+**Phase 8 (go-live):** production Supabase project (`npm run db:push` to it, then `scripts/copy-catalog.mjs`), point Vercel at it, real content, sample photos removed, Supabase backups on, `PAYMENTS_MOCK` off, and `CRON_SECRET` set in Vercel for the reminder and privacy crons.
