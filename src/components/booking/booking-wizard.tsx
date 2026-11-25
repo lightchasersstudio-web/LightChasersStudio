@@ -281,6 +281,9 @@ export function BookingWizard({
   }, [serviceId, form]);
   // Workshops are priced per person, by category; packages per booking.
   const people = workshop ? peopleCount(participants) : 1;
+  // The category a new person starts with (the first one on offer and still open).
+  const startCategory =
+    (workshop && defaultCategory(workshop.prices, workshop.earlyBird.open)) || "regular";
   const people_ = Array.from(
     { length: workshop ? people : 0 },
     (_, i) =>
@@ -288,7 +291,7 @@ export function BookingWizard({
         name: "",
         phone: "",
         address: "",
-        category: "regular" as const,
+        category: startCategory,
         idPath: "",
       },
   );
@@ -393,7 +396,7 @@ export function BookingWizard({
           name: i === 0 ? form.getValues("fullName").trim() : "",
           phone: i === 0 ? form.getValues("phone").trim() : "",
           address: "",
-          category: defaultCategory(workshop.prices) ?? "regular",
+          category: startCategory,
           idPath: "",
           // Keep what was already typed (a draft from before may lack newer fields).
           ...current[i],
@@ -496,6 +499,7 @@ export function BookingWizard({
     <form
       onSubmit={form.handleSubmit(onSubmit, (errors) => goTo(stepWith(Object.keys(errors))))}
       noValidate
+      data-booking-wizard
       className="space-y-8 sm:space-y-12"
     >
       <StepTracker steps={STEPS} step={step} onGoTo={goTo} disabled={submitting} />

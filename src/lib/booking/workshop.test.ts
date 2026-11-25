@@ -49,6 +49,16 @@ describe("workshop category switches", () => {
     expect(defaultCategory(workshopPrices({ ...ON, workshop_regular_enabled: false }))).toBe(
       "early_bird",
     );
+    // A closed early bird isn't the starting category.
+    expect(defaultCategory(workshopPrices({ ...ON, workshop_regular_enabled: false }), false)).toBe(
+      "student",
+    );
+    expect(
+      defaultCategory(
+        workshopPrices({ ...ON, workshop_regular_enabled: false, workshop_student_enabled: false }),
+        false,
+      ),
+    ).toBeNull();
   });
 
   it("pauses sign-up when every category is off", () => {

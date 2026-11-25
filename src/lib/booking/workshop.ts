@@ -84,9 +84,19 @@ export function workshopPrices(workshop: PriceFields): WorkshopPrices {
   };
 }
 
-/** The first category on offer, for a new attendee card (null when none are). */
-export function defaultCategory(prices: WorkshopPrices): keyof WorkshopPrices | null {
-  return (["regular", "early_bird", "student"] as const).find((c) => prices[c] !== null) ?? null;
+/**
+ * The first category on offer, for a new attendee card (null when none are).
+ * Early bird is skipped once it has closed (see earlyBirdOpening).
+ */
+export function defaultCategory(
+  prices: WorkshopPrices,
+  earlyBirdOpen = true,
+): keyof WorkshopPrices | null {
+  return (
+    (["regular", "early_bird", "student"] as const).find(
+      (c) => prices[c] !== null && (c !== "early_bird" || earlyBirdOpen),
+    ) ?? null
+  );
 }
 
 /** The workshop price (before VAT) for these people. */
