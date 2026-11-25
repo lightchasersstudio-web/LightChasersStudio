@@ -13,7 +13,8 @@ const GREETED_KEY = "lcs:messenger-greeted";
  * Floating "chat on Messenger" bubble on every public page. A small greeting
  * pops up once per visit after a few seconds. On phones it sits above the
  * "Book now" bar so the two never overlap, and steps aside while the client is
- * typing in a form (it would cover the field and the keyboard).
+ * typing in a form (it would cover the field and the keyboard) and on pages with
+ * the booking wizard (it would cover the calendar; the footer still has the link).
  */
 export function MessengerButton({ href, businessName }: { href: string; businessName: string }) {
   const [greeting, setGreeting] = useState(false);
@@ -47,6 +48,7 @@ export function MessengerButton({ href, businessName }: { href: string; business
         className={cn(
           "fixed right-4 bottom-[5.25rem] z-30 flex flex-col items-end gap-3 transition-opacity md:right-6 md:bottom-6",
           typing && "max-md:pointer-events-none max-md:opacity-0",
+          "max-md:[body:has([data-booking-wizard])_&]:hidden",
         )}
       >
         <AnimatePresence>
