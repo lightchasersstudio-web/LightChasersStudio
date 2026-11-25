@@ -9,6 +9,7 @@ export const ACTIVITY_KINDS = {
   service: { label: "Packages & add-ons", entities: ["service", "add_on"] },
   portfolio: { label: "Portfolio & reviews", entities: ["portfolio_images", "review"] },
   faq: { label: "FAQ", entities: ["faq"] },
+  // Payroll moved to the POS (2026-11-25); its past entries are still listed here.
   payroll: {
     label: "Staff & payroll",
     entities: ["employee", "contribution_settings", "payroll_period"],
@@ -129,12 +130,6 @@ export function activityHref(
       return "/admin/availability";
     case "business_settings":
       return "/admin/settings";
-    case "contribution_settings":
-      return "/admin/payroll/settings";
-    case "payroll_period":
-      return "/admin/payroll";
-    case "employee":
-      return entityId ? `/admin/employees/${entityId}` : "/admin/employees";
     default:
       return null;
   }

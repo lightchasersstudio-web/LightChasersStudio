@@ -5,7 +5,6 @@ import {
   ClipboardCheckIcon,
   ClipboardListIcon,
   HistoryIcon,
-  IdCardIcon,
   CameraIcon,
   ChartColumnIcon,
   ImagesIcon,
@@ -14,14 +13,13 @@ import {
   SettingsIcon,
   UserRoundIcon,
   UsersRoundIcon,
-  WalletIcon,
   type LucideIcon,
 } from "lucide-react";
 
 export type AdminNavItem = { href: string; label: string; icon: LucideIcon };
 export type AdminNavGroup = { label: string; items: AdminNavItem[] };
 
-/** The sidebar, in groups so staff find their part (bookings, team, website) quickly. */
+/** The sidebar, in groups so staff find their part (bookings, website, admin) quickly. */
 export const adminNavGroups: AdminNavGroup[] = [
   {
     label: "Bookings",
@@ -32,13 +30,6 @@ export const adminNavGroups: AdminNavGroup[] = [
       { href: "/admin/bookings", label: "Bookings", icon: ClipboardListIcon },
       { href: "/admin/clients", label: "Clients", icon: UsersRoundIcon },
       { href: "/admin/reports", label: "Sales report", icon: ChartColumnIcon },
-    ],
-  },
-  {
-    label: "Team",
-    items: [
-      { href: "/admin/employees", label: "Employees", icon: IdCardIcon },
-      { href: "/admin/payroll", label: "Payroll", icon: WalletIcon },
     ],
   },
   {

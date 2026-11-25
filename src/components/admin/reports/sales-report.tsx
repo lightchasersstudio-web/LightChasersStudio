@@ -47,17 +47,8 @@ function totals(months: SalesMonth[]) {
   return { sales, bookings, average: bookings ? Math.round(sales / bookings / 100) * 100 : 0 };
 }
 
-/**
- * `all`: the last 24 months up to this one, oldest first (see getSalesMonths).
- * `payroll`: the daily payroll section, shown right below Workshop.
- */
-export function SalesReport({
-  months: all,
-  payroll,
-}: {
-  months: SalesMonth[];
-  payroll?: React.ReactNode;
-}) {
+/** `all`: the last 24 months up to this one, oldest first (see getSalesMonths). */
+export function SalesReport({ months: all }: { months: SalesMonth[] }) {
   const [range, setRange] = useState<number>(6);
   const [showTable, setShowTable] = useState(false);
 
@@ -182,8 +173,6 @@ export function SalesReport({
       </div>
 
       <WorkshopSummary months={current} />
-
-      {payroll}
 
       {showTable && <MonthTable months={current} />}
     </div>

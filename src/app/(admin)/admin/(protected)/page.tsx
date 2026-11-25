@@ -169,7 +169,7 @@ async function DashboardBody() {
               <EmptyState
                 icon={PartyPopperIcon}
                 title="All caught up!"
-                text="No bookings, requests or payroll waiting on you."
+                text="No bookings or requests waiting on you."
               />
             ) : (
               <>

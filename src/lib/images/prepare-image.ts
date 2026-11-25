@@ -3,8 +3,8 @@
 import { createClient } from "@/lib/supabase/browser";
 import type { PublicBucket } from "@/lib/storage";
 
-/** The public image buckets, plus the private one for staff photos (admins only). */
-export type UploadBucket = PublicBucket | "employee-photos";
+/** The public image buckets admins upload to. */
+export type UploadBucket = PublicBucket;
 
 export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const MAX_INPUT_BYTES = 40 * 1024 * 1024;

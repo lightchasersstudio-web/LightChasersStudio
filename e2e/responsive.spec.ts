@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * No page is wider than a phone (375 px) or a tablet (768 px): every public
- * and admin page, with a test employee, time record and payroll to show.
+ * and admin page.
  * Needs an admin login and the service role key. Runs once (it sets its own
  * screen sizes), in the desktop project.
  */
@@ -20,34 +20,9 @@ const sb = createClient(
     auth: { persistSession: false },
   },
 );
-const CUT = "2031-02-01";
-const NAME = `E2E Staff responsive${Date.now().toString(36)} Maria Clara Santos-Reyes`;
-let empId = "";
 const dyn: Record<string, string> = {};
 
 test.beforeAll(async () => {
-  await sb.from("payroll_periods").delete().eq("period_start", CUT);
-  const { data } = await sb
-    .from("employees")
-    .insert({
-      full_name: NAME,
-      position: "Lead photographer and editor",
-      date_hired: "2026-01-05",
-      salary_type: "monthly",
-      salary_rate: 30000,
-      overtime_rate: 150,
-    })
-    .select("id")
-    .single();
-  empId = data!.id;
-  const logs = Array.from({ length: 12 }, (_, n) => ({
-    employee_id: empId,
-    work_date: `2031-02-${String(n + 1).padStart(2, "0")}`,
-    status: n === 3 ? "absent" : "present",
-    time_in: n === 3 ? null : "08:00",
-    time_out: n === 3 ? null : n === 5 ? "12:00" : n === 6 ? "19:00" : "16:00",
-  }));
-  await sb.from("attendance_logs").insert(logs);
   const b = await sb.from("bookings").select("id").limit(1).maybeSingle();
   const c = await sb.from("clients").select("id").limit(1).maybeSingle();
   const s = await sb
@@ -61,12 +36,6 @@ test.beforeAll(async () => {
   dyn.client = c.data?.id ?? "";
   dyn.service = s.data?.id ?? "";
   dyn.slug = s.data?.slug ?? "";
-});
-
-test.afterAll(async () => {
-  await sb.from("payroll_periods").delete().eq("period_start", CUT);
-  await sb.from("payslips").delete().eq("employee_id", empId);
-  await sb.from("employees").delete().eq("id", empId);
 });
 
 async function overflow(page: Page) {
@@ -140,13 +109,6 @@ for (const width of [375, 768]) {
       "/admin/services/new",
       "/admin/settings",
       "/admin/trial-emails",
-      "/admin/employees",
-      `/admin/employees/${empId}`,
-      "/admin/employees/new",
-      "/admin/payroll/settings",
-      `/admin/dtr?cutoff=${CUT}`,
-      `/admin/dtr?cutoff=${CUT}&employee=${empId}`,
-      `/admin/payroll?cutoff=${CUT}`,
     ];
     for (const r of routes) {
       await page.goto(r);

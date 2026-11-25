@@ -19,7 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database.types";
 
-// Shared bits for the payroll PDFs (A4, studio name and logo at the top).
+// Shared bits for the PDFs, e.g. receipts (A4, studio name and logo at the top).
 // Fonts are bundled TTFs: the built-in PDF fonts have no ₱ sign.
 
 const FONTS = path.join(process.cwd(), "src", "assets", "fonts");
@@ -155,21 +155,6 @@ export async function toJpeg(bytes: Buffer, size: number): Promise<Buffer | null
   } catch {
     return null;
   }
-}
-
-/** Staff photos from the private bucket as small JPEGs, by path. */
-export async function loadEmployeePhotos(paths: string[]): Promise<Map<string, Buffer>> {
-  const photos = new Map<string, Buffer>();
-  if (!paths.length) return photos;
-  const supabase = await createClient();
-  await Promise.all(
-    paths.map(async (p) => {
-      const { data } = await supabase.storage.from("employee-photos").download(p);
-      const jpeg = data ? await toJpeg(Buffer.from(await data.arrayBuffer()), 240) : null;
-      if (jpeg) photos.set(p, jpeg);
-    }),
-  );
-  return photos;
 }
 
 export function PdfHeader({
